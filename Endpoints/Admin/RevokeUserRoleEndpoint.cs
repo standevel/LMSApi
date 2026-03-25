@@ -1,0 +1,39 @@
+using FastEndpoints;
+using LMS.Api.Endpoints;
+using LMS.Api.Security;
+
+namespace LMS.Api.Endpoints.Admin;
+
+public sealed class RevokeUserRoleRequest
+{
+    public string EntraObjectId { get; set; } = string.Empty;
+    public string RoleName { get; set; } = string.Empty;
+}
+
+public sealed class RevokeUserRoleEndpoint(IAdminAuthzService adminAuthzService)
+    : ApiEndpoint<RevokeUserRoleRequest, UserRoleMutationResponse>
+{
+    public override void Configure()
+    {
+        Post("/api/admin/users/roles/revoke");
+        Policies(LmsPolicies.Management);
+    }
+
+    public override async Task HandleAsync(RevokeUserRoleRequest req, CancellationToken ct)
+    {
+        var result = await adminAuthzService.RevokeUserRoleAsync(req.EntraObjectId, req.RoleName, ct);
+        if (!result.Success)
+        {
+            await SendFailureAsync(
+                result.StatusCode,
+                result.StatusCode == StatusCodes.Status404NotFound ? "User not found." : "Invalid role",
+                result.ErrorCode ?? "role_revoke_failed",
+                result.ErrorMessage ?? "Role revoke failed.",
+                ct);
+            return;
+        }
+
+        var data = new UserRoleMutationResponse(result.EntraObjectId!, result.RoleName!, "revoked");
+        await SendSuccessAsync(data, ct, "Role assignment updated");
+    }
+}
