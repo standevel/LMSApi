@@ -13,7 +13,9 @@ public sealed class SubmitApplicationRequest
 public sealed record AdmissionApplicationResponse(
     Guid Id,
     string ApplicationNumber,
-    string StudentName,
+    string FirstName,
+    string LastName,
+    string? MiddleName,
     string StudentEmail,
     string JambRegNumber,
     Guid AcademicSessionId,
@@ -31,7 +33,13 @@ public sealed record AdmissionApplicationResponse(
     string Status,
     DateTime CreatedAt,
     DateTime? SubmittedAt,
-    IEnumerable<DocumentResponse> Documents
+    IEnumerable<DocumentResponse> Documents,
+    Guid? StudentUserId = null,
+    Guid? AcceptanceFeeRecordId = null,
+    decimal? AcceptanceFeeAmount = null,
+    decimal? AcceptanceFeeBalance = null,
+    string? AcceptanceFeeStatus = null,
+    bool RequiresAcceptanceFee = false
 );
 
 public sealed record DocumentResponse(
@@ -49,22 +57,25 @@ public sealed record UpdateDocumentStatusRequest(string Status, string? Rejectio
 
 public sealed record UploadMultipleDocumentsResponse(IEnumerable<DocumentResponse> Documents);
 
-public sealed record SaveApplicationRequest(
-    Guid? Id,
-    string StudentName,
-    string StudentEmail,
-    string JambRegNumber,
-    Guid AcademicSessionId,
-    string Persona,
-    Guid? FacultyId,
-    Guid? AcademicProgramId,
-    string ProgramReason,
-    string QualificationsJson,
-    string Phone,
-    string EmergencyContactJson,
-    string SponsorshipJson,
-    IEnumerable<Guid>? DocumentIds = null
-);
+public sealed class SaveApplicationRequest
+{
+    public Guid? Id { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string? MiddleName { get; set; }
+    public string StudentEmail { get; set; } = string.Empty;
+    public string JambRegNumber { get; set; } = string.Empty;
+    public Guid AcademicSessionId { get; set; }
+    public string Persona { get; set; } = string.Empty;
+    public string? FacultyId { get; set; }  // Changed to string to handle empty values
+    public string? AcademicProgramId { get; set; }  // Changed to string to handle empty values
+    public string ProgramReason { get; set; } = string.Empty;
+    public string QualificationsJson { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string EmergencyContactJson { get; set; } = string.Empty;
+    public string SponsorshipJson { get; set; } = string.Empty;
+    public IEnumerable<Guid>? DocumentIds { get; set; }
+}
 
 public sealed record DocumentTypeResponse(
     Guid Id,
@@ -82,6 +93,8 @@ public sealed record SubjectResponse(Guid Id, string Name);
 
 // Admin Contracts
 public sealed record UpdateApplicationStatusRequest(string Status);
+public sealed record AdmissionOfferDecisionRequest(bool AcceptOffer);
+public sealed record InitiateOfferPaymentRequest(string Gateway, string CallbackUrl);
 public sealed record AutoAdmitRequest(Guid SessionId, bool IsDryRun);
 public sealed record UpdateProgramCriteriaRequest(int MinJambScore, int MaxAdmissions, string RequiredJambSubjectsJson, string RequiredOLevelSubjectsJson);
 

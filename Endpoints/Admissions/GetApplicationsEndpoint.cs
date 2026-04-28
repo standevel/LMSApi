@@ -32,24 +32,7 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
 
         var apps = await admissionService.GetApplicationsAsync(status, req.SessionId);
 
-        var response = apps.Select(app => new AdmissionApplicationResponse(
-            app.Id,
-            app.ApplicationNumber,
-            app.StudentName, app.StudentEmail, app.JambRegNumber, app.AcademicSessionId,
-            app.AcademicSession?.Name ?? string.Empty,
-            app.Persona, app.FacultyId, app.Faculty?.Name ?? string.Empty,
-            app.AcademicProgramId, app.AcademicProgram?.Name ?? string.Empty,
-            app.ProgramReason, app.QualificationsJson, app.Phone,
-            app.EmergencyContactJson, app.SponsorshipJson,
-            app.Status.ToString(), app.CreatedAt, app.SubmittedAt,
-            app.Documents.Select(d => new DocumentResponse(
-                d.Id, d.FileName, d.FileUrl, d.DocumentTypeId,
-                d.DocumentType?.Name ?? "Admission Document",
-                d.DocumentType?.Code ?? string.Empty,
-                d.Status.ToString(),
-                d.RejectionReason
-            ))
-        ));
+        var response = apps.Select(app => AdmissionResponseMapper.Map(app));
 
         await SendSuccessAsync(response, ct);
     }

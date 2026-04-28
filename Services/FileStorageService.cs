@@ -1,61 +1,122 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace LMS.Api.Services;
 
-public sealed class FileStorageService : IFileStorageService
+public class FileStorageService : IFileStorageService
 {
-    private readonly string _rootPath;
+    private readonly string _storageBasePath;
+    private readonly ILogger<FileStorageService> _logger;
 
-    public FileStorageService(IConfiguration configuration)
+    public FileStorageService(
+        IConfiguration configuration,
+        ILogger<FileStorageService> logger)
     {
-        // Default to C:\LMS_Storage if not configured
-        _rootPath = configuration["FileStorage:RootPath"] ?? @"C:\LMS_Storage\Uploads";
+        _storageBasePath = configuration["FileStorage:BasePath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        _logger = logger;
+        
+        // Ensure base directory exists
+        if (!Directory.Exists(_storageBasePath))
+        {
+            Directory.CreateDirectory(_storageBasePath);
+        }
     }
 
-    public async Task<string> SaveFileAsync(string category, string referenceId, string fileName, Stream content)
+    public async Task<string> UploadFileAsync(IFormFile file, string containerName, string fileName)
     {
-        // Sanitize inputs to prevent path traversal
-        var sanitizedCategory = Sanitize(category);
-        var sanitizedRefId = Sanitize(referenceId);
-        var sanitizedFileName = Path.GetFileName(fileName); // Prevents subdirectories in filename
-
-        var folderPath = Path.Combine(_rootPath, sanitizedCategory, sanitizedRefId);
-
-        if (!Directory.Exists(folderPath))
+        try
         {
-            Directory.CreateDirectory(folderPath);
+            var containerPath = Path.Combine(_storageBasePath, containerName);
+            if (!Directory.Exists(containerPath))
+            {
+                Directory.CreateDirectory(containerPath);
+            }
+
+            var filePath = Path.Combine(containerPath, fileName);
+
+            await using var stream = new FileStream(filePath, FileMode.Create);
+            await file.CopyToAsync(stream);
+
+            _logger.LogInformation("Uploaded file {FileName} to container {ContainerName}", fileName, containerName);
+
+            // Return relative URL path
+            return $"/uploads/{containerName}/{fileName}";
         }
-
-        // Add a timestamp to prevent collisions
-        var uniqueFileName = $"{Guid.NewGuid()}_{sanitizedFileName}";
-        var physicalPath = Path.Combine(folderPath, uniqueFileName);
-
-        using (var fileStream = new FileStream(physicalPath, FileMode.Create))
+        catch (Exception ex)
         {
-            await content.CopyToAsync(fileStream);
+            _logger.LogError(ex, "Failed to upload file {FileName} to container {ContainerName}", fileName, containerName);
+            throw;
         }
-
-        // Return a relative path that we can use for virtual path mapping or direct access
-        // Example: /Admission/app-id/uuid_name.pdf
-        return $"/{sanitizedCategory}/{sanitizedRefId}/{uniqueFileName}";
     }
 
-    public Task<string> GetPhysicalPathAsync(string fileUrl)
+    public async Task DeleteFileAsync(string fileUrl)
     {
-        // Logic to map the relative URL back to a physical path for downloads
-        var relativePath = fileUrl.TrimStart('/');
-        return Task.FromResult(Path.Combine(_rootPath, relativePath));
+        try
+        {
+            var relativePath = fileUrl.TrimStart('/');
+            var filePath = Path.Combine(_storageBasePath, relativePath);
+
+            if (File.Exists(filePath))
+            {
+                await Task.Run(() => File.Delete(filePath));
+                _logger.LogInformation("Deleted file from path {FilePath}", filePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete file from URL {FileUrl}", fileUrl);
+            throw;
+        }
     }
 
-    private static string Sanitize(string input)
+    // Legacy methods for admission documents
+    public async Task<string> SaveFileAsync(string category, string referenceId, string fileName, Stream stream)
     {
-        foreach (var c in Path.GetInvalidFileNameChars())
+        try
         {
-            input = input.Replace(c, '_');
+            var containerPath = Path.Combine(_storageBasePath, category, referenceId);
+            if (!Directory.Exists(containerPath))
+            {
+                Directory.CreateDirectory(containerPath);
+            }
+
+            var filePath = Path.Combine(containerPath, fileName);
+
+            await using var fileStream = new FileStream(filePath, FileMode.Create);
+            await stream.CopyToAsync(fileStream);
+
+            _logger.LogInformation("Saved file {FileName} to category {Category} with reference {ReferenceId}", fileName, category, referenceId);
+
+            // Return relative path
+            return Path.Combine(category, referenceId, fileName).Replace("\\", "/");
         }
-        return input.Replace(" ", "_");
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save file {FileName} to category {Category}", fileName, category);
+            throw;
+        }
+    }
+
+    public Task<string?> GetPhysicalPathAsync(string fileUrl)
+    {
+        try
+        {
+            // fileUrl is already a relative path like "category/referenceId/filename.pdf"
+            var filePath = Path.Combine(_storageBasePath, fileUrl);
+
+            if (File.Exists(filePath))
+            {
+                return Task.FromResult<string?>(filePath);
+            }
+
+            _logger.LogWarning("File not found at path {FilePath}", filePath);
+            return Task.FromResult<string?>(null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get physical path for URL {FileUrl}", fileUrl);
+            return Task.FromResult<string?>(null);
+        }
     }
 }

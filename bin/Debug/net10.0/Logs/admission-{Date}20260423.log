@@ -1,0 +1,954 @@
+2026-04-23 08:51:16.622 +01:00 [INF] Executed DbCommand (120ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-23 08:51:16.795 +01:00 [INF] Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+2026-04-23 08:51:17.125 +01:00 [INF] Executed DbCommand (305ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+SELECT @result
+2026-04-23 08:51:17.468 +01:00 [INF] Executed DbCommand (42ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+2026-04-23 08:51:17.515 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-23 08:51:17.528 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+2026-04-23 08:51:17.633 +01:00 [INF] Executed DbCommand (94ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [MigrationId], [ProductVersion]
+FROM [__EFMigrationsHistory]
+ORDER BY [MigrationId];
+2026-04-23 08:51:17.680 +01:00 [INF] No migrations were applied. The database is already up to date.
+2026-04-23 08:51:17.820 +01:00 [INF] Executed DbCommand (16ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+SELECT @result
+2026-04-23 08:51:18.469 +01:00 [INF] Executed DbCommand (20ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [Roles] AS [r]
+2026-04-23 08:51:18.546 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Code]
+FROM [Permissions] AS [p]
+2026-04-23 08:51:18.664 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+2026-04-23 08:51:18.697 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[Description]
+FROM [Permissions] AS [p]
+2026-04-23 08:51:18.740 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[RoleId], [r].[PermissionId]
+FROM [RolePermissions] AS [r]
+2026-04-23 08:51:18.887 +01:00 [INF] Executed DbCommand (52ms) [Parameters=[@adminRole_Id='?' (DbType = Guid), @accessManagePermission_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[RoleId], [r].[PermissionId], [r].[AssignedUtc]
+FROM [RolePermissions] AS [r]
+WHERE [r].[RoleId] = @adminRole_Id AND [r].[PermissionId] = @accessManagePermission_Id
+2026-04-23 08:51:19.014 +01:00 [INF] Executed DbCommand (58ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [AcademicSessions] AS [a]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:51:19.134 +01:00 [INF] Sessions already seeded. Skipping.
+2026-04-23 08:51:19.153 +01:00 [INF] Seeding Faculties...
+2026-04-23 08:51:19.265 +01:00 [INF] Executed DbCommand (19ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-04-23 08:51:19.488 +01:00 [INF] Removing 6 existing faculties
+2026-04-23 08:51:23.079 +01:00 [INF] Executed DbCommand (3,252ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p5;
+2026-04-23 08:51:23.188 +01:00 [ERR] An exception occurred in the database while saving changes for context type 'LMS.Api.Data.LmsDbContext'.
+Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.
+ ---> Microsoft.Data.SqlClient.SqlException (0x80131904): The DELETE statement conflicted with the REFERENCE constraint "FK_Departments_Faculties_FacultyId". The conflict occurred in database "LMSDB", table "dbo.Departments", column 'FacultyId'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryHasMoreRows(Boolean& moreRows)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryReadInternal(Boolean setTimeout, Boolean& more)
+   at Microsoft.Data.SqlClient.SqlDataReader.ReadAsyncExecute(Task task, Object state)
+   at Microsoft.Data.SqlClient.SqlDataReader.InvokeAsyncCall[T](SqlDataReaderBaseAsyncCallContext`1 context)
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetWithRowsAffectedOnlyAsync(Int32 commandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+ClientConnectionId:843dc133-5df3-4364-8c7f-791dba25e9e5
+Error Number:547,State:0,Class:16
+   --- End of inner exception stack trace ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalDatabase.SaveChangesAsync(IList`1 entries, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(IList`1 entriesToSave, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(StateManager stateManager, Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.<>c__DisplayClass30_0`2.<<ExecuteAsync>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync[TState,TResult](TState state, Func`4 operation, Func`4 verifySucceeded, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+Microsoft.EntityFrameworkCore.DbUpdateException: An error occurred while saving the entity changes. See the inner exception for details.
+ ---> Microsoft.Data.SqlClient.SqlException (0x80131904): The DELETE statement conflicted with the REFERENCE constraint "FK_Departments_Faculties_FacultyId". The conflict occurred in database "LMSDB", table "dbo.Departments", column 'FacultyId'.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+   at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryHasMoreRows(Boolean& moreRows)
+   at Microsoft.Data.SqlClient.SqlDataReader.TryReadInternal(Boolean setTimeout, Boolean& more)
+   at Microsoft.Data.SqlClient.SqlDataReader.ReadAsyncExecute(Task task, Object state)
+   at Microsoft.Data.SqlClient.SqlDataReader.InvokeAsyncCall[T](SqlDataReaderBaseAsyncCallContext`1 context)
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeResultSetWithRowsAffectedOnlyAsync(Int32 commandIndex, RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+ClientConnectionId:843dc133-5df3-4364-8c7f-791dba25e9e5
+Error Number:547,State:0,Class:16
+   --- End of inner exception stack trace ---
+   at Microsoft.EntityFrameworkCore.Update.AffectedCountModificationCommandBatch.ConsumeAsync(RelationalDataReader reader, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.ReaderModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.SqlServer.Update.Internal.SqlServerModificationCommandBatch.ExecuteAsync(IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Update.Internal.BatchExecutor.ExecuteAsync(IEnumerable`1 commandBatches, IRelationalConnection connection, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalDatabase.SaveChangesAsync(IList`1 entries, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(IList`1 entriesToSave, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.ChangeTracking.Internal.StateManager.SaveChangesAsync(StateManager stateManager, Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.<>c__DisplayClass30_0`2.<<ExecuteAsync>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteImplementationAsync[TState,TResult](Func`4 operation, Func`4 verifySucceeded, TState state, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.ExecutionStrategy.ExecuteAsync[TState,TResult](TState state, Func`4 operation, Func`4 verifySucceeded, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.DbContext.SaveChangesAsync(Boolean acceptAllChangesOnSuccess, CancellationToken cancellationToken)
+2026-04-23 08:52:58.236 +01:00 [INF] Executed DbCommand (66ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-23 08:52:58.367 +01:00 [INF] Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+2026-04-23 08:52:58.534 +01:00 [INF] Executed DbCommand (99ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+SELECT @result
+2026-04-23 08:52:58.809 +01:00 [INF] Executed DbCommand (55ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+2026-04-23 08:52:58.854 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-23 08:52:58.866 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+2026-04-23 08:52:58.898 +01:00 [INF] Executed DbCommand (17ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [MigrationId], [ProductVersion]
+FROM [__EFMigrationsHistory]
+ORDER BY [MigrationId];
+2026-04-23 08:52:58.926 +01:00 [INF] No migrations were applied. The database is already up to date.
+2026-04-23 08:52:58.943 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+SELECT @result
+2026-04-23 08:52:59.518 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [Roles] AS [r]
+2026-04-23 08:52:59.582 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Code]
+FROM [Permissions] AS [p]
+2026-04-23 08:52:59.713 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+2026-04-23 08:52:59.745 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[Description]
+FROM [Permissions] AS [p]
+2026-04-23 08:52:59.814 +01:00 [INF] Executed DbCommand (29ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[RoleId], [r].[PermissionId]
+FROM [RolePermissions] AS [r]
+2026-04-23 08:52:59.984 +01:00 [INF] Executed DbCommand (46ms) [Parameters=[@adminRole_Id='?' (DbType = Guid), @accessManagePermission_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[RoleId], [r].[PermissionId], [r].[AssignedUtc]
+FROM [RolePermissions] AS [r]
+WHERE [r].[RoleId] = @adminRole_Id AND [r].[PermissionId] = @accessManagePermission_Id
+2026-04-23 08:53:00.130 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [AcademicSessions] AS [a]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:00.142 +01:00 [INF] Sessions already seeded. Skipping.
+2026-04-23 08:53:00.148 +01:00 [INF] Seeding Faculties...
+2026-04-23 08:53:00.530 +01:00 [INF] Executed DbCommand (156ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[DepartmentId], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId]
+FROM [Programs] AS [p]
+LEFT JOIN [Levels] AS [l] ON [p].[Id] = [l].[ProgramId]
+ORDER BY [p].[Id]
+2026-04-23 08:53:00.807 +01:00 [INF] Removing 15 existing programs and their levels
+2026-04-23 08:53:01.991 +01:00 [INF] Executed DbCommand (785ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (DbType = Guid), @p18='?' (DbType = Guid), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (DbType = Guid), @p22='?' (DbType = Guid), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (DbType = Guid), @p26='?' (DbType = Guid), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (DbType = Guid), @p30='?' (DbType = Guid), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (DbType = Guid), @p34='?' (DbType = Guid), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (DbType = Guid), @p38='?' (DbType = Guid), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p14;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p15;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p16;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p17;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p18;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p19;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p20;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p21;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p22;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p23;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p24;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p25;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p26;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p27;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p28;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p29;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p30;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p31;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p32;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p33;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p34;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p35;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p36;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p37;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p38;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p39;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p40;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p41;
+2026-04-23 08:53:03.828 +01:00 [INF] Executed DbCommand (1,807ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (DbType = Guid), @p18='?' (DbType = Guid), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (DbType = Guid), @p22='?' (DbType = Guid), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (DbType = Guid), @p26='?' (DbType = Guid), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (DbType = Guid), @p30='?' (DbType = Guid), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (DbType = Guid), @p34='?' (DbType = Guid), @p35='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p14;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p15;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p16;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p17;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p18;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p19;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p20;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p21;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p22;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p23;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p24;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p25;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p26;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p27;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p28;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p29;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p30;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p31;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p32;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p33;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p34;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p35;
+2026-04-23 08:53:03.887 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+2026-04-23 08:53:03.925 +01:00 [INF] Removing 15 existing departments
+2026-04-23 08:53:04.043 +01:00 [INF] Executed DbCommand (87ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p14;
+2026-04-23 08:53:04.078 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-04-23 08:53:04.111 +01:00 [INF] Removing 6 existing faculties
+2026-04-23 08:53:04.218 +01:00 [INF] Executed DbCommand (92ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p5;
+2026-04-23 08:53:04.285 +01:00 [INF] Executed DbCommand (20ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Date), @p2='?' (Size = 100), @p3='?' (Size = 200), @p4='?' (DbType = Date), @p5='?' (DbType = Guid), @p6='?' (DbType = Date), @p7='?' (Size = 100), @p8='?' (Size = 200), @p9='?' (DbType = Date), @p10='?' (DbType = Guid), @p11='?' (DbType = Date), @p12='?' (Size = 100), @p13='?' (Size = 200), @p14='?' (DbType = Date), @p15='?' (DbType = Guid), @p16='?' (DbType = Date), @p17='?' (Size = 100), @p18='?' (Size = 200), @p19='?' (DbType = Date), @p20='?' (DbType = Guid), @p21='?' (DbType = Date), @p22='?' (Size = 100), @p23='?' (Size = 200), @p24='?' (DbType = Date), @p25='?' (DbType = Guid), @p26='?' (DbType = Date), @p27='?' (Size = 100), @p28='?' (Size = 200), @p29='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Faculties] ([Id], [CreatedDate], [Label], [Name], [UpdatedDate])
+VALUES (@p0, @p1, @p2, @p3, @p4),
+(@p5, @p6, @p7, @p8, @p9),
+(@p10, @p11, @p12, @p13, @p14),
+(@p15, @p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23, @p24),
+(@p25, @p26, @p27, @p28, @p29);
+2026-04-23 08:53:04.292 +01:00 [INF] Created 6 faculties
+2026-04-23 08:53:04.328 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Departments] AS [d]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:04.333 +01:00 [INF] Seeding Departments...
+2026-04-23 08:53:04.338 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-04-23 08:53:04.385 +01:00 [INF] Executed DbCommand (25ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 20), @p2='?' (DbType = Date), @p3='?' (DbType = Guid), @p4='?' (Size = 200), @p5='?' (DbType = Date), @p6='?' (DbType = Guid), @p7='?' (Size = 20), @p8='?' (DbType = Date), @p9='?' (DbType = Guid), @p10='?' (Size = 200), @p11='?' (DbType = Date), @p12='?' (DbType = Guid), @p13='?' (Size = 20), @p14='?' (DbType = Date), @p15='?' (DbType = Guid), @p16='?' (Size = 200), @p17='?' (DbType = Date), @p18='?' (DbType = Guid), @p19='?' (Size = 20), @p20='?' (DbType = Date), @p21='?' (DbType = Guid), @p22='?' (Size = 200), @p23='?' (DbType = Date), @p24='?' (DbType = Guid), @p25='?' (Size = 20), @p26='?' (DbType = Date), @p27='?' (DbType = Guid), @p28='?' (Size = 200), @p29='?' (DbType = Date), @p30='?' (DbType = Guid), @p31='?' (Size = 20), @p32='?' (DbType = Date), @p33='?' (DbType = Guid), @p34='?' (Size = 200), @p35='?' (DbType = Date), @p36='?' (DbType = Guid), @p37='?' (Size = 20), @p38='?' (DbType = Date), @p39='?' (DbType = Guid), @p40='?' (Size = 200), @p41='?' (DbType = Date), @p42='?' (DbType = Guid), @p43='?' (Size = 20), @p44='?' (DbType = Date), @p45='?' (DbType = Guid), @p46='?' (Size = 200), @p47='?' (DbType = Date), @p48='?' (DbType = Guid), @p49='?' (Size = 20), @p50='?' (DbType = Date), @p51='?' (DbType = Guid), @p52='?' (Size = 200), @p53='?' (DbType = Date), @p54='?' (DbType = Guid), @p55='?' (Size = 20), @p56='?' (DbType = Date), @p57='?' (DbType = Guid), @p58='?' (Size = 200), @p59='?' (DbType = Date), @p60='?' (DbType = Guid), @p61='?' (Size = 20), @p62='?' (DbType = Date), @p63='?' (DbType = Guid), @p64='?' (Size = 200), @p65='?' (DbType = Date), @p66='?' (DbType = Guid), @p67='?' (Size = 20), @p68='?' (DbType = Date), @p69='?' (DbType = Guid), @p70='?' (Size = 200), @p71='?' (DbType = Date), @p72='?' (DbType = Guid), @p73='?' (Size = 20), @p74='?' (DbType = Date), @p75='?' (DbType = Guid), @p76='?' (Size = 200), @p77='?' (DbType = Date), @p78='?' (DbType = Guid), @p79='?' (Size = 20), @p80='?' (DbType = Date), @p81='?' (DbType = Guid), @p82='?' (Size = 200), @p83='?' (DbType = Date), @p84='?' (DbType = Guid), @p85='?' (Size = 20), @p86='?' (DbType = Date), @p87='?' (DbType = Guid), @p88='?' (Size = 200), @p89='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Departments] ([Id], [Code], [CreatedDate], [FacultyId], [Name], [UpdatedDate])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5),
+(@p6, @p7, @p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15, @p16, @p17),
+(@p18, @p19, @p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27, @p28, @p29),
+(@p30, @p31, @p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39, @p40, @p41),
+(@p42, @p43, @p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51, @p52, @p53),
+(@p54, @p55, @p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63, @p64, @p65),
+(@p66, @p67, @p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75, @p76, @p77),
+(@p78, @p79, @p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87, @p88, @p89);
+2026-04-23 08:53:04.391 +01:00 [INF] Created 15 departments mapped to correct faculties
+2026-04-23 08:53:04.427 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Programs] AS [p]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:04.437 +01:00 [INF] Seeding Academic Programs and Levels...
+2026-04-23 08:53:04.446 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-04-23 08:53:04.482 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CS'
+2026-04-23 08:53:04.518 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'SE'
+2026-04-23 08:53:04.559 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CY'
+2026-04-23 08:53:04.592 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ICT'
+2026-04-23 08:53:04.631 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'MDS'
+2026-04-23 08:53:04.678 +01:00 [INF] Executed DbCommand (21ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'EE'
+2026-04-23 08:53:04.723 +01:00 [INF] Executed DbCommand (21ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ME'
+2026-04-23 08:53:04.780 +01:00 [INF] Executed DbCommand (33ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CEN'
+2026-04-23 08:53:04.821 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FMA'
+2026-04-23 08:53:04.854 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FAD'
+2026-04-23 08:53:04.879 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'TA'
+2026-04-23 08:53:04.905 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ADA'
+2026-04-23 08:53:04.949 +01:00 [INF] Executed DbCommand (17ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'BM'
+2026-04-23 08:53:05.005 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'EC'
+2026-04-23 08:53:05.057 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FIN'
+2026-04-23 08:53:05.134 +01:00 [INF] Executed DbCommand (54ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 20), @p2='?' (Size = 4000), @p3='?' (DbType = Guid), @p4='?' (Size = 1000), @p5='?' (DbType = Int32), @p6='?' (DbType = Guid), @p7='?' (DbType = Boolean), @p8='?' (DbType = Int32), @p9='?' (DbType = Int32), @p10='?' (Size = 200), @p11='?' (Size = 4000), @p12='?' (Size = 4000), @p13='?' (DbType = Int32), @p14='?' (DbType = Guid), @p15='?' (Size = 20), @p16='?' (Size = 4000), @p17='?' (DbType = Guid), @p18='?' (Size = 1000), @p19='?' (DbType = Int32), @p20='?' (DbType = Guid), @p21='?' (DbType = Boolean), @p22='?' (DbType = Int32), @p23='?' (DbType = Int32), @p24='?' (Size = 200), @p25='?' (Size = 4000), @p26='?' (Size = 4000), @p27='?' (DbType = Int32), @p28='?' (DbType = Guid), @p29='?' (Size = 20), @p30='?' (Size = 4000), @p31='?' (DbType = Guid), @p32='?' (Size = 1000), @p33='?' (DbType = Int32), @p34='?' (DbType = Guid), @p35='?' (DbType = Boolean), @p36='?' (DbType = Int32), @p37='?' (DbType = Int32), @p38='?' (Size = 200), @p39='?' (Size = 4000), @p40='?' (Size = 4000), @p41='?' (DbType = Int32), @p42='?' (DbType = Guid), @p43='?' (Size = 20), @p44='?' (Size = 4000), @p45='?' (DbType = Guid), @p46='?' (Size = 1000), @p47='?' (DbType = Int32), @p48='?' (DbType = Guid), @p49='?' (DbType = Boolean), @p50='?' (DbType = Int32), @p51='?' (DbType = Int32), @p52='?' (Size = 200), @p53='?' (Size = 4000), @p54='?' (Size = 4000), @p55='?' (DbType = Int32), @p56='?' (DbType = Guid), @p57='?' (Size = 20), @p58='?' (Size = 4000), @p59='?' (DbType = Guid), @p60='?' (Size = 1000), @p61='?' (DbType = Int32), @p62='?' (DbType = Guid), @p63='?' (DbType = Boolean), @p64='?' (DbType = Int32), @p65='?' (DbType = Int32), @p66='?' (Size = 200), @p67='?' (Size = 4000), @p68='?' (Size = 4000), @p69='?' (DbType = Int32), @p70='?' (DbType = Guid), @p71='?' (Size = 20), @p72='?' (Size = 4000), @p73='?' (DbType = Guid), @p74='?' (Size = 1000), @p75='?' (DbType = Int32), @p76='?' (DbType = Guid), @p77='?' (DbType = Boolean), @p78='?' (DbType = Int32), @p79='?' (DbType = Int32), @p80='?' (Size = 200), @p81='?' (Size = 4000), @p82='?' (Size = 4000), @p83='?' (DbType = Int32), @p84='?' (DbType = Guid), @p85='?' (Size = 20), @p86='?' (Size = 4000), @p87='?' (DbType = Guid), @p88='?' (Size = 1000), @p89='?' (DbType = Int32), @p90='?' (DbType = Guid), @p91='?' (DbType = Boolean), @p92='?' (DbType = Int32), @p93='?' (DbType = Int32), @p94='?' (Size = 200), @p95='?' (Size = 4000), @p96='?' (Size = 4000), @p97='?' (DbType = Int32), @p98='?' (DbType = Guid), @p99='?' (Size = 20), @p100='?' (Size = 4000), @p101='?' (DbType = Guid), @p102='?' (Size = 1000), @p103='?' (DbType = Int32), @p104='?' (DbType = Guid), @p105='?' (DbType = Boolean), @p106='?' (DbType = Int32), @p107='?' (DbType = Int32), @p108='?' (Size = 200), @p109='?' (Size = 4000), @p110='?' (Size = 4000), @p111='?' (DbType = Int32), @p112='?' (DbType = Guid), @p113='?' (Size = 20), @p114='?' (Size = 4000), @p115='?' (DbType = Guid), @p116='?' (Size = 1000), @p117='?' (DbType = Int32), @p118='?' (DbType = Guid), @p119='?' (DbType = Boolean), @p120='?' (DbType = Int32), @p121='?' (DbType = Int32), @p122='?' (Size = 200), @p123='?' (Size = 4000), @p124='?' (Size = 4000), @p125='?' (DbType = Int32), @p126='?' (DbType = Guid), @p127='?' (Size = 20), @p128='?' (Size = 4000), @p129='?' (DbType = Guid), @p130='?' (Size = 1000), @p131='?' (DbType = Int32), @p132='?' (DbType = Guid), @p133='?' (DbType = Boolean), @p134='?' (DbType = Int32), @p135='?' (DbType = Int32), @p136='?' (Size = 200), @p137='?' (Size = 4000), @p138='?' (Size = 4000), @p139='?' (DbType = Int32), @p140='?' (DbType = Guid), @p141='?' (Size = 20), @p142='?' (Size = 4000), @p143='?' (DbType = Guid), @p144='?' (Size = 1000), @p145='?' (DbType = Int32), @p146='?' (DbType = Guid), @p147='?' (DbType = Boolean), @p148='?' (DbType = Int32), @p149='?' (DbType = Int32), @p150='?' (Size = 200), @p151='?' (Size = 4000), @p152='?' (Size = 4000), @p153='?' (DbType = Int32), @p154='?' (DbType = Guid), @p155='?' (Size = 20), @p156='?' (Size = 4000), @p157='?' (DbType = Guid), @p158='?' (Size = 1000), @p159='?' (DbType = Int32), @p160='?' (DbType = Guid), @p161='?' (DbType = Boolean), @p162='?' (DbType = Int32), @p163='?' (DbType = Int32), @p164='?' (Size = 200), @p165='?' (Size = 4000), @p166='?' (Size = 4000), @p167='?' (DbType = Int32), @p168='?' (DbType = Guid), @p169='?' (Size = 20), @p170='?' (Size = 4000), @p171='?' (DbType = Guid), @p172='?' (Size = 1000), @p173='?' (DbType = Int32), @p174='?' (DbType = Guid), @p175='?' (DbType = Boolean), @p176='?' (DbType = Int32), @p177='?' (DbType = Int32), @p178='?' (Size = 200), @p179='?' (Size = 4000), @p180='?' (Size = 4000), @p181='?' (DbType = Int32), @p182='?' (DbType = Guid), @p183='?' (Size = 20), @p184='?' (Size = 4000), @p185='?' (DbType = Guid), @p186='?' (Size = 1000), @p187='?' (DbType = Int32), @p188='?' (DbType = Guid), @p189='?' (DbType = Boolean), @p190='?' (DbType = Int32), @p191='?' (DbType = Int32), @p192='?' (Size = 200), @p193='?' (Size = 4000), @p194='?' (Size = 4000), @p195='?' (DbType = Int32), @p196='?' (DbType = Guid), @p197='?' (Size = 20), @p198='?' (Size = 4000), @p199='?' (DbType = Guid), @p200='?' (Size = 1000), @p201='?' (DbType = Int32), @p202='?' (DbType = Guid), @p203='?' (DbType = Boolean), @p204='?' (DbType = Int32), @p205='?' (DbType = Int32), @p206='?' (Size = 200), @p207='?' (Size = 4000), @p208='?' (Size = 4000), @p209='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Programs] ([Id], [Code], [DegreeAwarded], [DepartmentId], [Description], [DurationYears], [FacultyId], [IsActive], [MaxAdmissions], [MinJambScore], [Name], [RequiredJambSubjectsJson], [RequiredOLevelSubjectsJson], [Type])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13),
+(@p14, @p15, @p16, @p17, @p18, @p19, @p20, @p21, @p22, @p23, @p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31, @p32, @p33, @p34, @p35, @p36, @p37, @p38, @p39, @p40, @p41),
+(@p42, @p43, @p44, @p45, @p46, @p47, @p48, @p49, @p50, @p51, @p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59, @p60, @p61, @p62, @p63, @p64, @p65, @p66, @p67, @p68, @p69),
+(@p70, @p71, @p72, @p73, @p74, @p75, @p76, @p77, @p78, @p79, @p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87, @p88, @p89, @p90, @p91, @p92, @p93, @p94, @p95, @p96, @p97),
+(@p98, @p99, @p100, @p101, @p102, @p103, @p104, @p105, @p106, @p107, @p108, @p109, @p110, @p111),
+(@p112, @p113, @p114, @p115, @p116, @p117, @p118, @p119, @p120, @p121, @p122, @p123, @p124, @p125),
+(@p126, @p127, @p128, @p129, @p130, @p131, @p132, @p133, @p134, @p135, @p136, @p137, @p138, @p139),
+(@p140, @p141, @p142, @p143, @p144, @p145, @p146, @p147, @p148, @p149, @p150, @p151, @p152, @p153),
+(@p154, @p155, @p156, @p157, @p158, @p159, @p160, @p161, @p162, @p163, @p164, @p165, @p166, @p167),
+(@p168, @p169, @p170, @p171, @p172, @p173, @p174, @p175, @p176, @p177, @p178, @p179, @p180, @p181),
+(@p182, @p183, @p184, @p185, @p186, @p187, @p188, @p189, @p190, @p191, @p192, @p193, @p194, @p195),
+(@p196, @p197, @p198, @p199, @p200, @p201, @p202, @p203, @p204, @p205, @p206, @p207, @p208, @p209);
+2026-04-23 08:53:05.265 +01:00 [INF] Executed DbCommand (80ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 100), @p2='?' (DbType = Int32), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (Size = 100), @p6='?' (DbType = Int32), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (Size = 100), @p10='?' (DbType = Int32), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (Size = 100), @p14='?' (DbType = Int32), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (Size = 100), @p18='?' (DbType = Int32), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (Size = 100), @p22='?' (DbType = Int32), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (Size = 100), @p26='?' (DbType = Int32), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (Size = 100), @p30='?' (DbType = Int32), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (Size = 100), @p34='?' (DbType = Int32), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (Size = 100), @p38='?' (DbType = Int32), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (Size = 100), @p42='?' (DbType = Int32), @p43='?' (DbType = Guid), @p44='?' (DbType = Guid), @p45='?' (Size = 100), @p46='?' (DbType = Int32), @p47='?' (DbType = Guid), @p48='?' (DbType = Guid), @p49='?' (Size = 100), @p50='?' (DbType = Int32), @p51='?' (DbType = Guid), @p52='?' (DbType = Guid), @p53='?' (Size = 100), @p54='?' (DbType = Int32), @p55='?' (DbType = Guid), @p56='?' (DbType = Guid), @p57='?' (Size = 100), @p58='?' (DbType = Int32), @p59='?' (DbType = Guid), @p60='?' (DbType = Guid), @p61='?' (Size = 100), @p62='?' (DbType = Int32), @p63='?' (DbType = Guid), @p64='?' (DbType = Guid), @p65='?' (Size = 100), @p66='?' (DbType = Int32), @p67='?' (DbType = Guid), @p68='?' (DbType = Guid), @p69='?' (Size = 100), @p70='?' (DbType = Int32), @p71='?' (DbType = Guid), @p72='?' (DbType = Guid), @p73='?' (Size = 100), @p74='?' (DbType = Int32), @p75='?' (DbType = Guid), @p76='?' (DbType = Guid), @p77='?' (Size = 100), @p78='?' (DbType = Int32), @p79='?' (DbType = Guid), @p80='?' (DbType = Guid), @p81='?' (Size = 100), @p82='?' (DbType = Int32), @p83='?' (DbType = Guid), @p84='?' (DbType = Guid), @p85='?' (Size = 100), @p86='?' (DbType = Int32), @p87='?' (DbType = Guid), @p88='?' (DbType = Guid), @p89='?' (Size = 100), @p90='?' (DbType = Int32), @p91='?' (DbType = Guid), @p92='?' (DbType = Guid), @p93='?' (Size = 100), @p94='?' (DbType = Int32), @p95='?' (DbType = Guid), @p96='?' (DbType = Guid), @p97='?' (Size = 100), @p98='?' (DbType = Int32), @p99='?' (DbType = Guid), @p100='?' (DbType = Guid), @p101='?' (Size = 100), @p102='?' (DbType = Int32), @p103='?' (DbType = Guid), @p104='?' (DbType = Guid), @p105='?' (Size = 100), @p106='?' (DbType = Int32), @p107='?' (DbType = Guid), @p108='?' (DbType = Guid), @p109='?' (Size = 100), @p110='?' (DbType = Int32), @p111='?' (DbType = Guid), @p112='?' (DbType = Guid), @p113='?' (Size = 100), @p114='?' (DbType = Int32), @p115='?' (DbType = Guid), @p116='?' (DbType = Guid), @p117='?' (Size = 100), @p118='?' (DbType = Int32), @p119='?' (DbType = Guid), @p120='?' (DbType = Guid), @p121='?' (Size = 100), @p122='?' (DbType = Int32), @p123='?' (DbType = Guid), @p124='?' (DbType = Guid), @p125='?' (Size = 100), @p126='?' (DbType = Int32), @p127='?' (DbType = Guid), @p128='?' (DbType = Guid), @p129='?' (Size = 100), @p130='?' (DbType = Int32), @p131='?' (DbType = Guid), @p132='?' (DbType = Guid), @p133='?' (Size = 100), @p134='?' (DbType = Int32), @p135='?' (DbType = Guid), @p136='?' (DbType = Guid), @p137='?' (Size = 100), @p138='?' (DbType = Int32), @p139='?' (DbType = Guid), @p140='?' (DbType = Guid), @p141='?' (Size = 100), @p142='?' (DbType = Int32), @p143='?' (DbType = Guid), @p144='?' (DbType = Guid), @p145='?' (Size = 100), @p146='?' (DbType = Int32), @p147='?' (DbType = Guid), @p148='?' (DbType = Guid), @p149='?' (Size = 100), @p150='?' (DbType = Int32), @p151='?' (DbType = Guid), @p152='?' (DbType = Guid), @p153='?' (Size = 100), @p154='?' (DbType = Int32), @p155='?' (DbType = Guid), @p156='?' (DbType = Guid), @p157='?' (Size = 100), @p158='?' (DbType = Int32), @p159='?' (DbType = Guid), @p160='?' (DbType = Guid), @p161='?' (Size = 100), @p162='?' (DbType = Int32), @p163='?' (DbType = Guid), @p164='?' (DbType = Guid), @p165='?' (Size = 100), @p166='?' (DbType = Int32), @p167='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Levels] ([Id], [Name], [Order], [ProgramId])
+VALUES (@p0, @p1, @p2, @p3),
+(@p4, @p5, @p6, @p7),
+(@p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15),
+(@p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31),
+(@p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39),
+(@p40, @p41, @p42, @p43),
+(@p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51),
+(@p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63),
+(@p64, @p65, @p66, @p67),
+(@p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75),
+(@p76, @p77, @p78, @p79),
+(@p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87),
+(@p88, @p89, @p90, @p91),
+(@p92, @p93, @p94, @p95),
+(@p96, @p97, @p98, @p99),
+(@p100, @p101, @p102, @p103),
+(@p104, @p105, @p106, @p107),
+(@p108, @p109, @p110, @p111),
+(@p112, @p113, @p114, @p115),
+(@p116, @p117, @p118, @p119),
+(@p120, @p121, @p122, @p123),
+(@p124, @p125, @p126, @p127),
+(@p128, @p129, @p130, @p131),
+(@p132, @p133, @p134, @p135),
+(@p136, @p137, @p138, @p139),
+(@p140, @p141, @p142, @p143),
+(@p144, @p145, @p146, @p147),
+(@p148, @p149, @p150, @p151),
+(@p152, @p153, @p154, @p155),
+(@p156, @p157, @p158, @p159),
+(@p160, @p161, @p162, @p163),
+(@p164, @p165, @p166, @p167);
+2026-04-23 08:53:05.297 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 100), @p2='?' (DbType = Int32), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (Size = 100), @p6='?' (DbType = Int32), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (Size = 100), @p10='?' (DbType = Int32), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (Size = 100), @p14='?' (DbType = Int32), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (Size = 100), @p18='?' (DbType = Int32), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (Size = 100), @p22='?' (DbType = Int32), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (Size = 100), @p26='?' (DbType = Int32), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (Size = 100), @p30='?' (DbType = Int32), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (Size = 100), @p34='?' (DbType = Int32), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (Size = 100), @p38='?' (DbType = Int32), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (Size = 100), @p42='?' (DbType = Int32), @p43='?' (DbType = Guid), @p44='?' (DbType = Guid), @p45='?' (Size = 100), @p46='?' (DbType = Int32), @p47='?' (DbType = Guid), @p48='?' (DbType = Guid), @p49='?' (Size = 100), @p50='?' (DbType = Int32), @p51='?' (DbType = Guid), @p52='?' (DbType = Guid), @p53='?' (Size = 100), @p54='?' (DbType = Int32), @p55='?' (DbType = Guid), @p56='?' (DbType = Guid), @p57='?' (Size = 100), @p58='?' (DbType = Int32), @p59='?' (DbType = Guid), @p60='?' (DbType = Guid), @p61='?' (Size = 100), @p62='?' (DbType = Int32), @p63='?' (DbType = Guid), @p64='?' (DbType = Guid), @p65='?' (Size = 100), @p66='?' (DbType = Int32), @p67='?' (DbType = Guid), @p68='?' (DbType = Guid), @p69='?' (Size = 100), @p70='?' (DbType = Int32), @p71='?' (DbType = Guid), @p72='?' (DbType = Guid), @p73='?' (Size = 100), @p74='?' (DbType = Int32), @p75='?' (DbType = Guid), @p76='?' (DbType = Guid), @p77='?' (Size = 100), @p78='?' (DbType = Int32), @p79='?' (DbType = Guid), @p80='?' (DbType = Guid), @p81='?' (Size = 100), @p82='?' (DbType = Int32), @p83='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Levels] ([Id], [Name], [Order], [ProgramId])
+VALUES (@p0, @p1, @p2, @p3),
+(@p4, @p5, @p6, @p7),
+(@p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15),
+(@p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31),
+(@p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39),
+(@p40, @p41, @p42, @p43),
+(@p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51),
+(@p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63),
+(@p64, @p65, @p66, @p67),
+(@p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75),
+(@p76, @p77, @p78, @p79),
+(@p80, @p81, @p82, @p83);
+2026-04-23 08:53:05.332 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+WHERE [r].[Name] = N'Lecturer'
+2026-04-23 08:53:05.421 +01:00 [INF] Executed DbCommand (33ms) [Parameters=[@l_Email='?' (Size = 256), @l_Oid='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Users] AS [u]
+        WHERE [u].[Email] = @l_Email OR [u].[EntraObjectId] = @l_Oid) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:05.426 +01:00 [INF] Lecturer john.doe@wigweuniversity.edu.ng already exists. Skipping.
+2026-04-23 08:53:05.438 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[@l_Email='?' (Size = 256), @l_Oid='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Users] AS [u]
+        WHERE [u].[Email] = @l_Email OR [u].[EntraObjectId] = @l_Oid) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:05.444 +01:00 [INF] Lecturer jane.smith@wigweuniversity.edu.ng already exists. Skipping.
+2026-04-23 08:53:05.504 +01:00 [INF] Executed DbCommand (25ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [DocumentTypes] AS [d]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:05.548 +01:00 [INF] Document types already seeded. Skipping.
+2026-04-23 08:53:05.616 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SponsorOrganizations] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:05.625 +01:00 [INF] Sponsors already seeded. Skipping.
+2026-04-23 08:53:05.652 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Subjects] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-23 08:53:05.657 +01:00 [INF] Subjects already seeded. Skipping.
+2026-04-23 08:53:05.659 +01:00 [INF] Database initialization completed successfully.
+2026-04-23 08:53:05.849 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.onmicrosoft.com
+2026-04-23 08:53:05.960 +01:00 [INF] Entra ID Service initialized successfully
+2026-04-23 08:53:06.353 +01:00 [INF] Registered 150 endpoints in 13,040 milliseconds.
+2026-04-23 08:53:06.402 +01:00 [INF] User profile is available. Using 'C:\Users\StanleyNwaegwu\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-23 08:53:06.581 +01:00 [INF] Now listening on: http://localhost:5012
+2026-04-23 08:53:06.591 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-04-23 08:53:06.592 +01:00 [INF] Hosting environment: Development
+2026-04-23 08:53:06.593 +01:00 [INF] Content root path: C:\Work\LMS\LMS-API\LMS.Api
+2026-04-23 08:56:51.196 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/api/admissions/faculties - null null
+2026-04-23 08:56:51.595 +01:00 [INF] Executing endpoint 'HTTP: GET /api/admissions/faculties'
+2026-04-23 08:56:51.602 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.onmicrosoft.com
+2026-04-23 08:56:51.606 +01:00 [INF] Entra ID Service initialized successfully
+2026-04-23 08:56:51.792 +01:00 [INF] Executed DbCommand (35ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+ORDER BY [f].[Name]
+2026-04-23 08:56:51.841 +01:00 [INF] Executed endpoint 'HTTP: GET /api/admissions/faculties'
+2026-04-23 08:56:51.853 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/api/admissions/faculties - 200 null application/json; charset=utf-8 660.5726ms
+2026-04-23 09:11:34.851 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/api/admissions/programs/8cddbfd1-fa8b-4a57-b9f5-eff5d876b3bc - null null
+2026-04-23 09:11:35.150 +01:00 [INF] Executing endpoint 'HTTP: GET /api/admissions/programs/{FacultyId}'
+2026-04-23 09:11:35.183 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.onmicrosoft.com
+2026-04-23 09:11:35.271 +01:00 [INF] Entra ID Service initialized successfully
+2026-04-23 09:11:38.603 +01:00 [INF] Executed DbCommand (1,463ms) [Parameters=[@facultyId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[DepartmentId], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type]
+FROM [Programs] AS [p]
+WHERE [p].[FacultyId] = @facultyId
+ORDER BY [p].[Name]
+2026-04-23 09:11:38.682 +01:00 [INF] Executed endpoint 'HTTP: GET /api/admissions/programs/{FacultyId}'
+2026-04-23 09:11:38.694 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/api/admissions/programs/8cddbfd1-fa8b-4a57-b9f5-eff5d876b3bc - 200 null application/json; charset=utf-8 3853.7388ms
+2026-04-23 09:12:00.651 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/api/admissions/programs/978b1d58-b81b-427d-9d31-2d2abaf77b98 - null null
+2026-04-23 09:12:00.679 +01:00 [INF] Executing endpoint 'HTTP: GET /api/admissions/programs/{FacultyId}'
+2026-04-23 09:12:00.681 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.onmicrosoft.com
+2026-04-23 09:12:00.684 +01:00 [INF] Entra ID Service initialized successfully
+2026-04-23 09:12:00.724 +01:00 [INF] Executed DbCommand (35ms) [Parameters=[@facultyId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[DepartmentId], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type]
+FROM [Programs] AS [p]
+WHERE [p].[FacultyId] = @facultyId
+ORDER BY [p].[Name]
+2026-04-23 09:12:00.730 +01:00 [INF] Executed endpoint 'HTTP: GET /api/admissions/programs/{FacultyId}'
+2026-04-23 09:12:00.732 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/api/admissions/programs/978b1d58-b81b-427d-9d31-2d2abaf77b98 - 200 null application/json; charset=utf-8 80.3612ms
+2026-04-23 09:26:13.807 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/api/admissions/sessions/active - null null
+2026-04-23 09:26:13.842 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-23 09:26:13.853 +01:00 [INF] AuthenticationScheme: Bearer was challenged.
+2026-04-23 09:26:13.874 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/api/admissions/sessions/active - 401 null application/json; charset=utf-8 67.3874ms
+2026-04-23 09:26:24.855 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/api/admissions/sessions/active - null null
+2026-04-23 09:26:24.859 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-23 09:26:24.861 +01:00 [INF] AuthenticationScheme: Bearer was challenged.
+2026-04-23 09:26:24.863 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/api/admissions/sessions/active - 401 null application/json; charset=utf-8 8.123ms
+2026-04-23 12:02:04.527 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/ - null null
+2026-04-23 12:02:04.759 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-23 12:02:04.775 +01:00 [INF] AuthenticationScheme: Bearer was challenged.
+2026-04-23 12:02:04.835 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/ - 401 null application/json; charset=utf-8 328.7089ms
+2026-04-23 12:02:05.185 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/favicon.ico - null null
+2026-04-23 12:02:05.200 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-23 12:02:05.204 +01:00 [INF] AuthenticationScheme: Bearer was challenged.
+2026-04-23 12:02:05.213 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/favicon.ico - 401 null application/json; charset=utf-8 29.3196ms
+2026-04-23 12:02:14.541 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/docs - null null
+2026-04-23 12:02:14.570 +01:00 [INF] Executing endpoint 'HTTP: GET /docs/{documentName?}'
+2026-04-23 12:02:14.786 +01:00 [INF] Executing RedirectResult, redirecting to docs/.
+2026-04-23 12:02:14.791 +01:00 [INF] Executed endpoint 'HTTP: GET /docs/{documentName?}'
+2026-04-23 12:02:14.798 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/docs - 302 0 null 256.3431ms
+2026-04-23 12:02:14.812 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/docs/ - null null
+2026-04-23 12:02:14.845 +01:00 [INF] Executing endpoint 'HTTP: GET /docs/{documentName?}'
+2026-04-23 12:02:16.015 +01:00 [INF] Write content with HTTP Response ContentType of text/html
+2026-04-23 12:02:16.021 +01:00 [INF] Executed endpoint 'HTTP: GET /docs/{documentName?}'
+2026-04-23 12:02:16.025 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/docs/ - 200 643 text/html 1212.9552ms
+2026-04-23 12:02:16.103 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/docs/scalar.js - null null
+2026-04-23 12:02:16.109 +01:00 [INF] Executing endpoint 'HTTP: GET /docs/scalar.js'
+2026-04-23 12:02:16.111 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/docs/scalar.aspnetcore.js - null null
+2026-04-23 12:02:16.128 +01:00 [INF] CORS policy execution failed.
+2026-04-23 12:02:16.130 +01:00 [INF] Request origin http://127.0.0.1:10514 does not have permission to access the resource.
+2026-04-23 12:02:16.140 +01:00 [INF] Executing endpoint 'HTTP: GET /docs/scalar.aspnetcore.js'
+2026-04-23 12:02:16.151 +01:00 [INF] Sending file with download name ''.
+2026-04-23 12:02:16.151 +01:00 [INF] Sending file with download name ''.
+2026-04-23 12:02:16.204 +01:00 [INF] Executed endpoint 'HTTP: GET /docs/scalar.aspnetcore.js'
+2026-04-23 12:02:16.206 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/docs/scalar.aspnetcore.js - 200 1111 text/javascript 95.0137ms
+2026-04-23 12:02:16.543 +01:00 [INF] Executed endpoint 'HTTP: GET /docs/scalar.js'
+2026-04-23 12:02:16.545 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/docs/scalar.js - 200 989777 text/javascript 441.461ms
+2026-04-23 12:02:17.092 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/openapi/v1.json - null null
+2026-04-23 12:02:17.130 +01:00 [INF] Executing endpoint 'HTTP: GET /openapi/{documentName}.json'
+2026-04-23 12:02:17.341 +01:00 [INF] No action descriptors found. This may indicate an incorrectly configured application or missing application parts. To learn more, visit https://aka.ms/aspnet/mvc/app-parts
+2026-04-23 12:02:18.313 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/docs/favicon.svg - null null
+2026-04-23 12:02:18.316 +01:00 [INF] Executing endpoint 'HTTP: GET /docs/favicon.svg'
+2026-04-23 12:02:18.318 +01:00 [INF] Sending file with download name ''.
+2026-04-23 12:02:18.320 +01:00 [INF] Executed endpoint 'HTTP: GET /docs/favicon.svg'
+2026-04-23 12:02:18.327 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/docs/favicon.svg - 200 533 image/svg+xml 13.5565ms
+2026-04-23 12:02:20.238 +01:00 [INF] Executed endpoint 'HTTP: GET /openapi/{documentName}.json'
+2026-04-23 12:02:20.257 +01:00 [ERR] An unhandled exception has occurred while executing the request.
+System.InvalidOperationException: CurrentDepth (64) is equal to or larger than the maximum allowed depth of 64. Cannot write the next JSON object or array.
+   at System.Text.Json.ThrowHelper.ThrowInvalidOperationException(ExceptionResource resource, Int32 currentDepth, Int32 maxDepth, Byte token, JsonTokenType tokenType)
+   at System.Text.Json.Utf8JsonWriter.ThrowInvalidOperationException_DepthTooLarge()
+   at System.Text.Json.Utf8JsonWriter.WriteStart(Byte token)
+   at System.Text.Json.Nodes.JsonArray.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.Nodes.JsonObject.WriteTo(Utf8JsonWriter writer, JsonSerializerOptions options)
+   at System.Text.Json.JsonSerializer.ReadFromNode[TValue](JsonNode node, JsonTypeInfo`1 jsonTypeInfo)
+   at Microsoft.AspNetCore.OpenApi.OpenApiSchemaService.GetOrCreateUnresolvedSchemaAsync(OpenApiDocument document, Type type, IServiceProvider scopedServiceProvider, IOpenApiSchemaTransformer[] schemaTransformers, ApiParameterDescription parameterDescription, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiSchemaService.GetOrCreateSchemaAsync(OpenApiDocument document, Type type, IServiceProvider scopedServiceProvider, IOpenApiSchemaTransformer[] schemaTransformers, ApiParameterDescription parameterDescription, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetResponseAsync(OpenApiDocument document, ApiDescription apiDescription, Int32 statusCode, ApiResponseType apiResponseType, IServiceProvider scopedServiceProvider, IOpenApiSchemaTransformer[] schemaTransformers, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetResponsesAsync(OpenApiDocument document, ApiDescription description, IServiceProvider scopedServiceProvider, IOpenApiSchemaTransformer[] schemaTransformers, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetOperationAsync(ApiDescription description, OpenApiDocument document, IServiceProvider scopedServiceProvider, IOpenApiSchemaTransformer[] schemaTransformers, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetOperationsAsync(IGrouping`2 descriptions, OpenApiDocument document, IServiceProvider scopedServiceProvider, IOpenApiOperationTransformer[] operationTransformers, IOpenApiSchemaTransformer[] schemaTransformers, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetOpenApiPathsAsync(OpenApiDocument document, IServiceProvider scopedServiceProvider, IOpenApiOperationTransformer[] operationTransformers, IOpenApiSchemaTransformer[] schemaTransformers, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.OpenApi.OpenApiDocumentService.GetOpenApiDocumentAsync(IServiceProvider scopedServiceProvider, HttpRequest httpRequest, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Builder.OpenApiEndpointRouteBuilderExtensions.<>c__DisplayClass0_0.<<MapOpenApi>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.AspNetCore.Http.Generated.<GeneratedRouteBuilderExtensions_g>F0399B8B15BE443123F4BECEE84B112C1912EE3F44D9DDD7BFA38E371FB917343__GeneratedRouteBuilderExtensionsCore.<>c__DisplayClass2_0.<<MapGet0>g__RequestHandler|5>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.AspNetCore.Routing.EndpointMiddleware.<Invoke>g__AwaitRequestTask|7_0(Endpoint endpoint, Task requestTask, ILogger logger)
+   at Microsoft.AspNetCore.Authorization.AuthorizationMiddleware.Invoke(HttpContext context)
+   at LMS.Api.Security.UserProvisioningMiddleware.InvokeAsync(HttpContext context, LmsDbContext dbContext, IConfiguration configuration) in C:\Work\LMS\LMS-API\LMS.Api\Security\UserProvisioningMiddleware.cs:line 141
+   at LMS.Api.Security.ApiReplayPreventionMiddleware.InvokeAsync(HttpContext context) in C:\Work\LMS\LMS-API\LMS.Api\Security\ApiReplayPreventionMiddleware.cs:line 19
+   at Microsoft.AspNetCore.Authentication.AuthenticationMiddleware.Invoke(HttpContext context)
+   at Microsoft.AspNetCore.Diagnostics.StatusCodePagesMiddleware.Invoke(HttpContext context)
+   at Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddlewareImpl.<Invoke>g__Awaited|10_0(ExceptionHandlerMiddlewareImpl middleware, HttpContext context, Task task)
+2026-04-23 12:02:20.495 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/openapi/v1.json - 500 null application/json; charset=utf-8 3403.4741ms

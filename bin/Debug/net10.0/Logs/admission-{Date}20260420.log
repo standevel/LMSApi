@@ -1,0 +1,1576 @@
+2026-04-20 10:50:34.577 +01:00 [INF] Executed DbCommand (45ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-20 10:50:34.640 +01:00 [INF] Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+2026-04-20 10:50:34.737 +01:00 [INF] Executed DbCommand (90ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+SELECT @result
+2026-04-20 10:50:34.859 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+2026-04-20 10:50:34.890 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-20 10:50:34.895 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+2026-04-20 10:50:34.948 +01:00 [INF] Executed DbCommand (47ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [MigrationId], [ProductVersion]
+FROM [__EFMigrationsHistory]
+ORDER BY [MigrationId];
+2026-04-20 10:50:34.969 +01:00 [INF] No migrations were applied. The database is already up to date.
+2026-04-20 10:50:34.982 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+SELECT @result
+2026-04-20 10:50:35.401 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [Roles] AS [r]
+2026-04-20 10:50:35.445 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Code]
+FROM [Permissions] AS [p]
+2026-04-20 10:50:35.533 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+2026-04-20 10:50:35.554 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[Description]
+FROM [Permissions] AS [p]
+2026-04-20 10:50:35.586 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[RoleId], [r].[PermissionId]
+FROM [RolePermissions] AS [r]
+2026-04-20 10:50:35.716 +01:00 [INF] Executed DbCommand (40ms) [Parameters=[@adminRole_Id='?' (DbType = Guid), @accessManagePermission_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[RoleId], [r].[PermissionId], [r].[AssignedUtc]
+FROM [RolePermissions] AS [r]
+WHERE [r].[RoleId] = @adminRole_Id AND [r].[PermissionId] = @accessManagePermission_Id
+2026-04-20 10:50:35.764 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [AcademicSessions] AS [a]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.769 +01:00 [INF] Sessions already seeded. Skipping.
+2026-04-20 10:50:35.793 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Faculties] AS [f]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.794 +01:00 [INF] Faculties already seeded. Skipping.
+2026-04-20 10:50:35.816 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Programs] AS [p]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.817 +01:00 [INF] Programs already seeded. Skipping.
+2026-04-20 10:50:35.841 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [DocumentTypes] AS [d]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.841 +01:00 [INF] Document types already seeded. Skipping.
+2026-04-20 10:50:35.863 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SponsorOrganizations] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.863 +01:00 [INF] Sponsors already seeded. Skipping.
+2026-04-20 10:50:35.887 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Subjects] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-04-20 10:50:35.887 +01:00 [INF] Subjects already seeded. Skipping.
+2026-04-20 10:50:35.888 +01:00 [INF] Database initialization completed successfully.
+2026-04-20 10:50:36.257 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.onmicrosoft.com
+2026-04-20 10:50:36.334 +01:00 [INF] Entra ID Service initialized successfully
+2026-04-20 10:50:36.492 +01:00 [INF] Registered 126 endpoints in 5,475 milliseconds.
+2026-04-20 10:50:36.510 +01:00 [INF] User profile is available. Using 'C:\Users\StanleyNwaegwu\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-20 10:50:36.600 +01:00 [INF] Now listening on: http://localhost:5021
+2026-04-20 10:50:36.601 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-04-20 10:50:36.601 +01:00 [INF] Hosting environment: Development
+2026-04-20 10:50:36.601 +01:00 [INF] Content root path: C:\Work\LMS\LMS-API\LMS.Api
+2026-04-20 10:59:16.320 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 10:59:16.911 +01:00 [INF] CORS policy execution successful.
+2026-04-20 10:59:16.940 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 634.5642ms
+2026-04-20 10:59:16.994 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 10:59:17.003 +01:00 [INF] CORS policy execution successful.
+2026-04-20 10:59:17.217 +01:00 [INF] Failed to validate the token.
+Microsoft.IdentityModel.Tokens.SecurityTokenExpiredException: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '17/04/2026 20:24:11', Current time (UTC): '20/04/2026 09:59:17'.
+   at Microsoft.IdentityModel.Tokens.ValidatorUtilities.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.Tokens.Validators.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateTokenPayloadAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateJWSAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+2026-04-20 10:59:17.247 +01:00 [INF] LocalJwt was not authenticated. Failure message: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '17/04/2026 20:24:11', Current time (UTC): '20/04/2026 09:59:17'.
+2026-04-20 10:59:17.299 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 10:59:17.436 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 10:59:17.453 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 458.4805ms
+2026-04-20 10:59:23.352 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - null null
+2026-04-20 10:59:23.353 +01:00 [INF] CORS policy execution successful.
+2026-04-20 10:59:23.354 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - 204 null null 1.5991ms
+2026-04-20 10:59:23.355 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5021/api/auth/login - application/json 76
+2026-04-20 10:59:23.356 +01:00 [INF] CORS policy execution successful.
+2026-04-20 10:59:23.367 +01:00 [INF] Executing endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 10:59:24.143 +01:00 [INF] Executed DbCommand (54ms) [Parameters=[@username='?' (Size = 64), @username0='?' (Size = 256)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE ([u].[Username] = @username OR [u].[Email] = @username0) AND [u].[IsActive] = CAST(1 AS bit)
+2026-04-20 10:59:24.155 +01:00 [INF] Setting HTTP status code 401.
+2026-04-20 10:59:24.161 +01:00 [INF] Writing value of type 'ApiResponse`1' as Json.
+2026-04-20 10:59:24.166 +01:00 [INF] Executed endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 10:59:24.176 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5021/api/auth/login - 401 null application/json; charset=utf-8 820.4609ms
+2026-04-20 11:01:40.058 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - null null
+2026-04-20 11:01:40.059 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:01:40.059 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - 204 null null 1.6852ms
+2026-04-20 11:01:40.061 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5021/api/auth/login - application/json 76
+2026-04-20 11:01:40.061 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:01:40.074 +01:00 [INF] Executing endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 11:01:40.130 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@username='?' (Size = 64), @username0='?' (Size = 256)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE ([u].[Username] = @username OR [u].[Email] = @username0) AND [u].[IsActive] = CAST(1 AS bit)
+2026-04-20 11:01:40.830 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[Id] = @userId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 11:01:40.967 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT DISTINCT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @userId
+2026-04-20 11:01:40.984 +01:00 [INF] Executed endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 11:01:40.984 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5021/api/auth/login - 200 null application/json; charset=utf-8 923.626ms
+2026-04-20 11:01:40.988 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 11:01:40.988 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:01:40.988 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 0.4026ms
+2026-04-20 11:01:40.989 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 11:01:40.990 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:01:41.026 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:01:41.185 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@p2='?' (DbType = Guid), @p0='?' (Size = 256), @p1='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [Email] = @p0, [UpdatedUtc] = @p1
+OUTPUT 1
+WHERE [Id] = @p2;
+2026-04-20 11:01:41.232 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:01:41.235 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 11:01:41.300 +01:00 [INF] Executed DbCommand (19ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 11:01:41.311 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 11:01:41.312 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 321.9693ms
+2026-04-20 11:02:38.215 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - null null
+2026-04-20 11:02:38.216 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:38.216 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - 204 null null 1.376ms
+2026-04-20 11:02:38.222 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - null null
+2026-04-20 11:02:38.224 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:38.248 +01:00 [INF] Executed DbCommand (16ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:02:38.273 +01:00 [INF] Executed DbCommand (14ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:02:38.306 +01:00 [INF] Executed DbCommand (30ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:02:38.343 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:38.560 +01:00 [INF] Executed DbCommand (28ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE EXISTS (
+    SELECT 1
+    FROM [LectureSessionLecturers] AS [l0]
+    WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+2026-04-20 11:02:38.769 +01:00 [INF] Executed DbCommand (64ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date), @p='?' (DbType = Int32), @p4='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT [l1].[Id], [c0].[Code], [c0].[Title], [l1].[SessionDate], [l1].[StartTime], [l1].[EndTime], [s].[Name], [c].[Id], [c0].[Id], [s].[Id], [s2].[c], [s2].[LectureSessionId], [s2].[LecturerId], [s2].[Id], [l1].[IsManuallyCreated], [l1].[IsCompleted], (
+    SELECT COUNT(*)
+    FROM [SessionMaterials] AS [s0]
+    WHERE [l1].[Id] = [s0].[LectureSessionId]), CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SessionAttendances] AS [s1]
+        WHERE [l1].[Id] = [s1].[LectureSessionId]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+FROM (
+    SELECT [l].[Id], [l].[CourseOfferingId], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[SessionDate], [l].[StartTime], [l].[VenueId]
+    FROM [LectureSessions] AS [l]
+    WHERE EXISTS (
+        SELECT 1
+        FROM [LectureSessionLecturers] AS [l0]
+        WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+    ORDER BY [l].[SessionDate], [l].[StartTime]
+    OFFSET @p ROWS FETCH NEXT @p4 ROWS ONLY
+) AS [l1]
+INNER JOIN [CourseOfferings] AS [c] ON [l1].[CourseOfferingId] = [c].[Id]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+LEFT JOIN [Subjects] AS [s] ON [l1].[VenueId] = [s].[Id]
+LEFT JOIN (
+    SELECT COALESCE([u].[DisplayName], [u].[Email], N'Unknown') AS [c], [l2].[LectureSessionId], [l2].[LecturerId], [u].[Id]
+    FROM [LectureSessionLecturers] AS [l2]
+    INNER JOIN [Users] AS [u] ON [l2].[LecturerId] = [u].[Id]
+) AS [s2] ON [l1].[Id] = [s2].[LectureSessionId]
+ORDER BY [l1].[SessionDate], [l1].[StartTime], [l1].[Id], [c].[Id], [c0].[Id], [s].[Id], [s2].[LectureSessionId], [s2].[LecturerId]
+2026-04-20 11:02:38.817 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:38.817 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - 200 null application/json; charset=utf-8 594.3664ms
+2026-04-20 11:02:51.808 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/admin/sessions - null null
+2026-04-20 11:02:51.808 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/timetable/lecturers - null null
+2026-04-20 11:02:51.808 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.808 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.809 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/admin/sessions - 204 null null 0.813ms
+2026-04-20 11:02:51.809 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/timetable/lecturers - 204 null null 0.4411ms
+2026-04-20 11:02:51.809 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - null null
+2026-04-20 11:02:51.809 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.809 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - 204 null null 0.1844ms
+2026-04-20 11:02:51.811 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/timetable/lecturers - null null
+2026-04-20 11:02:51.811 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/admin/sessions - null null
+2026-04-20 11:02:51.811 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - null null
+2026-04-20 11:02:51.812 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.813 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.814 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:51.821 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:02:51.830 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:02:51.834 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:02:51.836 +01:00 [INF] Executing endpoint 'HTTP: GET /api/admin/sessions'
+2026-04-20 11:02:51.866 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [AcademicSessions] AS [a]
+2026-04-20 11:02:51.908 +01:00 [INF] Executed endpoint 'HTTP: GET /api/admin/sessions'
+2026-04-20 11:02:51.909 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/admin/sessions - 200 null application/json; charset=utf-8 97.3089ms
+2026-04-20 11:02:52.137 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:02:52.139 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:02:52.140 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:02:52.141 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:02:52.141 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:02:52.142 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:52.143 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:02:52.144 +01:00 [INF] Authorization failed. These requirements were not met:
+RolesAuthorizationRequirement:User.IsInRole must be true for one of the following roles: (Admin|Registrar|SuperAdmin)
+2026-04-20 11:02:52.147 +01:00 [INF] AuthenticationScheme: LocalJwt was forbidden.
+2026-04-20 11:02:52.150 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE EXISTS (
+    SELECT 1
+    FROM [LectureSessionLecturers] AS [l0]
+    WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+2026-04-20 11:02:52.153 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/timetable/lecturers - 403 null application/json; charset=utf-8 342.035ms
+2026-04-20 11:02:52.186 +01:00 [INF] Executed DbCommand (34ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date), @p='?' (DbType = Int32), @p4='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT [l1].[Id], [c0].[Code], [c0].[Title], [l1].[SessionDate], [l1].[StartTime], [l1].[EndTime], [s].[Name], [c].[Id], [c0].[Id], [s].[Id], [s2].[c], [s2].[LectureSessionId], [s2].[LecturerId], [s2].[Id], [l1].[IsManuallyCreated], [l1].[IsCompleted], (
+    SELECT COUNT(*)
+    FROM [SessionMaterials] AS [s0]
+    WHERE [l1].[Id] = [s0].[LectureSessionId]), CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SessionAttendances] AS [s1]
+        WHERE [l1].[Id] = [s1].[LectureSessionId]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+FROM (
+    SELECT [l].[Id], [l].[CourseOfferingId], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[SessionDate], [l].[StartTime], [l].[VenueId]
+    FROM [LectureSessions] AS [l]
+    WHERE EXISTS (
+        SELECT 1
+        FROM [LectureSessionLecturers] AS [l0]
+        WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+    ORDER BY [l].[SessionDate], [l].[StartTime]
+    OFFSET @p ROWS FETCH NEXT @p4 ROWS ONLY
+) AS [l1]
+INNER JOIN [CourseOfferings] AS [c] ON [l1].[CourseOfferingId] = [c].[Id]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+LEFT JOIN [Subjects] AS [s] ON [l1].[VenueId] = [s].[Id]
+LEFT JOIN (
+    SELECT COALESCE([u].[DisplayName], [u].[Email], N'Unknown') AS [c], [l2].[LectureSessionId], [l2].[LecturerId], [u].[Id]
+    FROM [LectureSessionLecturers] AS [l2]
+    INNER JOIN [Users] AS [u] ON [l2].[LecturerId] = [u].[Id]
+) AS [s2] ON [l1].[Id] = [s2].[LectureSessionId]
+ORDER BY [l1].[SessionDate], [l1].[StartTime], [l1].[Id], [c].[Id], [c0].[Id], [s].[Id], [s2].[LectureSessionId], [s2].[LecturerId]
+2026-04-20 11:02:52.187 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:52.187 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - 200 null application/json; charset=utf-8 375.8063ms
+2026-04-20 11:02:57.217 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-05-03&page=1&pageSize=100 - null null
+2026-04-20 11:02:57.217 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:57.217 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-05-03&page=1&pageSize=100 - 204 null null 0.4332ms
+2026-04-20 11:02:57.219 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-05-03&page=1&pageSize=100 - null null
+2026-04-20 11:02:57.219 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:02:57.222 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:02:57.225 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:02:57.227 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:02:57.228 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:57.229 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE EXISTS (
+    SELECT 1
+    FROM [LectureSessionLecturers] AS [l0]
+    WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+2026-04-20 11:02:57.232 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date), @p='?' (DbType = Int32), @p4='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT [l1].[Id], [c0].[Code], [c0].[Title], [l1].[SessionDate], [l1].[StartTime], [l1].[EndTime], [s].[Name], [c].[Id], [c0].[Id], [s].[Id], [s2].[c], [s2].[LectureSessionId], [s2].[LecturerId], [s2].[Id], [l1].[IsManuallyCreated], [l1].[IsCompleted], (
+    SELECT COUNT(*)
+    FROM [SessionMaterials] AS [s0]
+    WHERE [l1].[Id] = [s0].[LectureSessionId]), CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SessionAttendances] AS [s1]
+        WHERE [l1].[Id] = [s1].[LectureSessionId]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+FROM (
+    SELECT [l].[Id], [l].[CourseOfferingId], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[SessionDate], [l].[StartTime], [l].[VenueId]
+    FROM [LectureSessions] AS [l]
+    WHERE EXISTS (
+        SELECT 1
+        FROM [LectureSessionLecturers] AS [l0]
+        WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+    ORDER BY [l].[SessionDate], [l].[StartTime]
+    OFFSET @p ROWS FETCH NEXT @p4 ROWS ONLY
+) AS [l1]
+INNER JOIN [CourseOfferings] AS [c] ON [l1].[CourseOfferingId] = [c].[Id]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+LEFT JOIN [Subjects] AS [s] ON [l1].[VenueId] = [s].[Id]
+LEFT JOIN (
+    SELECT COALESCE([u].[DisplayName], [u].[Email], N'Unknown') AS [c], [l2].[LectureSessionId], [l2].[LecturerId], [u].[Id]
+    FROM [LectureSessionLecturers] AS [l2]
+    INNER JOIN [Users] AS [u] ON [l2].[LecturerId] = [u].[Id]
+) AS [s2] ON [l1].[Id] = [s2].[LectureSessionId]
+ORDER BY [l1].[SessionDate], [l1].[StartTime], [l1].[Id], [c].[Id], [c0].[Id], [s].[Id], [s2].[LectureSessionId], [s2].[LecturerId]
+2026-04-20 11:02:57.233 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 11:02:57.234 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-05-03&page=1&pageSize=100 - 200 null application/json; charset=utf-8 15.0518ms
+2026-04-20 11:03:14.502 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions/09f1378a-f106-4703-aa09-02c4b27ee8bf - null null
+2026-04-20 11:03:14.502 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:14.503 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions/09f1378a-f106-4703-aa09-02c4b27ee8bf - 204 null null 0.77ms
+2026-04-20 11:03:14.507 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions/09f1378a-f106-4703-aa09-02c4b27ee8bf - null null
+2026-04-20 11:03:14.510 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:14.527 +01:00 [INF] Executed DbCommand (15ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:03:14.540 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:03:14.546 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:03:14.553 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions/{id}'
+2026-04-20 11:03:14.736 +01:00 [WRN] Compiling a query which loads related collections for more than one collection navigation, either via 'Include' or through projection, but no 'QuerySplittingBehavior' has been configured. By default, Entity Framework will use 'QuerySplittingBehavior.SingleQuery', which can potentially result in slow query performance. See https://go.microsoft.com/fwlink/?linkid=2134277 for more information. To identify the query that's triggering this warning call 'ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))'.
+2026-04-20 11:03:14.870 +01:00 [INF] Executed DbCommand (41ms) [Parameters=[@sessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [s3].[Id], [s3].[CourseOfferingId], [s3].[CreatedAt], [s3].[CreatedBy], [s3].[EndTime], [s3].[IsCompleted], [s3].[IsManuallyCreated], [s3].[Notes], [s3].[SessionDate], [s3].[StartTime], [s3].[TimetableSlotId], [s3].[VenueId], [s3].[Id0], [s3].[AcademicSessionId], [s3].[CourseId], [s3].[LecturerId], [s3].[LevelId], [s3].[ProgramId], [s3].[Semester], [s3].[Id1], [s3].[AcademicLevelId], [s3].[AcademicProgramId], [s3].[Code], [s3].[CreditUnits], [s3].[Description], [s3].[IsActive], [s3].[Title], [s3].[Id2], [s3].[IsActive0], [s3].[Name], [s4].[LectureSessionId], [s4].[LecturerId], [s4].[Id], [s4].[CreatedUtc], [s4].[DisplayName], [s4].[Email], [s4].[EntraObjectId], [s4].[IsActive], [s4].[PasswordHash], [s4].[UpdatedUtc], [s4].[Username], [s5].[Id], [s5].[ContentType], [s5].[FileName], [s5].[FileSizeBytes], [s5].[FileUrl], [s5].[LectureSessionId], [s5].[UploadedAt], [s5].[UploadedBy], [s5].[Id0], [s5].[CreatedUtc], [s5].[DisplayName], [s5].[Email], [s5].[EntraObjectId], [s5].[IsActive], [s5].[PasswordHash], [s5].[UpdatedUtc], [s5].[Username], [s6].[Id], [s6].[CreatedAt], [s6].[CreatedBy], [s6].[Description], [s6].[LectureSessionId], [s6].[Title], [s6].[Url], [s6].[Id0], [s6].[CreatedUtc], [s6].[DisplayName], [s6].[Email], [s6].[EntraObjectId], [s6].[IsActive], [s6].[PasswordHash], [s6].[UpdatedUtc], [s6].[Username], [s2].[Id], [s2].[IsPresent], [s2].[LectureSessionId], [s2].[ModifiedAt], [s2].[ModifiedBy], [s2].[RecordedAt], [s2].[RecordedBy], [s2].[StudentId]
+FROM (
+    SELECT TOP(1) [l].[Id], [l].[CourseOfferingId], [l].[CreatedAt], [l].[CreatedBy], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[Notes], [l].[SessionDate], [l].[StartTime], [l].[TimetableSlotId], [l].[VenueId], [c].[Id] AS [Id0], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id] AS [Id1], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [s].[Id] AS [Id2], [s].[IsActive] AS [IsActive0], [s].[Name]
+    FROM [LectureSessions] AS [l]
+    INNER JOIN [CourseOfferings] AS [c] ON [l].[CourseOfferingId] = [c].[Id]
+    INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+    LEFT JOIN [Subjects] AS [s] ON [l].[VenueId] = [s].[Id]
+    WHERE [l].[Id] = @sessionId
+) AS [s3]
+LEFT JOIN (
+    SELECT [l0].[LectureSessionId], [l0].[LecturerId], [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [LectureSessionLecturers] AS [l0]
+    INNER JOIN [Users] AS [u] ON [l0].[LecturerId] = [u].[Id]
+) AS [s4] ON [s3].[Id] = [s4].[LectureSessionId]
+LEFT JOIN (
+    SELECT [s0].[Id], [s0].[ContentType], [s0].[FileName], [s0].[FileSizeBytes], [s0].[FileUrl], [s0].[LectureSessionId], [s0].[UploadedAt], [s0].[UploadedBy], [u0].[Id] AS [Id0], [u0].[CreatedUtc], [u0].[DisplayName], [u0].[Email], [u0].[EntraObjectId], [u0].[IsActive], [u0].[PasswordHash], [u0].[UpdatedUtc], [u0].[Username]
+    FROM [SessionMaterials] AS [s0]
+    INNER JOIN [Users] AS [u0] ON [s0].[UploadedBy] = [u0].[Id]
+) AS [s5] ON [s3].[Id] = [s5].[LectureSessionId]
+LEFT JOIN (
+    SELECT [s1].[Id], [s1].[CreatedAt], [s1].[CreatedBy], [s1].[Description], [s1].[LectureSessionId], [s1].[Title], [s1].[Url], [u1].[Id] AS [Id0], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username]
+    FROM [SessionExternalLinks] AS [s1]
+    INNER JOIN [Users] AS [u1] ON [s1].[CreatedBy] = [u1].[Id]
+) AS [s6] ON [s3].[Id] = [s6].[LectureSessionId]
+LEFT JOIN [SessionAttendances] AS [s2] ON [s3].[Id] = [s2].[LectureSessionId]
+ORDER BY [s3].[Id], [s3].[Id0], [s3].[Id1], [s3].[Id2], [s4].[LectureSessionId], [s4].[LecturerId], [s4].[Id], [s5].[Id], [s5].[Id0], [s6].[Id], [s6].[Id0]
+2026-04-20 11:03:15.056 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions/{id}'
+2026-04-20 11:03:15.057 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions/09f1378a-f106-4703-aa09-02c4b27ee8bf - 200 null application/json; charset=utf-8 549.819ms
+2026-04-20 11:03:29.756 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/my-courses - null null
+2026-04-20 11:03:29.757 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:29.757 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/my-courses - 204 null null 0.6617ms
+2026-04-20 11:03:29.758 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/courses/my-courses - null null
+2026-04-20 11:03:29.760 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:29.766 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:03:29.773 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:03:29.777 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:03:29.777 +01:00 [INF] Executing endpoint 'HTTP: GET /api/courses/my-courses'
+2026-04-20 11:03:29.870 +01:00 [INF] Executed DbCommand (33ms) [Parameters=[@lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId], [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+INNER JOIN [Programs] AS [p] ON [c].[ProgramId] = [p].[Id]
+INNER JOIN [Levels] AS [l] ON [c].[LevelId] = [l].[Id]
+INNER JOIN [AcademicSessions] AS [a] ON [c].[AcademicSessionId] = [a].[Id]
+WHERE [c].[LecturerId] = @lecturerId
+ORDER BY [c0].[Code]
+2026-04-20 11:03:29.895 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 11:03:29.920 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 11:03:29.924 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 11:03:29.925 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 11:03:29.925 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 11:03:29.926 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 11:03:29.927 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 11:03:29.928 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 11:03:29.938 +01:00 [INF] Executed endpoint 'HTTP: GET /api/courses/my-courses'
+2026-04-20 11:03:29.939 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/courses/my-courses - 200 null application/json; charset=utf-8 180.1647ms
+2026-04-20 11:03:35.256 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:03:35.256 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:35.257 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 204 null null 0.4232ms
+2026-04-20 11:03:35.258 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:03:35.260 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:03:35.266 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:03:35.272 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:03:35.276 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:03:35.276 +01:00 [INF] Executing endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:03:35.322 +01:00 [INF] Executed DbCommand (15ms) [Parameters=[@offeringId='?' (DbType = Guid), @lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId], [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+INNER JOIN [Programs] AS [p] ON [c].[ProgramId] = [p].[Id]
+INNER JOIN [Levels] AS [l] ON [c].[LevelId] = [l].[Id]
+INNER JOIN [AcademicSessions] AS [a] ON [c].[AcademicSessionId] = [a].[Id]
+WHERE [c].[Id] = @offeringId AND [c].[LecturerId] = @lecturerId
+2026-04-20 11:03:35.362 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[@offeringId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [c].[Id], [c].[Title], [c].[Description], [c].[FileUrl], [c].[FileType], [c].[FileSize], [c].[UploadedAt], COALESCE([u].[DisplayName], [u].[Email], N'Unknown')
+FROM [CourseMaterials] AS [c]
+INNER JOIN [Users] AS [u] ON [c].[UploadedById] = [u].[Id]
+WHERE [c].[CourseOfferingId] = @offeringId
+ORDER BY [c].[UploadedAt] DESC
+2026-04-20 11:03:35.384 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [e].[Id], [e].[AcademicSessionId], [e].[CurriculumId], [e].[EnrolledAtUtc], [e].[LevelId], [e].[ProgramId], [e].[UserId], [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Enrollments] AS [e]
+INNER JOIN [Users] AS [u] ON [e].[UserId] = [u].[Id]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+ORDER BY [u].[DisplayName]
+2026-04-20 11:03:35.396 +01:00 [INF] Executed endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:03:35.396 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 200 null application/json; charset=utf-8 137.4876ms
+2026-04-20 11:18:27.775 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7/materials - null null
+2026-04-20 11:18:27.776 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:27.777 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7/materials - 204 null null 0.8425ms
+2026-04-20 11:18:27.779 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7/materials - multipart/form-data; boundary=----WebKitFormBoundaryQ0NjsOOGt4DYmAOs 117125
+2026-04-20 11:18:27.780 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:28.141 +01:00 [INF] Executed DbCommand (21ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:18:28.153 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:18:28.161 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:18:28.162 +01:00 [INF] Executing endpoint 'HTTP: POST /api/courses/{offeringId:guid}/materials'
+2026-04-20 11:18:28.272 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[@offeringId='?' (DbType = Guid), @lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+WHERE [c].[Id] = @offeringId AND [c].[LecturerId] = @lecturerId
+2026-04-20 11:18:28.288 +01:00 [INF] Uploaded file ee931a3b-a2f9-41fd-a210-3de00edc8ca3_Ate.pdf to container course-materials/8f3294c0-3046-436b-8f6b-ce328ea08ec7
+2026-04-20 11:18:28.414 +01:00 [INF] Executed DbCommand (16ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (Size = 500), @p3='?' (DbType = Int64), @p4='?' (Size = 100), @p5='?' (Size = 2000), @p6='?' (Size = 200), @p7='?' (DbType = DateTime2), @p8='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [CourseMaterials] ([Id], [CourseOfferingId], [Description], [FileSize], [FileType], [FileUrl], [Title], [UploadedAt], [UploadedById])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+2026-04-20 11:18:28.460 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 50), @p2='?' (Size = 4000), @p3='?' (Size = 100), @p4='?' (Size = 100), @p5='?' (DbType = DateTime2), @p6='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [AuditLogs] ([Id], [Action], [Changes], [EntityId], [EntityName], [Timestamp], [UserId])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6);
+2026-04-20 11:18:28.466 +01:00 [INF] Executed endpoint 'HTTP: POST /api/courses/{offeringId:guid}/materials'
+2026-04-20 11:18:28.467 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7/materials - 200 null application/json; charset=utf-8 688.0779ms
+2026-04-20 11:18:28.470 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:18:28.470 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:28.470 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 204 null null 0.7639ms
+2026-04-20 11:18:28.474 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:18:28.474 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:28.477 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:18:28.478 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:18:28.479 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:18:28.480 +01:00 [INF] Executing endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:18:28.497 +01:00 [INF] Executed DbCommand (17ms) [Parameters=[@offeringId='?' (DbType = Guid), @lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId], [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+INNER JOIN [Programs] AS [p] ON [c].[ProgramId] = [p].[Id]
+INNER JOIN [Levels] AS [l] ON [c].[LevelId] = [l].[Id]
+INNER JOIN [AcademicSessions] AS [a] ON [c].[AcademicSessionId] = [a].[Id]
+WHERE [c].[Id] = @offeringId AND [c].[LecturerId] = @lecturerId
+2026-04-20 11:18:28.510 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@offeringId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [c].[Id], [c].[Title], [c].[Description], [c].[FileUrl], [c].[FileType], [c].[FileSize], [c].[UploadedAt], COALESCE([u].[DisplayName], [u].[Email], N'Unknown')
+FROM [CourseMaterials] AS [c]
+INNER JOIN [Users] AS [u] ON [c].[UploadedById] = [u].[Id]
+WHERE [c].[CourseOfferingId] = @offeringId
+ORDER BY [c].[UploadedAt] DESC
+2026-04-20 11:18:28.520 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [e].[Id], [e].[AcademicSessionId], [e].[CurriculumId], [e].[EnrolledAtUtc], [e].[LevelId], [e].[ProgramId], [e].[UserId], [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Enrollments] AS [e]
+INNER JOIN [Users] AS [u] ON [e].[UserId] = [u].[Id]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+ORDER BY [u].[DisplayName]
+2026-04-20 11:18:28.525 +01:00 [INF] Executed endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:18:28.525 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 200 null application/json; charset=utf-8 51.2788ms
+2026-04-20 11:18:36.549 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 11:18:36.553 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:36.553 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 3.6426ms
+2026-04-20 11:18:36.555 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 11:18:36.555 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:36.557 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:18:36.559 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:18:36.561 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:18:36.561 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 11:18:36.571 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 11:18:36.575 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 11:18:36.575 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 20.4978ms
+2026-04-20 11:18:36.682 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:18:36.682 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:36.682 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 204 null null 0.7218ms
+2026-04-20 11:18:36.685 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - null null
+2026-04-20 11:18:36.685 +01:00 [INF] CORS policy execution successful.
+2026-04-20 11:18:36.696 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 11:18:36.701 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 11:18:36.703 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 11:18:36.703 +01:00 [INF] Executing endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:18:36.704 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@offeringId='?' (DbType = Guid), @lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId], [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+INNER JOIN [Programs] AS [p] ON [c].[ProgramId] = [p].[Id]
+INNER JOIN [Levels] AS [l] ON [c].[LevelId] = [l].[Id]
+INNER JOIN [AcademicSessions] AS [a] ON [c].[AcademicSessionId] = [a].[Id]
+WHERE [c].[Id] = @offeringId AND [c].[LecturerId] = @lecturerId
+2026-04-20 11:18:36.706 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@offeringId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [c].[Id], [c].[Title], [c].[Description], [c].[FileUrl], [c].[FileType], [c].[FileSize], [c].[UploadedAt], COALESCE([u].[DisplayName], [u].[Email], N'Unknown')
+FROM [CourseMaterials] AS [c]
+INNER JOIN [Users] AS [u] ON [c].[UploadedById] = [u].[Id]
+WHERE [c].[CourseOfferingId] = @offeringId
+ORDER BY [c].[UploadedAt] DESC
+2026-04-20 11:18:36.707 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [e].[Id], [e].[AcademicSessionId], [e].[CurriculumId], [e].[EnrolledAtUtc], [e].[LevelId], [e].[ProgramId], [e].[UserId], [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Enrollments] AS [e]
+INNER JOIN [Users] AS [u] ON [e].[UserId] = [u].[Id]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+ORDER BY [u].[DisplayName]
+2026-04-20 11:18:36.707 +01:00 [INF] Executed endpoint 'HTTP: GET /api/courses/{offeringId:guid}'
+2026-04-20 11:18:36.707 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/courses/8f3294c0-3046-436b-8f6b-ce328ea08ec7 - 200 null application/json; charset=utf-8 22.0371ms
+2026-04-20 11:20:51.987 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/uploads/course-materials/8f3294c0-3046-436b-8f6b-ce328ea08ec7/ee931a3b-a2f9-41fd-a210-3de00edc8ca3_Ate.pdf - null null
+2026-04-20 11:20:52.051 +01:00 [INF] Sending file. Request path: '/course-materials/8f3294c0-3046-436b-8f6b-ce328ea08ec7/ee931a3b-a2f9-41fd-a210-3de00edc8ca3_Ate.pdf'. Physical path: 'C:\LMS_Storage\course-materials\8f3294c0-3046-436b-8f6b-ce328ea08ec7\ee931a3b-a2f9-41fd-a210-3de00edc8ca3_Ate.pdf'
+2026-04-20 11:20:52.053 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/uploads/course-materials/8f3294c0-3046-436b-8f6b-ce328ea08ec7/ee931a3b-a2f9-41fd-a210-3de00edc8ca3_Ate.pdf - 200 116694 application/pdf 65.8123ms
+2026-04-20 11:20:52.122 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/favicon.ico - null null
+2026-04-20 11:20:52.124 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-20 11:20:52.131 +01:00 [INF] AuthenticationScheme: Bearer was challenged.
+2026-04-20 11:20:52.131 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/favicon.ico - 401 null application/json; charset=utf-8 8.5578ms
+2026-04-20 15:00:57.317 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 15:00:57.394 +01:00 [INF] CORS policy execution successful.
+2026-04-20 15:00:57.440 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 119.7428ms
+2026-04-20 16:22:45.823 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:22:45.874 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:45.894 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 71.3832ms
+2026-04-20 16:22:57.667 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:22:57.668 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:57.678 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 10.6143ms
+2026-04-20 16:22:57.702 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:22:57.729 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:58.072 +01:00 [INF] Failed to validate the token.
+Microsoft.IdentityModel.Tokens.SecurityTokenExpiredException: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+   at Microsoft.IdentityModel.Tokens.ValidatorUtilities.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.Tokens.Validators.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateTokenPayloadAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateJWSAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+2026-04-20 16:22:58.222 +01:00 [INF] LocalJwt was not authenticated. Failure message: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+2026-04-20 16:22:58.742 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:22:58.930 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:22:58.933 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 1230.5184ms
+2026-04-20 16:22:58.952 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:22:58.956 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:58.957 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 4.38ms
+2026-04-20 16:22:58.970 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:22:58.970 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:58.981 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:22:58.979 +01:00 [INF] Failed to validate the token.
+Microsoft.IdentityModel.Tokens.SecurityTokenExpiredException: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+   at Microsoft.IdentityModel.Tokens.ValidatorUtilities.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.Tokens.Validators.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateTokenPayloadAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateJWSAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+2026-04-20 16:22:58.983 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:58.983 +01:00 [INF] LocalJwt was not authenticated. Failure message: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+2026-04-20 16:22:58.983 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 1.8735ms
+2026-04-20 16:22:58.986 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:22:58.986 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:22:58.990 +01:00 [INF] Failed to validate the token.
+Microsoft.IdentityModel.Tokens.SecurityTokenExpiredException: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+   at Microsoft.IdentityModel.Tokens.ValidatorUtilities.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.Tokens.Validators.ValidateLifetime(Nullable`1 notBefore, Nullable`1 expires, SecurityToken securityToken, TokenValidationParameters validationParameters)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateTokenPayloadAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+   at Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler.ValidateJWSAsync(JsonWebToken jsonWebToken, TokenValidationParameters validationParameters, BaseConfiguration configuration)
+2026-04-20 16:22:58.992 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-20 16:22:58.993 +01:00 [INF] LocalJwt was not authenticated. Failure message: IDX10223: Lifetime validation failed. The token is expired. ValidTo (UTC): '20/04/2026 11:01:40', Current time (UTC): '20/04/2026 15:22:58'.
+2026-04-20 16:22:58.993 +01:00 [INF] Authorization failed. These requirements were not met:
+DenyAnonymousAuthorizationRequirement: Requires an authenticated user.
+2026-04-20 16:22:59.020 +01:00 [INF] AuthenticationScheme: LocalJwt was challenged.
+2026-04-20 16:22:59.020 +01:00 [INF] AuthenticationScheme: LocalJwt was challenged.
+2026-04-20 16:22:59.035 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 401 null application/json; charset=utf-8 49.163ms
+2026-04-20 16:22:59.040 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 401 null application/json; charset=utf-8 70.1069ms
+2026-04-20 16:23:30.764 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - null null
+2026-04-20 16:23:30.806 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:30.806 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - 204 null null 42.4732ms
+2026-04-20 16:23:30.811 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5021/api/auth/login - application/json 76
+2026-04-20 16:23:30.866 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:30.907 +01:00 [INF] Executing endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 16:23:32.957 +01:00 [INF] Executed DbCommand (825ms) [Parameters=[@username='?' (Size = 64), @username0='?' (Size = 256)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE ([u].[Username] = @username OR [u].[Email] = @username0) AND [u].[IsActive] = CAST(1 AS bit)
+2026-04-20 16:23:32.969 +01:00 [INF] Setting HTTP status code 401.
+2026-04-20 16:23:32.979 +01:00 [INF] Writing value of type 'ApiResponse`1' as Json.
+2026-04-20 16:23:32.991 +01:00 [INF] Executed endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 16:23:32.991 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5021/api/auth/login - 401 null application/json; charset=utf-8 2180.2918ms
+2026-04-20 16:23:54.633 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - null null
+2026-04-20 16:23:54.634 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:54.634 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/auth/login - 204 null null 0.5668ms
+2026-04-20 16:23:54.636 +01:00 [INF] Request starting HTTP/1.1 POST http://localhost:5021/api/auth/login - application/json 76
+2026-04-20 16:23:54.636 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:54.637 +01:00 [INF] Executing endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 16:23:54.648 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@username='?' (Size = 64), @username0='?' (Size = 256)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE ([u].[Username] = @username OR [u].[Email] = @username0) AND [u].[IsActive] = CAST(1 AS bit)
+2026-04-20 16:23:55.466 +01:00 [INF] Executed DbCommand (17ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[Id] = @userId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:23:55.517 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT DISTINCT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @userId
+2026-04-20 16:23:55.539 +01:00 [INF] Executed endpoint 'HTTP: POST /api/auth/login'
+2026-04-20 16:23:55.540 +01:00 [INF] Request finished HTTP/1.1 POST http://localhost:5021/api/auth/login - 200 null application/json; charset=utf-8 903.953ms
+2026-04-20 16:23:55.544 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:23:55.544 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:55.544 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 0.2371ms
+2026-04-20 16:23:55.545 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:23:55.545 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:55.563 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:23:55.925 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[@p2='?' (DbType = Guid), @p0='?' (Size = 256), @p1='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [Email] = @p0, [UpdatedUtc] = @p1
+OUTPUT 1
+WHERE [Id] = @p2;
+2026-04-20 16:23:55.930 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:23:55.931 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:23:55.942 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:23:55.947 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:23:55.947 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 401.6632ms
+2026-04-20 16:23:58.805 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/courses/my-courses - null null
+2026-04-20 16:23:58.810 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:58.810 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/courses/my-courses - 204 null null 5.1437ms
+2026-04-20 16:23:58.813 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/courses/my-courses - null null
+2026-04-20 16:23:58.814 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:23:58.817 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:23:58.826 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:23:58.832 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:23:58.834 +01:00 [INF] Executing endpoint 'HTTP: GET /api/courses/my-courses'
+2026-04-20 16:23:58.912 +01:00 [INF] Executed DbCommand (44ms) [Parameters=[@lecturerId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [c].[Id], [c].[AcademicSessionId], [c].[CourseId], [c].[LecturerId], [c].[LevelId], [c].[ProgramId], [c].[Semester], [c0].[Id], [c0].[AcademicLevelId], [c0].[AcademicProgramId], [c0].[Code], [c0].[CreditUnits], [c0].[Description], [c0].[IsActive], [c0].[Title], [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId], [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [CourseOfferings] AS [c]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+INNER JOIN [Programs] AS [p] ON [c].[ProgramId] = [p].[Id]
+INNER JOIN [Levels] AS [l] ON [c].[LevelId] = [l].[Id]
+INNER JOIN [AcademicSessions] AS [a] ON [c].[AcademicSessionId] = [a].[Id]
+WHERE [c].[LecturerId] = @lecturerId
+ORDER BY [c0].[Code]
+2026-04-20 16:23:58.938 +01:00 [INF] Executed DbCommand (11ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 16:23:58.962 +01:00 [INF] Executed DbCommand (15ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 16:23:58.965 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 16:23:58.967 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 16:23:58.968 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 16:23:58.969 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 16:23:58.970 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_ProgramId='?' (DbType = Guid), @offering_LevelId='?' (DbType = Guid), @offering_AcademicSessionId='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [Enrollments] AS [e]
+WHERE [e].[ProgramId] = @offering_ProgramId AND [e].[LevelId] = @offering_LevelId AND [e].[AcademicSessionId] = @offering_AcademicSessionId
+2026-04-20 16:23:58.972 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@offering_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE [l].[CourseOfferingId] = @offering_Id AND [l].[SessionDate] >= CAST(GETUTCDATE() AS date)
+2026-04-20 16:23:58.997 +01:00 [INF] Executed endpoint 'HTTP: GET /api/courses/my-courses'
+2026-04-20 16:23:58.998 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/courses/my-courses - 200 null application/json; charset=utf-8 184.3834ms
+2026-04-20 16:24:01.207 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:24:01.207 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:24:01.207 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.4584ms
+2026-04-20 16:24:01.209 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:24:01.209 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:24:01.209 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:24:01.209 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:24:01.209 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.2486ms
+2026-04-20 16:24:01.211 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:24:01.212 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:24:01.214 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:24:01.217 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:24:01.219 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:24:01.223 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 13.5276ms
+2026-04-20 16:24:01.228 +01:00 [INF] Executed DbCommand (0ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:24:01.230 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:24:01.234 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:24:01.239 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:24:01.240 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 28.4419ms
+2026-04-20 16:24:01.240 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:25:10.243 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - null null
+2026-04-20 16:25:10.245 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:10.245 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - 204 null null 2.3799ms
+2026-04-20 16:25:10.247 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - null null
+2026-04-20 16:25:10.248 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:10.290 +01:00 [INF] Executed DbCommand (33ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:25:10.321 +01:00 [INF] Executed DbCommand (29ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:25:10.330 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:25:10.336 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 16:25:10.397 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE EXISTS (
+    SELECT 1
+    FROM [LectureSessionLecturers] AS [l0]
+    WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+2026-04-20 16:25:10.495 +01:00 [INF] Executed DbCommand (45ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date), @p='?' (DbType = Int32), @p4='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT [l1].[Id], [c0].[Code], [c0].[Title], [l1].[SessionDate], [l1].[StartTime], [l1].[EndTime], [s].[Name], [c].[Id], [c0].[Id], [s].[Id], [s2].[c], [s2].[LectureSessionId], [s2].[LecturerId], [s2].[Id], [l1].[IsManuallyCreated], [l1].[IsCompleted], (
+    SELECT COUNT(*)
+    FROM [SessionMaterials] AS [s0]
+    WHERE [l1].[Id] = [s0].[LectureSessionId]), CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SessionAttendances] AS [s1]
+        WHERE [l1].[Id] = [s1].[LectureSessionId]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+FROM (
+    SELECT [l].[Id], [l].[CourseOfferingId], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[SessionDate], [l].[StartTime], [l].[VenueId]
+    FROM [LectureSessions] AS [l]
+    WHERE EXISTS (
+        SELECT 1
+        FROM [LectureSessionLecturers] AS [l0]
+        WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+    ORDER BY [l].[SessionDate], [l].[StartTime]
+    OFFSET @p ROWS FETCH NEXT @p4 ROWS ONLY
+) AS [l1]
+INNER JOIN [CourseOfferings] AS [c] ON [l1].[CourseOfferingId] = [c].[Id]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+LEFT JOIN [Subjects] AS [s] ON [l1].[VenueId] = [s].[Id]
+LEFT JOIN (
+    SELECT COALESCE([u].[DisplayName], [u].[Email], N'Unknown') AS [c], [l2].[LectureSessionId], [l2].[LecturerId], [u].[Id]
+    FROM [LectureSessionLecturers] AS [l2]
+    INNER JOIN [Users] AS [u] ON [l2].[LecturerId] = [u].[Id]
+) AS [s2] ON [l1].[Id] = [s2].[LectureSessionId]
+ORDER BY [l1].[SessionDate], [l1].[StartTime], [l1].[Id], [c].[Id], [c0].[Id], [s].[Id], [s2].[LectureSessionId], [s2].[LecturerId]
+2026-04-20 16:25:10.519 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 16:25:10.519 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-20&endDate=2026-04-27&page=1&pageSize=5 - 200 null application/json; charset=utf-8 272.0532ms
+2026-04-20 16:25:55.884 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:25:55.884 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:55.884 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.5332ms
+2026-04-20 16:25:55.887 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:25:55.887 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:55.887 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.2462ms
+2026-04-20 16:25:55.887 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:25:55.887 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:55.889 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:25:55.896 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:25:55.938 +01:00 [INF] Executed DbCommand (35ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:25:55.958 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:25:55.970 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:25:56.116 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 229.275ms
+2026-04-20 16:25:56.116 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:25:56.277 +01:00 [INF] Executed DbCommand (13ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:25:56.282 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:25:56.286 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:25:56.286 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 397.0235ms
+2026-04-20 16:25:56.287 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:29:07.886 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:29:07.887 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:07.887 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 0.9997ms
+2026-04-20 16:29:07.905 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:29:07.905 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:07.951 +01:00 [INF] Executed DbCommand (27ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:29:07.973 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:29:07.986 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:29:07.986 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:29:08.019 +01:00 [INF] Executed DbCommand (32ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:29:08.025 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:29:08.026 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 121.0624ms
+2026-04-20 16:29:08.367 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:29:08.367 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:08.367 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.5562ms
+2026-04-20 16:29:08.394 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:29:08.394 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:08.517 +01:00 [INF] Executed DbCommand (78ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:29:08.532 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:29:08.533 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:08.533 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.3668ms
+2026-04-20 16:29:08.537 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:29:08.538 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:29:08.557 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:29:08.573 +01:00 [INF] Executed DbCommand (14ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:29:08.594 +01:00 [INF] Executed DbCommand (70ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:29:08.599 +01:00 [INF] Executed DbCommand (25ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:29:08.604 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:29:08.608 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 213.8252ms
+2026-04-20 16:29:08.608 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:29:08.609 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 71.2969ms
+2026-04-20 16:29:08.609 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:32:59.683 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:32:59.683 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:32:59.683 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 0.3272ms
+2026-04-20 16:32:59.687 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:32:59.693 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:00.141 +01:00 [INF] Executed DbCommand (60ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:00.153 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:00.163 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:00.163 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:33:00.183 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:33:00.184 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:33:00.184 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 497.6826ms
+2026-04-20 16:33:00.286 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:33:00.287 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:00.287 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.2484ms
+2026-04-20 16:33:00.288 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:33:00.288 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:00.299 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:00.300 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:33:00.300 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:00.300 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.2235ms
+2026-04-20 16:33:00.302 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:33:00.303 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:00.306 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:00.315 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:00.315 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 27.1538ms
+2026-04-20 16:33:00.316 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:33:00.656 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:00.669 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:00.683 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:00.685 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 382.5016ms
+2026-04-20 16:33:00.685 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:33:29.576 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:33:29.576 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.576 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 0.5321ms
+2026-04-20 16:33:29.581 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:33:29.585 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.631 +01:00 [INF] Executed DbCommand (38ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:29.645 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:29.654 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:29.655 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:33:29.671 +01:00 [INF] Executed DbCommand (15ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:33:29.672 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:33:29.672 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 91.1639ms
+2026-04-20 16:33:29.804 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:33:29.804 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.806 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.2277ms
+2026-04-20 16:33:29.807 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:33:29.807 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.807 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.7467ms
+2026-04-20 16:33:29.809 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:33:29.809 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.816 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:33:29.816 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:33:29.820 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:29.821 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:33:29.829 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:29.834 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:29.837 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 28.3503ms
+2026-04-20 16:33:29.837 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:33:29.838 +01:00 [INF] Executed DbCommand (14ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:33:29.845 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:33:29.847 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 31.0759ms
+2026-04-20 16:33:29.847 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:55:39.149 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/me - null null
+2026-04-20 16:55:39.171 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:39.181 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/me - 204 null null 29.1617ms
+2026-04-20 16:55:39.185 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/me - null null
+2026-04-20 16:55:39.186 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:43.820 +01:00 [INF] Executed DbCommand (346ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:43.962 +01:00 [INF] Executed DbCommand (56ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:44.003 +01:00 [INF] Executed DbCommand (17ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:44.012 +01:00 [INF] Executing endpoint 'HTTP: GET /api/me'
+2026-04-20 16:55:44.075 +01:00 [INF] Executed DbCommand (36ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT [u1].[Id], [u1].[CreatedUtc], [u1].[DisplayName], [u1].[Email], [u1].[EntraObjectId], [u1].[IsActive], [u1].[PasswordHash], [u1].[UpdatedUtc], [u1].[Username], [s].[UserId], [s].[RoleId], [s].[AssignedUtc], [s].[Id], [s].[Description], [s].[Name]
+FROM (
+    SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+    FROM [Users] AS [u]
+    WHERE [u].[EntraObjectId] = @entraObjectId
+) AS [u1]
+LEFT JOIN (
+    SELECT [u0].[UserId], [u0].[RoleId], [u0].[AssignedUtc], [r].[Id], [r].[Description], [r].[Name]
+    FROM [UserRoles] AS [u0]
+    INNER JOIN [Roles] AS [r] ON [u0].[RoleId] = [r].[Id]
+) AS [s] ON [u1].[Id] = [s].[UserId]
+ORDER BY [u1].[Id], [s].[UserId], [s].[RoleId]
+2026-04-20 16:55:44.104 +01:00 [INF] Executed endpoint 'HTTP: GET /api/me'
+2026-04-20 16:55:44.105 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/me - 200 null application/json; charset=utf-8 4920.0345ms
+2026-04-20 16:55:44.170 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:55:44.172 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:44.174 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:55:44.174 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:44.174 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.9299ms
+2026-04-20 16:55:44.176 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:55:44.176 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:44.173 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 2.9077ms
+2026-04-20 16:55:44.183 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:55:44.183 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:44.190 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:44.224 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:44.233 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:44.242 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 66.0337ms
+2026-04-20 16:55:44.247 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404
+2026-04-20 16:55:44.583 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:44.590 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:44.596 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:44.596 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 413.0715ms
+2026-04-20 16:55:44.597 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:55:49.126 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/admin/sessions - null null
+2026-04-20 16:55:49.128 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/timetable/lecturers - null null
+2026-04-20 16:55:49.131 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.132 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/timetable/lecturers - 204 null null 4.0964ms
+2026-04-20 16:55:49.132 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.132 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/admin/sessions - 204 null null 6.4387ms
+2026-04-20 16:55:49.134 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/admin/sessions - null null
+2026-04-20 16:55:49.134 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/timetable/lecturers - null null
+2026-04-20 16:55:49.135 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.136 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.136 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - null null
+2026-04-20 16:55:49.136 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.137 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - 204 null null 0.1151ms
+2026-04-20 16:55:49.139 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - null null
+2026-04-20 16:55:49.141 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:49.150 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:49.151 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:49.162 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:49.163 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:49.167 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:49.167 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:49.170 +01:00 [INF] Executing endpoint 'HTTP: GET /api/admin/sessions'
+2026-04-20 16:55:49.179 +01:00 [INF] Executing endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 16:55:49.221 +01:00 [INF] Executed DbCommand (18ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [a].[Id], [a].[EndDate], [a].[IsActive], [a].[IsAdmissionOpen], [a].[Name], [a].[StartDate]
+FROM [AcademicSessions] AS [a]
+2026-04-20 16:55:49.276 +01:00 [INF] Executed DbCommand (42ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SELECT COUNT(*)
+FROM [LectureSessions] AS [l]
+WHERE EXISTS (
+    SELECT 1
+    FROM [LectureSessionLecturers] AS [l0]
+    WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+2026-04-20 16:55:49.310 +01:00 [INF] Executed endpoint 'HTTP: GET /api/admin/sessions'
+2026-04-20 16:55:49.311 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/admin/sessions - 200 null application/json; charset=utf-8 177.0353ms
+2026-04-20 16:55:49.472 +01:00 [INF] Executed DbCommand (163ms) [Parameters=[@userId='?' (DbType = Guid), @filters_StartDate_Value='?' (DbType = Date), @filters_EndDate_Value='?' (DbType = Date), @p='?' (DbType = Int32), @p4='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SELECT [l1].[Id], [c0].[Code], [c0].[Title], [l1].[SessionDate], [l1].[StartTime], [l1].[EndTime], [s].[Name], [c].[Id], [c0].[Id], [s].[Id], [s2].[c], [s2].[LectureSessionId], [s2].[LecturerId], [s2].[Id], [l1].[IsManuallyCreated], [l1].[IsCompleted], (
+    SELECT COUNT(*)
+    FROM [SessionMaterials] AS [s0]
+    WHERE [l1].[Id] = [s0].[LectureSessionId]), CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SessionAttendances] AS [s1]
+        WHERE [l1].[Id] = [s1].[LectureSessionId]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+FROM (
+    SELECT [l].[Id], [l].[CourseOfferingId], [l].[EndTime], [l].[IsCompleted], [l].[IsManuallyCreated], [l].[SessionDate], [l].[StartTime], [l].[VenueId]
+    FROM [LectureSessions] AS [l]
+    WHERE EXISTS (
+        SELECT 1
+        FROM [LectureSessionLecturers] AS [l0]
+        WHERE [l].[Id] = [l0].[LectureSessionId] AND [l0].[LecturerId] = @userId) AND [l].[SessionDate] >= @filters_StartDate_Value AND [l].[SessionDate] <= @filters_EndDate_Value
+    ORDER BY [l].[SessionDate], [l].[StartTime]
+    OFFSET @p ROWS FETCH NEXT @p4 ROWS ONLY
+) AS [l1]
+INNER JOIN [CourseOfferings] AS [c] ON [l1].[CourseOfferingId] = [c].[Id]
+INNER JOIN [Courses] AS [c0] ON [c].[CourseId] = [c0].[Id]
+LEFT JOIN [Subjects] AS [s] ON [l1].[VenueId] = [s].[Id]
+LEFT JOIN (
+    SELECT COALESCE([u].[DisplayName], [u].[Email], N'Unknown') AS [c], [l2].[LectureSessionId], [l2].[LecturerId], [u].[Id]
+    FROM [LectureSessionLecturers] AS [l2]
+    INNER JOIN [Users] AS [u] ON [l2].[LecturerId] = [u].[Id]
+) AS [s2] ON [l1].[Id] = [s2].[LectureSessionId]
+ORDER BY [l1].[SessionDate], [l1].[StartTime], [l1].[Id], [c].[Id], [c0].[Id], [s].[Id], [s2].[LectureSessionId], [s2].[LecturerId]
+2026-04-20 16:55:49.476 +01:00 [INF] Executed endpoint 'HTTP: GET /api/lecture-sessions'
+2026-04-20 16:55:49.476 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/lecture-sessions?startDate=2026-04-19&endDate=2026-04-26&page=1&pageSize=100 - 200 null application/json; charset=utf-8 337.3267ms
+2026-04-20 16:55:49.498 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:49.504 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:49.508 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:49.510 +01:00 [INF] Authorization failed. These requirements were not met:
+RolesAuthorizationRequirement:User.IsInRole must be true for one of the following roles: (Admin|Registrar|SuperAdmin)
+2026-04-20 16:55:49.514 +01:00 [INF] AuthenticationScheme: LocalJwt was forbidden.
+2026-04-20 16:55:49.514 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/timetable/lecturers - 403 null application/json; charset=utf-8 380.175ms
+2026-04-20 16:55:55.330 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:55:55.330 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:55.331 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id - 204 null null 0.1525ms
+2026-04-20 16:55:55.332 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - null null
+2026-04-20 16:55:55.334 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:55.339 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:55.345 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:55.348 +01:00 [INF] Request starting HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:55:55.348 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:55.348 +01:00 [INF] Request finished HTTP/1.1 OPTIONS http://localhost:5021/api/gradebook/courses/sample-id/students - 204 null null 0.1856ms
+2026-04-20 16:55:55.349 +01:00 [INF] Request starting HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - null null
+2026-04-20 16:55:55.350 +01:00 [INF] CORS policy execution successful.
+2026-04-20 16:55:55.352 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:55.353 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id - 404 null application/json; charset=utf-8 21.4463ms
+2026-04-20 16:55:55.353 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id, Response status code: 404
+2026-04-20 16:55:55.354 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@entraObjectId='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [u].[Id], [u].[CreatedUtc], [u].[DisplayName], [u].[Email], [u].[EntraObjectId], [u].[IsActive], [u].[PasswordHash], [u].[UpdatedUtc], [u].[Username]
+FROM [Users] AS [u]
+WHERE [u].[EntraObjectId] = @entraObjectId
+2026-04-20 16:55:55.356 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime2)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [Users] SET [UpdatedUtc] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-20 16:55:55.366 +01:00 [INF] Executed DbCommand (1ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [UserRoles] AS [u]
+INNER JOIN [Roles] AS [r] ON [u].[RoleId] = [r].[Id]
+WHERE [u].[UserId] = @user_Id
+2026-04-20 16:55:55.375 +01:00 [INF] Request finished HTTP/1.1 GET http://localhost:5021/api/gradebook/courses/sample-id/students - 404 null application/json; charset=utf-8 25.7965ms
+2026-04-20 16:55:55.375 +01:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5021/api/gradebook/courses/sample-id/students, Response status code: 404

@@ -65,4 +65,15 @@ public static class DomainErrors
             "Faculty.NotFound",
             "Faculty not found");
     }
+
+    public static class Department
+    {
+        public static Error NotFound => Error.NotFound(
+            "Department.NotFound",
+            "Department not found");
+
+        public static Error DuplicateCode => Error.Conflict(
+            "Department.DuplicateCode",
+            "A department with this code already exists");
+    }
 }

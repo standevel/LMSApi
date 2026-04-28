@@ -29,7 +29,9 @@ public sealed class IdentifyEndpoint(IAdmissionService admissionService)
             var response = new AdmissionApplicationResponse(
                 app.Id,
                 app.ApplicationNumber,
-                app.StudentName,
+                app.FirstName,
+                app.LastName,
+                app.MiddleName,
                 app.StudentEmail,
                 app.JambRegNumber,
                 app.AcademicSessionId,

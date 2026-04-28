@@ -2,6 +2,7 @@ namespace LMS.Api.Security;
 
 public static class LmsPermissions
 {
+    public const string AccessManage = "access.manage";
     public const string UsersManage = "users.manage";
     public const string RolesManage = "roles.manage";
     public const string PermissionsManage = "permissions.manage";
@@ -15,6 +16,7 @@ public static class LmsPermissions
 
     public static readonly IReadOnlyList<string> All =
     [
+        AccessManage,
         UsersManage,
         RolesManage,
         PermissionsManage,

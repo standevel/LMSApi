@@ -13,6 +13,7 @@ public sealed class UserPermission
     public PermissionEffect Effect { get; set; }
     public string? Reason { get; set; }
     public DateTime ModifiedUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? ExpiresUtc { get; set; }
 
     public AppUser User { get; set; } = null!;
     public AppPermission Permission { get; set; } = null!;

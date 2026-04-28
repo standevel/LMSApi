@@ -13,6 +13,8 @@ public sealed class AcademicProgram
     public string DegreeAwarded { get; set; } = string.Empty; // e.g., B.Sc., B.Eng.
     public Guid FacultyId { get; set; }
     public Faculty Faculty { get; set; } = null!;
+    public Guid? DepartmentId { get; set; }
+    public Department? Department { get; set; }
     public ProgramType Type { get; set; } = ProgramType.Undergraduate;
     public int DurationYears { get; set; } = 4;
     public bool IsActive { get; set; } = true;

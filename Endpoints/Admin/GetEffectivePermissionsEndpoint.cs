@@ -12,7 +12,7 @@ public sealed class GetEffectivePermissionsEndpoint(IAdminAuthzService adminAuth
     public override void Configure()
     {
         Get("/api/admin/users/{entraObjectId}/permissions");
-        Policies(LmsPolicies.Management);
+        Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

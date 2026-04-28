@@ -21,8 +21,8 @@ public sealed class LocalAuthService(
                 ErrorMessage: "Username and password are required.",
                 StatusCode: StatusCodes.Status400BadRequest);
         }
-
         var normalizedUsername = username.Trim();
+        Console.WriteLine("Attempting login for username: " + normalizedUsername);
         var user = await userRepository.GetActiveByUsernameAsync(normalizedUsername, ct);
         if (user is null || string.IsNullOrWhiteSpace(user.PasswordHash))
         {
@@ -32,7 +32,9 @@ public sealed class LocalAuthService(
                 ErrorMessage: "Invalid username or password.",
                 StatusCode: StatusCodes.Status401Unauthorized);
         }
-
+        // Console.WriteLine("user found: ",user);
+        var hashed = passwordHasher.HashPassword(user, password);
+        Console.WriteLine("Hashed password: " + hashed);
         var verify = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
         if (verify == PasswordVerificationResult.Failed)
         {

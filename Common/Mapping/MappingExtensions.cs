@@ -29,6 +29,14 @@ public static class MappingExtensions
         f.CreatedDate,
         f.UpdatedDate);
 
+    public static DepartmentDto ToDto(this Department d) => new(
+        d.Id,
+        d.Name,
+        d.Code,
+        d.Faculty?.ToDto() ?? new FacultyDto(d.FacultyId, "N/A", "N/A", DateOnly.MinValue, DateOnly.MinValue),
+        d.CreatedDate,
+        d.UpdatedDate);
+
     public static AcademicLevelDto ToDto(this AcademicLevel l) => new(
         l.Id,
         l.ProgramId,

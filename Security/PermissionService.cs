@@ -8,6 +8,8 @@ public sealed class PermissionService(LmsDbContext dbContext) : IPermissionServi
 {
     public async Task<HashSet<string>> GetEffectivePermissionsAsync(Guid userId, CancellationToken ct = default)
     {
+        var now = DateTime.UtcNow;
+
         var rolePermissionCodes = await
             (from userRole in dbContext.UserRoles.AsNoTracking()
              join rolePermission in dbContext.RolePermissions.AsNoTracking()
@@ -22,12 +24,13 @@ public sealed class PermissionService(LmsDbContext dbContext) : IPermissionServi
         var effective = rolePermissionCodes.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var userOverrides = await
-            (from userPermission in dbContext.UserPermissions.AsNoTracking()
-             join permission in dbContext.Permissions.AsNoTracking()
-                on userPermission.PermissionId equals permission.Id
-             where userPermission.UserId == userId
-             select new { permission.Code, userPermission.Effect })
-            .ToListAsync(ct);
+             (from userPermission in dbContext.UserPermissions.AsNoTracking()
+              join permission in dbContext.Permissions.AsNoTracking()
+                 on userPermission.PermissionId equals permission.Id
+              where userPermission.UserId == userId
+                 && (!userPermission.ExpiresUtc.HasValue || userPermission.ExpiresUtc > now)
+              select new { permission.Code, userPermission.Effect })
+             .ToListAsync(ct);
 
         foreach (var userOverride in userOverrides)
         {

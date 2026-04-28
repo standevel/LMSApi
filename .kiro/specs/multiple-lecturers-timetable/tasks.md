@@ -1,0 +1,88 @@
+# Implementation Plan
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Multi-Select Lecturer Assignment in Edit Overlay
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Test concrete failing cases - edit overlay with multiple lecturers assigned
+  - Test that opening edit overlay for a slot with multiple lecturers displays all lecturers with checkboxes (from Bug Condition in design)
+  - Test that user can select/deselect multiple lecturers using checkboxes
+  - Test that saving changes sends all selected lecturers (main + co-lecturers) to backend
+  - The test assertions should match the Expected Behavior Properties from design (requirements 2.1, 2.2, 2.3, 2.4)
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found: single-select dropdown instead of checkboxes, only one lecturer selectable, co-lecturers hidden/lost
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Non-Lecturer Fields and Single Lecturer Assignment
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs (single lecturer assignment, other fields)
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements
+  - Test single lecturer assignment: assign one lecturer in edit overlay, verify it saves correctly
+  - Test time fields: modify start/end time, verify changes save correctly
+  - Test venue field: modify venue, verify changes save correctly
+  - Test notes field: modify notes, verify changes save correctly
+  - Test cancel button: make changes, click cancel, verify no changes saved
+  - Test delete button: click delete, verify slot is deleted
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4_
+
+- [x] 3. Fix for multiple lecturers timetable edit overlay
+  - [x] 3.1 Replace single-select dropdown with multi-select checkboxes in component
+    - File: `LMS-UI/src/app/components/TimetableManager/timetable-edit-overlay/timetable-edit-overlay.component.ts`
+    - Remove: `selectedLecturerId: string | undefined;`
+    - Add: `selectedLecturerIds = new Set<string>();`
+    - Add `toggleLecturer(id: string)` method to add/remove lecturers from Set
+    - Add `isLecturerSelected(id: string)` method to check if lecturer is selected
+    - Update initialization logic to populate Set from `slot.lecturerId` and `slot.coLecturerIds`
+    - Update save logic to split Set into `primaryId` (first) and `coIds` (rest)
+    - _Bug_Condition: isBugCondition(input) where input.action == "OPEN_EDIT_OVERLAY" AND editOverlayComponent.usesDropdown == true AND editOverlayComponent.allowsMultipleSelection == false_
+    - _Expected_Behavior: Edit overlay displays multi-select checkboxes, allows selection of multiple lecturers, initializes checkboxes from all assigned lecturers, saves all selected lecturers (expectedBehavior from design)_
+    - _Preservation: Single lecturer assignment, time/venue/notes fields, cancel/delete functionality (Preservation Requirements from design)_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4_
+
+  - [x] 3.2 Update template to use checkboxes instead of dropdown
+    - File: `LMS-UI/src/app/components/TimetableManager/timetable-edit-overlay/timetable-edit-overlay.component.html`
+    - Remove the `<select>` element with `[(ngModel)]="selectedLecturerId"`
+    - Add checkbox list using `@for` to iterate over `lecturerOptions`
+    - Each checkbox should call `(change)="toggleLecturer(lecturer.id)"`
+    - Use `[checked]="isLecturerSelected(lecturer.id)"` for checkbox state
+    - Add visual styling to match the working create overlay (selected state, checkmark icon)
+    - _Bug_Condition: isBugCondition(input) where editOverlayComponent.usesDropdown == true_
+    - _Expected_Behavior: Template displays checkboxes for multi-select lecturer assignment_
+    - _Preservation: All other form fields (time, venue, notes) remain unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 3.1_
+
+  - [x] 3.3 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Multi-Select Lecturer Assignment in Edit Overlay
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify edit overlay displays checkboxes for lecturer selection
+    - Verify multiple lecturers can be selected
+    - Verify all assigned lecturers are displayed when opening edit overlay
+    - Verify save sends all selected lecturers to backend
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.4 Verify preservation tests still pass
+    - **Property 2: Preservation** - Non-Lecturer Fields and Single Lecturer Assignment
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm single lecturer assignment still works correctly
+    - Confirm time/venue/notes fields still work correctly
+    - Confirm cancel/delete buttons still work correctly
+    - Confirm all tests still pass after fix (no regressions)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4_
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

@@ -5,5 +5,5 @@ namespace LMS.Api.Services;
 
 public interface IActiveDirectoryService
 {
-    Task<(string OfficialEmail, string TemporaryPassword)> CreateStudentAccountAsync(AdmissionApplication application);
+    Task<(string EntraObjectId, string OfficialEmail, string? TemporaryPassword, bool IsExisting)> CreateStudentAccountAsync(AdmissionApplication application);
 }

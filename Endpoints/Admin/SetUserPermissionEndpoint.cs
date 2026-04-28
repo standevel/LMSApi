@@ -12,9 +12,10 @@ public sealed class SetUserPermissionRequest
     public string PermissionCode { get; set; } = string.Empty;
     public PermissionEffect Effect { get; set; }
     public string? Reason { get; set; }
+    public DateTime? ExpiresUtc { get; set; }
 }
 
-public sealed record UserPermissionMutationResponse(string EntraObjectId, string PermissionCode, string Effect, string? Reason);
+public sealed record UserPermissionMutationResponse(string EntraObjectId, string PermissionCode, string Effect, string? Reason, DateTime? ExpiresUtc);
 
 public sealed class SetUserPermissionEndpoint(IAdminAuthzService adminAuthzService)
     : ApiEndpoint<SetUserPermissionRequest, UserPermissionMutationResponse>
@@ -22,7 +23,7 @@ public sealed class SetUserPermissionEndpoint(IAdminAuthzService adminAuthzServi
     public override void Configure()
     {
         Post("/api/admin/users/permissions/set");
-        Policies(LmsPolicies.Management);
+        Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
     }
 
     public override async Task HandleAsync(SetUserPermissionRequest req, CancellationToken ct)
@@ -32,6 +33,7 @@ public sealed class SetUserPermissionEndpoint(IAdminAuthzService adminAuthzServi
             req.PermissionCode,
             req.Effect,
             req.Reason,
+            req.ExpiresUtc,
             ct);
 
         if (!result.Success)
@@ -49,7 +51,8 @@ public sealed class SetUserPermissionEndpoint(IAdminAuthzService adminAuthzServi
             result.EntraObjectId!,
             result.PermissionCode!,
             result.Effect.ToString(),
-            result.Reason);
+            result.Reason,
+            result.ExpiresUtc);
 
         await SendSuccessAsync(data, ct, "User permission override updated");
     }

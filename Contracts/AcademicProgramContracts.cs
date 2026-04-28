@@ -19,6 +19,24 @@ public record UpdateFacultyRequest(
     string Name,
     string Label);
 
+public record DepartmentDto(
+    Guid Id,
+    string Name,
+    string Code,
+    FacultyDto Faculty,
+    DateOnly CreatedDate,
+    DateOnly UpdatedDate);
+
+public record CreateDepartmentRequest(
+    string Name,
+    string Code,
+    Guid FacultyId);
+
+public record UpdateDepartmentRequest(
+    string Name,
+    string Code,
+    Guid FacultyId);
+
 public record AcademicProgramDto(
     Guid Id,
     string Name,

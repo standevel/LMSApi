@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>ErrorOr</id>
+    <version>2.0.1</version>
+    <authors>Amichai Mantinband</authors>
+    <icon>icon-square.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>https://github.com/amantinband/error-or</projectUrl>
+    <description>A simple, fluent discriminated union of an error or a result.</description>
+    <tags>Result,Results,ErrorOr,Error,Handling</tags>
+    <repository type="git" url="https://github.com/amantinband/error-or" />
+    <dependencies>
+      <group targetFramework="net6.0" />
+      <group targetFramework=".NETStandard2.0" />
+    </dependencies>
+  </metadata>
+</package>

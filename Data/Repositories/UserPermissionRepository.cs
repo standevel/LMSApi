@@ -11,5 +11,7 @@ public sealed class UserPermissionRepository(LmsDbContext dbContext) : IUserPerm
     public Task AddAsync(UserPermission userPermission, CancellationToken ct = default) =>
         dbContext.UserPermissions.AddAsync(userPermission, ct).AsTask();
 
+    public void Remove(UserPermission userPermission) => dbContext.UserPermissions.Remove(userPermission);
+
     public Task SaveChangesAsync(CancellationToken ct = default) => dbContext.SaveChangesAsync(ct);
 }

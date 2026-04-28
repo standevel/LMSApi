@@ -1,0 +1,406 @@
+# Implementation Plan: Lecture Session Creation
+
+## Overview
+
+This implementation plan covers the creation of a lecture session management system with three creation modes: automatic generation from timetable slots for a single course, bulk generation for all courses in a semester, and manual session creation. The system includes conflict detection for lecturers and venues, multiple lecturer support, and comprehensive UI with Wigwe theme integration.
+
+## Tasks
+
+- [x] 1. Create database entities and migrations
+  - [x] 1.1 Create LectureSession entity
+    - Add LectureSession entity class with all properties (Id, CourseOfferingId, TimetableSlotId, SessionDate, StartTime, EndTime, VenueId, Notes, IsManuallyCreated, CreatedAt, CreatedBy)
+    - Add navigation properties for relationships
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+  - [x] 1.2 Create LectureSessionLecturer join table entity
+    - Add LectureSessionLecturer entity with composite primary key
+    - Configure many-to-many relationship between LectureSession and AppUser (lecturers)
+    - _Requirements: 3.3_
+  - [x] 1.3 Configure entity relationships in DbContext
+    - Add DbSet properties for LectureSession and LectureSessionLecturer
+    - Configure entity relationships and constraints using Fluent API
+    - Add indexes for SessionDate, VenueId, and LectureSessionLecturer composite key
+    - _Requirements: 3.1, 3.2, 3.3, 3.4_
+  - [x] 1.4 Create and apply database migration
+    - Generate migration for new entities
+    - Review migration SQL
+    - Apply migration to database
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
+
+- [x] 2. Implement core service layer
+  - [x] 2.1 Create ILectureSessionService interface
+    - Define service contract with all required methods
+    - Add method signatures for GenerateSessionsFromTimetableAsync, GenerateBulkSessionsForSemesterAsync, CreateManualSessionAsync, DetectConflictsAsync, GetTimetableSlotsForOfferingAsync, GetCourseOfferingsWithTimetableSlotsAsync
+    - _Requirements: 1.1, 1.2, 2.1, 2.2, 4.1, 4.2, 7.1_
+  - [x] 2.2 Create DTOs and result types
+    - Create GenerateSessionsRequest, GenerateBulkSessionsRequest, CreateManualSessionRequest records
+    - Create SessionGenerationResult, BulkSessionGenerationResult, CourseGenerationSummary, ConflictWarning records
+    - Create ConflictType enum
+    - _Requirements: 1.6, 4.3, 4.4, 4.6, 7.5_
+  - [x] 2.3 Implement LectureSessionService class
+    - Create service class implementing ILectureSessionService
+    - Inject DbContext and other dependencies
+    - Add constructor and private helper methods structure
+    - _Requirements: 1.1, 1.2, 2.1, 2.2, 4.1, 4.2, 7.1_
+  - [x] 2.4 Implement date calculation logic
+    - Create CalculateSessionDates method to compute session dates from timetable slots
+    - Handle day-of-week matching and weekly recurrence
+    - Validate dates fall within academic session boundaries
+    - _Requirements: 1.4, 1.5, 2.4, 5.2, 5.3_
+  - [ ]\* 2.5 Write unit tests for date calculation logic
+    - Test session date generation from timetable slots
+    - Test boundary conditions (semester start/end dates)
+    - Test day-of-week matching
+    - _Requirements: 1.4, 1.5_
+
+- [ ] 3. Implement conflict detection
+  - [x] 3.1 Implement DetectConflictsAsync method
+    - Query existing sessions for lecturer time overlaps
+    - Query existing sessions for venue time overlaps
+    - Return list of ConflictWarning objects
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - [ ]\* 3.2 Write unit tests for conflict detection
+    - Test lecturer conflict detection with overlapping times
+    - Test venue conflict detection with overlapping times
+    - Test no conflicts scenario
+    - Test multiple conflicts scenario
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+
+- [ ] 4. Implement automatic session generation (single course)
+  - [x] 4.1 Implement GetTimetableSlotsForOfferingAsync method
+    - Query timetable slots for a specific course offering
+    - Include lecturer and venue information
+    - _Requirements: 1.1, 6.3_
+  - [x] 4.2 Implement GenerateSessionsFromTimetableAsync method
+    - Validate end date against academic session boundaries
+    - Calculate session dates for each selected timetable slot
+    - Create LectureSession entities with lecturer associations
+    - Detect conflicts across all generated sessions
+    - Return SessionGenerationResult with summary and conflicts
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 4.5, 4.6, 5.1, 5.2, 5.3_
+  - [ ]\* 4.3 Write integration tests for automatic generation
+    - Test session generation from single timetable slot
+    - Test session generation from multiple timetable slots
+    - Test end date validation
+    - Test conflict detection during generation
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
+
+- [ ] 5. Implement bulk session generation (all courses)
+  - [x] 5.1 Implement GetCourseOfferingsWithTimetableSlotsAsync method
+    - Query all course offerings for an academic session
+    - Include timetable slot count for each offering
+    - Filter out offerings with no timetable slots
+    - _Requirements: 7.1, 7.7_
+  - [x] 5.2 Implement GenerateBulkSessionsForSemesterAsync method
+    - Validate end date against academic session boundaries
+    - Fetch all timetable slots for all course offerings in the session
+    - Calculate session dates for each slot across all courses
+    - Create LectureSession entities in batch with transaction
+    - Detect conflicts across all courses
+    - Return BulkSessionGenerationResult with per-course summary and conflicts
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
+  - [ ]\* 5.3 Write integration tests for bulk generation
+    - Test bulk generation for multiple courses
+    - Test transaction rollback on error
+    - Test conflict detection across courses
+    - Test summary generation with per-course breakdown
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+
+- [ ] 6. Checkpoint - Ensure backend tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 7. Implement manual session creation
+  - [x] 7.1 Implement CreateManualSessionAsync method
+    - Validate session date falls within academic session period
+    - Validate time range (end time after start time)
+    - Detect conflicts for specified lecturers and venue
+    - Create LectureSession entity with IsManuallyCreated flag
+    - Create LectureSessionLecturer associations for all specified lecturers
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 4.1, 4.2, 4.3, 4.4, 4.5_
+  - [ ]\* 7.2 Write integration tests for manual creation
+    - Test manual session creation with valid data
+    - Test date validation (outside academic session)
+    - Test time range validation
+    - Test conflict detection
+    - Test multiple lecturer associations
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+
+- [x] 8. Create API endpoints
+  - [x] 8.1 Create GenerateSessionsFromTimetableEndpoint
+    - Define POST endpoint at /api/lecture-sessions/generate
+    - Map request to service method
+    - Handle validation errors and return appropriate error responses
+    - Return SessionGenerationResult
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
+  - [x] 8.2 Create GenerateBulkSessionsForSemesterEndpoint
+    - Define POST endpoint at /api/lecture-sessions/generate-bulk
+    - Map request to service method
+    - Handle validation errors and return appropriate error responses
+    - Return BulkSessionGenerationResult
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+  - [x] 8.3 Create CreateManualSessionEndpoint
+    - Define POST endpoint at /api/lecture-sessions/manual
+    - Map request to service method
+    - Handle validation errors and return appropriate error responses
+    - Return created LectureSession
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+  - [x] 8.4 Create GetTimetableSlotsForOfferingEndpoint
+    - Define GET endpoint at /api/lecture-sessions/timetable-slots/{offeringId}
+    - Return list of timetable slots for the offering
+    - _Requirements: 1.1, 6.3_
+  - [x] 8.5 Create GetAllCourseOfferingsForSessionEndpoint
+    - Define GET endpoint at /api/lecture-sessions/course-offerings/{academicSessionId}
+    - Return list of course offerings with timetable slot counts
+    - _Requirements: 7.1_
+  - [x] 8.6 Create ValidateSessionConflictsEndpoint
+    - Define POST endpoint at /api/lecture-sessions/validate-conflicts
+    - Map request to DetectConflictsAsync service method
+    - Return list of ConflictWarning objects
+    - _Requirements: 4.1, 4.2, 4.3, 4.4_
+  - [x] 8.7 Register endpoints in Program.cs
+    - Add endpoint mappings to application builder
+    - Configure authorization policies (admin only)
+    - _Requirements: 1.1, 2.1, 7.1_
+  - [ ]\* 8.8 Write API integration tests
+    - Test all endpoints with valid requests
+    - Test authentication and authorization
+    - Test error responses for validation failures
+    - Test conflict warning inclusion in responses
+    - _Requirements: 1.1, 2.1, 4.1, 4.2, 7.1_
+
+- [ ] 9. Checkpoint - Ensure API tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Create Angular service for API integration
+  - [x] 10.1 Create LectureSessionService in Angular
+    - Create service with HttpClient injection
+    - Add methods for all API endpoints (generateSessionsFromTimetable, generateBulkSessionsForSemester, createManualSession, getTimetableSlotsForOffering, getCourseOfferingsForSession, validateConflicts)
+    - Add proper TypeScript interfaces for requests and responses
+    - Handle HTTP errors and map to user-friendly messages
+    - _Requirements: 1.1, 2.1, 4.1, 7.1_
+
+- [x] 11. Create Angular component structure
+  - [x] 11.1 Create LectureSessionCreationComponent
+    - Generate component with CLI
+    - Set up component structure with template and styles
+    - Add component to routing module
+    - _Requirements: 6.1, 6.2_
+  - [x] 11.2 Set up component state management with signals
+    - Create signals for creationMode, selectedSlots, courseOfferings, conflicts, generationResult, bulkGenerationResult, alerts, isProcessing, processingProgress
+    - Initialize state values
+    - _Requirements: 6.1, 6.5_
+  - [x] 11.3 Create TypeScript interfaces for component data
+    - Define interfaces for TimetableSlot, CourseOfferingWithSlotCount, ManualSessionData, SessionValidationData, Alert, AlertAction
+    - _Requirements: 1.1, 2.1, 7.1_
+
+- [x] 12. Implement mode selection UI
+  - [x] 12.1 Create mode selection interface
+    - Add three mode selection cards (automatic single course, bulk all courses, manual)
+    - Add academic session selector
+    - Implement selectCreationMode method
+    - Apply Wigwe theme styling to cards and buttons
+    - _Requirements: 6.1, 6.2, 6.5_
+  - [x] 12.2 Add mode-specific instructions display
+    - Show instructions based on selected mode
+    - Display informational alerts for each mode
+    - _Requirements: 6.6_
+
+- [x] 13. Implement automatic generation UI (single course)
+  - [x] 13.1 Create course offering selector
+    - Add dropdown for course offering selection
+    - Fetch and display course offerings for selected academic session
+    - Disable automatic mode if no timetable slots exist
+    - _Requirements: 6.3, 6.4_
+  - [x] 13.2 Create timetable slot selection interface
+    - Display timetable slots for selected course offering
+    - Add checkboxes for multi-select
+    - Show slot details (day, time, venue, lecturers)
+    - Implement loadTimetableSlotsForOffering method
+    - _Requirements: 1.1, 6.3_
+  - [x] 13.3 Create end date selector with validation
+    - Add date picker for end date
+    - Set default to academic session end date
+    - Display calculated number of weeks and estimated sessions
+    - Validate end date against academic session boundaries
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+  - [x] 13.4 Implement generateSessionsFromTimetable method
+    - Call API service with selected slots and end date
+    - Show processing indicator
+    - Handle success and error responses
+    - Display appropriate alerts
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
+  - [x] 13.5 Create generation summary display
+    - Show total sessions created
+    - Show sessions per timetable slot breakdown
+    - Display conflict warnings if any
+    - Implement displayGenerationSummary method
+    - Apply Wigwe theme styling to summary cards
+    - _Requirements: 1.6, 4.6_
+
+- [x] 14. Implement bulk generation UI (all courses)
+  - [x] 14.1 Create course offerings preview interface
+    - Display all course offerings with timetable slot counts
+    - Show total courses and total slots to be processed
+    - Implement loadCourseOfferingsForSession method
+    - _Requirements: 7.1, 7.7_
+  - [x] 14.2 Create bulk end date selector
+    - Add date picker for bulk generation end date
+    - Validate end date against academic session boundaries
+    - Display estimated total sessions across all courses
+    - _Requirements: 7.2, 5.2, 5.3_
+  - [x] 14.3 Implement generateBulkSessionsForSemester method
+    - Call API service with academic session ID and end date
+    - Show processing indicator with progress tracking
+    - Handle success and error responses
+    - Display appropriate alerts
+    - _Requirements: 7.1, 7.2, 7.3_
+  - [x] 14.4 Create bulk generation summary display
+    - Show total sessions created across all courses
+    - Show per-course breakdown with sessions per slot
+    - Display consolidated conflict warnings
+    - Implement displayBulkGenerationSummary method
+    - Apply Wigwe theme styling to summary tables
+    - _Requirements: 7.5, 7.6_
+
+- [x] 15. Implement manual creation UI
+  - [x] 15.1 Create manual session form
+    - Add course offering selector
+    - Add date picker for session date
+    - Add time pickers for start and end time
+    - Add multi-select for lecturers
+    - Add venue selector
+    - Add notes textarea
+    - Apply Wigwe theme styling to form controls
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 15.2 Implement form validation
+    - Validate date within academic session period
+    - Validate end time after start time
+    - Validate required fields (course, date, time, lecturers)
+    - Display validation errors inline
+    - _Requirements: 2.4, 2.5_
+  - [x] 15.3 Implement validateConflicts method
+    - Call API service to check for conflicts before creation
+    - Display conflict warnings if detected
+    - Allow user to proceed or cancel
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+  - [x] 15.4 Implement createManualSession method
+    - Call API service with form data
+    - Handle success and error responses
+    - Display appropriate alerts
+    - Allow creating multiple sessions without returning to mode selection
+    - _Requirements: 2.5, 2.6_
+
+- [x] 16. Implement conflict display component
+  - [x] 16.1 Create conflict summary card
+    - Display total conflicts by type (lecturer/venue)
+    - Show conflict count badges
+    - Apply Wigwe theme styling
+    - _Requirements: 4.3, 4.4, 4.6_
+  - [x] 16.2 Create detailed conflict list
+    - Display expandable list of conflicts
+    - Show conflict type, date, time, course, affected resource
+    - Add visual indicators for conflict severity
+    - Apply Wigwe theme styling to list items
+    - _Requirements: 4.3, 4.4, 4.6_
+  - [x] 16.3 Add conflict action buttons
+    - Add "Proceed Anyway" button
+    - Add "Cancel" button
+    - Handle user decision
+    - _Requirements: 4.5_
+
+- [x] 17. Implement alert system
+  - [x] 17.1 Create Alert interface and types
+    - Define Alert and AlertAction interfaces
+    - Create alert type constants (success, error, warning, info)
+    - _Requirements: 1.6, 2.5, 4.3, 7.5_
+  - [x] 17.2 Implement showAlert method
+    - Add alert to alerts signal
+    - Handle auto-dismiss timing
+    - Generate unique alert IDs
+    - _Requirements: 1.6, 2.5, 4.3, 7.5_
+  - [x] 17.3 Implement dismissAlert method
+    - Remove alert from alerts signal
+    - Handle animation timing
+    - _Requirements: 1.6, 2.5, 4.3, 7.5_
+  - [x] 17.4 Create alert display component
+    - Position alerts in top-right or top-center
+    - Implement stacking for multiple alerts
+    - Add close button to all alerts
+    - Add action buttons for alerts with actions
+    - Apply Wigwe theme styling (colors, typography, spacing)
+    - Implement smooth animations (slide-in, fade-out)
+    - _Requirements: 1.6, 2.5, 4.3, 7.5_
+  - [x] 17.5 Add alerts for all user actions
+    - Add success alerts for session creation
+    - Add error alerts for validation failures and API errors
+    - Add warning alerts for conflicts
+    - Add info alerts for processing status
+    - _Requirements: 1.6, 2.5, 4.3, 7.5_
+
+- [x] 18. Apply Wigwe theme styling
+  - [x] 18.1 Apply color palette
+    - Use Wigwe primary colors for buttons and headers
+    - Use success/warning/error/info colors for alerts and status indicators
+    - Ensure consistent color usage across all components
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+  - [x] 18.2 Apply typography styles
+    - Use Wigwe-approved font families
+    - Apply consistent heading hierarchy
+    - Ensure readable body text with appropriate line height
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+  - [x] 18.3 Apply component styling
+    - Style buttons with Wigwe variants (primary, secondary, outline)
+    - Style form inputs with Wigwe input styles
+    - Style cards with Wigwe card component styles
+    - Style tables with Wigwe table styles
+    - Style modals with Wigwe dialog styles
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+  - [x] 18.4 Apply layout and spacing
+    - Use Wigwe spacing scale for consistent spacing
+    - Implement responsive design following Wigwe breakpoints
+    - Ensure navigation consistency with existing LMS UI
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
+
+- [x] 19. Add progress indicators for long-running operations
+  - [x] 19.1 Create progress bar component
+    - Display percentage completion
+    - Show status text (e.g., "Processing course X of Y...")
+    - Apply Wigwe theme styling
+    - _Requirements: 7.3, 7.5_
+  - [x] 19.2 Implement progress tracking for bulk generation
+    - Update progress signal during bulk processing
+    - Display running count of sessions created
+    - Add cancel button for bulk operations
+    - _Requirements: 7.3, 7.5_
+
+- [x] 20. Final integration and testing
+  - [x] 20.1 Wire all components together
+    - Ensure navigation between modes works correctly
+    - Verify all API calls are properly integrated
+    - Test error handling across all flows
+    - _Requirements: 1.1, 2.1, 4.1, 6.5, 7.1_
+  - [ ]\* 20.2 Write component unit tests
+    - Test mode selection behavior
+    - Test form validation
+    - Test conflict warning display
+    - Test summary display
+    - _Requirements: 6.1, 6.5_
+  - [ ]\* 20.3 Write component integration tests
+    - Test API service integration
+    - Test navigation between modes
+    - Test error handling and display
+    - Test alert system
+    - _Requirements: 1.1, 2.1, 4.1, 7.1_
+
+- [ ] 21. Final checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Backend uses C# with Entity Framework Core and minimal API endpoints
+- Frontend uses Angular with signals for reactive state management
+- Wigwe theme integration is critical for brand consistency
+- Alert system provides comprehensive user feedback for all actions
+- Conflict detection is non-blocking to give admins flexibility

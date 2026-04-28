@@ -16,16 +16,37 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
 
     public override async Task HandleAsync(SaveApplicationRequest req, CancellationToken ct)
     {
+        // Parse GUID strings safely
+        Guid? facultyId = null;
+        if (!string.IsNullOrEmpty(req.FacultyId))
+        {
+            if (Guid.TryParse(req.FacultyId, out var facultyGuid))
+            {
+                facultyId = facultyGuid;
+            }
+        }
+
+        Guid? academicProgramId = null;
+        if (!string.IsNullOrEmpty(req.AcademicProgramId))
+        {
+            if (Guid.TryParse(req.AcademicProgramId, out var programGuid))
+            {
+                academicProgramId = programGuid;
+            }
+        }
+
         var app = new AdmissionApplication
         {
             Id = req.Id ?? Guid.NewGuid(),
-            StudentName = req.StudentName,
+            FirstName = req.FirstName,
+            LastName = req.LastName,
+            MiddleName = req.MiddleName,
             StudentEmail = req.StudentEmail,
             JambRegNumber = req.JambRegNumber,
             AcademicSessionId = req.AcademicSessionId,
             Persona = req.Persona,
-            FacultyId = req.FacultyId,
-            AcademicProgramId = req.AcademicProgramId,
+            FacultyId = facultyId,
+            AcademicProgramId = academicProgramId,
             ProgramReason = req.ProgramReason,
             QualificationsJson = req.QualificationsJson,
             Phone = req.Phone,
@@ -35,13 +56,17 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             UpdatedAt = DateTime.UtcNow
         };
 
-        var saved = await admissionService.SaveApplicationAsync(app, req.DocumentIds);
+        try
+        {
+            var saved = await admissionService.SaveApplicationAsync(app, req.DocumentIds);
 
-        // Map back to response
+            // Map back to response
         var response = new AdmissionApplicationResponse(
             saved.Id,
             saved.ApplicationNumber,
-            saved.StudentName,
+            saved.FirstName,
+            saved.LastName,
+            saved.MiddleName,
             saved.StudentEmail,
             saved.JambRegNumber,
             saved.AcademicSessionId,
@@ -72,5 +97,14 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
         );
 
         await SendSuccessAsync(response, ct);
+        }
+        catch (ArgumentException ex)
+        {
+            await SendFailureAsync(400, "Validation failed", "validation_error", ex.Message, ct);
+        }
+        catch (Exception ex)
+        {
+            await SendFailureAsync(500, "Failed to save application", "save_failed", ex.Message, ct);
+        }
     }
 }

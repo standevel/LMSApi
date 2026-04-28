@@ -69,7 +69,8 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                     col.Item().PaddingBottom(30).Column(c =>
                     {
                         c.Item().Text("ADMISSION OFFER TO:").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
-                        c.Item().Text((application.StudentName ?? "APPLICANT").ToUpper()).FontSize(14).Bold().FontColor("#1E293B");
+                        var fullName = $"{application.FirstName} {application.MiddleName} {application.LastName}".Trim();
+                        c.Item().Text((fullName ?? "APPLICANT").ToUpper()).FontSize(14).Bold().FontColor("#1E293B");
                         
                         if (!string.IsNullOrEmpty(application.EmergencyContactJson))
                         {
@@ -151,7 +152,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
     private void RenderFallbackContent(ColumnDescriptor col, AdmissionApplication application)
     {
         col.Item().PaddingBottom(20).Text($"Subject: Official Offer of Admission - Fall {application.CreatedAt.Year}").FontSize(18).Bold().FontColor("#0F172A");
-        col.Item().PaddingBottom(15).Text($"Dear {application.StudentName?.Split(' ')[0] ?? "Student"},").FontSize(11);
+        col.Item().PaddingBottom(15).Text($"Dear {application.FirstName ?? "Student"},").FontSize(11);
         col.Item().PaddingBottom(20).Text($"On behalf of the Admissions Committee, it is with great pleasure that I offer you admission to Wigwe University for the {application.AcademicProgram?.Name ?? "selected"} program, beginning in the Fall Semester of {application.CreatedAt.Year}.").LineHeight(1.5f).FontColor("#334155");
         col.Item().Text("Your application stood out among a highly competitive pool of candidates. We were particularly impressed by your academic record and your demonstrated passion for technological innovation.").LineHeight(1.5f).FontColor("#334155");
     }
@@ -233,8 +234,9 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
     private string ReplacePlaceholders(string text, AdmissionApplication app)
     {
+        var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
         return text
-            .Replace("{studentName}", app.StudentName)
+            .Replace("{studentName}", fullName)
             .Replace("{programName}", app.AcademicProgram?.Name ?? "Selected Program")
             .Replace("{year}", app.CreatedAt.Year.ToString())
             .Replace("{applicationNumber}", app.ApplicationNumber);

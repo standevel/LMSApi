@@ -26,11 +26,7 @@ namespace LMS.Api.Data.Migrations
 
             // Seed a default faculty to satisfy foreign key constraint for existing data
             var defaultFacultyId = Guid.NewGuid();
-            migrationBuilder.InsertData(
-                table: "Faculties",
-                columns: new[] { "Id", "Name", "Label" },
-                values: new object[] { defaultFacultyId, "General Faculty", "Faculty" });
-
+            
             migrationBuilder.AddColumn<Guid>(
                 name: "FacultyId",
                 table: "Programs",

@@ -77,6 +77,9 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -116,6 +119,8 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("Code")
                         .IsUnique();
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("FacultyId");
 
@@ -165,6 +170,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<Guid>("AcademicSessionId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTime?>("AccountCreatedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("ApplicationNumber")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -176,13 +184,36 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("EntraObjectId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<Guid?>("FacultyId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("JambRegNumber")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MiddleName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("OfferAcceptedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("OfferExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OfficialEmail")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Persona")
                         .IsRequired()
@@ -214,9 +245,8 @@ namespace LMS.Api.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<string>("StudentName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<Guid?>("StudentId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("SubmittedAt")
                         .HasColumnType("datetime2");
@@ -230,9 +260,14 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("AcademicSessionId");
 
+                    b.HasIndex("EntraObjectId")
+                        .HasFilter("[EntraObjectId] IS NOT NULL");
+
                     b.HasIndex("FacultyId");
 
                     b.HasIndex("JambRegNumber", "AcademicSessionId");
+
+                    b.HasIndex("Status", "OfferAcceptedAt");
 
                     b.HasIndex("StudentEmail", "AcademicSessionId");
 
@@ -335,6 +370,93 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Assessment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AssessmentCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AssessmentDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("MaxMarks")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentCategoryId");
+
+                    b.HasIndex("CourseOfferingId");
+
+                    b.ToTable("Assessments", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.AssessmentCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CategoryName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("CategoryType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsExamCategory")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MaxMarks")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseOfferingId");
+
+                    b.ToTable("AssessmentCategories", (string)null);
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -420,6 +542,51 @@ namespace LMS.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Courses", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.CourseMaterial", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UploadedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseOfferingId");
+
+                    b.HasIndex("UploadedById");
+
+                    b.ToTable("CourseMaterials", (string)null);
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.CourseOffering", b =>
@@ -564,6 +731,44 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("CurriculumCourses", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Department", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateOnly>("CreatedDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FacultyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateOnly>("UpdatedDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Departments", (string)null);
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.DocumentRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -694,6 +899,562 @@ namespace LMS.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Faculties", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("AmountOverride")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DueDateOverride")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("FacultyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FeeTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("ProgramId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("FeeTemplateId");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("FeeAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("FeeCategories", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeLineItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("FeeTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsOptional")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FeeTemplateId");
+
+                    b.ToTable("FeeLineItems", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeePayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("GatewayCheckoutUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("GatewayReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("PaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ReceiptUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ReferenceNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentFeeRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GatewayReference");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StudentFeeRecordId");
+
+                    b.ToTable("FeePayments", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("FacultyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FeeCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("LateFeeAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("LateFeeType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid?>("ProgramId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("FeeCategoryId");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("FeeTemplates", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.Grade", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AssessmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MarksObtained")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("UpdatedById");
+
+                    b.HasIndex("AssessmentId", "StudentId")
+                        .IsUnique();
+
+                    b.ToTable("Grades", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.GradeApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ApprovalOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedById");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("CourseOfferingId", "Level");
+
+                    b.ToTable("GradeApprovals", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.GradePublication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AcademicSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("ApprovalWorkflowCompleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsVisibleToStudents")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PublicationNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("PublishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("PublishedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Semester")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseOfferingId")
+                        .IsUnique();
+
+                    b.HasIndex("IsVisibleToStudents");
+
+                    b.HasIndex("PublishedById");
+
+                    b.ToTable("GradePublications", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LateFeeApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AmountCharged")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("AppliedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AppliedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<decimal>("BaseRateUsed")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("EffectiveDueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("FeeTemplateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("FeeType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentFeeRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FeeTemplateId");
+
+                    b.HasIndex("StudentFeeRecordId", "FeeTemplateId");
+
+                    b.ToTable("LateFeeApplications", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsManuallyCreated")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("date");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<Guid?>("TimetableSlotId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("VenueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseOfferingId");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("IsCompleted");
+
+                    b.HasIndex("SessionDate");
+
+                    b.HasIndex("TimetableSlotId");
+
+                    b.HasIndex("VenueId");
+
+                    b.ToTable("LectureSessions", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureSessionLecturer", b =>
+                {
+                    b.Property<Guid>("LectureSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LecturerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("LectureSessionId", "LecturerId");
+
+                    b.HasIndex("LecturerId");
+
+                    b.ToTable("LectureSessionLecturers", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureTimetableSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CoLecturersJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("CourseOfferingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("CreatedDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<Guid?>("LecturerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("UpdatedDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("VenueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseOfferingId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("LecturerId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("VenueId");
+
+                    b.ToTable("LectureTimetableSlots", (string)null);
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.LetterTemplate", b =>
@@ -840,6 +1601,127 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionAttendance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsPresent")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("LectureSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ModifiedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModifiedBy");
+
+                    b.HasIndex("RecordedBy");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("LectureSessionId", "StudentId")
+                        .IsUnique();
+
+                    b.ToTable("SessionAttendances", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionExternalLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("LectureSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("LectureSessionId");
+
+                    b.ToTable("SessionExternalLinks", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionMaterial", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<Guid>("LectureSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LectureSessionId");
+
+                    b.HasIndex("UploadedBy");
+
+                    b.ToTable("SessionMaterials", (string)null);
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.SponsorOrganization", b =>
                 {
                     b.Property<Guid>("Id")
@@ -867,6 +1749,153 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("SponsorOrganizations", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Student", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AcademicProgramId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AcademicSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AdmissionApplicationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EnrollmentDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EntraObjectId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("FacultyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("GraduationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("LevelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("MiddleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("OfficialEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("PersonalEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StudentNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicProgramId");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.HasIndex("AdmissionApplicationId")
+                        .IsUnique();
+
+                    b.HasIndex("EntraObjectId")
+                        .IsUnique();
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("LevelId");
+
+                    b.HasIndex("OfficialEmail")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StudentNumber")
+                        .IsUnique()
+                        .HasFilter("[StudentNumber] IS NOT NULL");
+
+                    b.ToTable("Students", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.StudentFeeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("LateFeeApplied")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("LateFeeTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StudentId", "SessionId")
+                        .IsUnique();
+
+                    b.ToTable("StudentFeeRecords", (string)null);
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.Subject", b =>
                 {
                     b.Property<Guid>("Id")
@@ -889,6 +1918,55 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("Subjects", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.SystemGradingConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("ApprovalWorkflowEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("DefaultCA1Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("DefaultCA2Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("DefaultCA3Weight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("DefaultExamPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("DefaultExamWeight")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("DefaultGradingStyle")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SystemGradingConfigurations", (string)null);
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.UserPermission", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -902,6 +1980,9 @@ namespace LMS.Api.Data.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
+                    b.Property<DateTime?>("ExpiresUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("ModifiedUtc")
                         .HasColumnType("datetime2");
 
@@ -910,6 +1991,8 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.HasKey("UserId", "PermissionId");
+
+                    b.HasIndex("ExpiresUtc");
 
                     b.HasIndex("PermissionId");
 
@@ -962,11 +2045,18 @@ namespace LMS.Api.Data.Migrations
 
             modelBuilder.Entity("LMS.Api.Data.Entities.AcademicProgram", b =>
                 {
+                    b.HasOne("LMS.Api.Data.Entities.Department", "Department")
+                        .WithMany("Programs")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
                         .WithMany("Programs")
                         .HasForeignKey("FacultyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Department");
 
                     b.Navigation("Faculty");
                 });
@@ -996,6 +2086,36 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Faculty");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Assessment", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AssessmentCategory", "AssessmentCategory")
+                        .WithMany()
+                        .HasForeignKey("AssessmentCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssessmentCategory");
+
+                    b.Navigation("CourseOffering");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.AssessmentCategory", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CourseOffering");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.AuditLog", b =>
                 {
                     b.HasOne("LMS.Api.Data.Entities.AppUser", "User")
@@ -1015,6 +2135,25 @@ namespace LMS.Api.Data.Migrations
                     b.HasOne("LMS.Api.Data.Entities.AcademicProgram", null)
                         .WithMany("Courses")
                         .HasForeignKey("AcademicProgramId");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.CourseMaterial", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CourseOffering");
+
+                    b.Navigation("UploadedBy");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.CourseOffering", b =>
@@ -1124,6 +2263,17 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Level");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Department", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
+                        .WithMany("Departments")
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Faculty");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.DocumentRecord", b =>
                 {
                     b.HasOne("LMS.Api.Data.Entities.DocumentType", "DocumentType")
@@ -1147,6 +2297,280 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Faculty");
 
                     b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeAssignment", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.FeeTemplate", "FeeTemplate")
+                        .WithMany("Assignments")
+                        .HasForeignKey("FeeTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("FeeTemplate");
+
+                    b.Navigation("Program");
+
+                    b.Navigation("Session");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeLineItem", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.FeeTemplate", "FeeTemplate")
+                        .WithMany("LineItems")
+                        .HasForeignKey("FeeTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FeeTemplate");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeePayment", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.StudentFeeRecord", "StudentFeeRecord")
+                        .WithMany("Payments")
+                        .HasForeignKey("StudentFeeRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StudentFeeRecord");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeTemplate", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.FeeCategory", "Category")
+                        .WithMany("Templates")
+                        .HasForeignKey("FeeCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Program");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.Grade", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.Assessment", "Assessment")
+                        .WithMany("Grades")
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "UpdatedBy")
+                        .WithMany()
+                        .HasForeignKey("UpdatedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Assessment");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Student");
+
+                    b.Navigation("UpdatedBy");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.GradeApproval", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "ApprovedBy")
+                        .WithMany()
+                        .HasForeignKey("ApprovedById")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedBy");
+
+                    b.Navigation("CourseOffering");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.GradePublication", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "PublishedBy")
+                        .WithMany()
+                        .HasForeignKey("PublishedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CourseOffering");
+
+                    b.Navigation("PublishedBy");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LateFeeApplication", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.FeeTemplate", "FeeTemplate")
+                        .WithMany()
+                        .HasForeignKey("FeeTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.StudentFeeRecord", "StudentFeeRecord")
+                        .WithMany("LateFeeApplications")
+                        .HasForeignKey("StudentFeeRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FeeTemplate");
+
+                    b.Navigation("StudentFeeRecord");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureSession", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.LectureTimetableSlot", "TimetableSlot")
+                        .WithMany()
+                        .HasForeignKey("TimetableSlotId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Api.Data.Entities.Subject", "Venue")
+                        .WithMany()
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CourseOffering");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("TimetableSlot");
+
+                    b.Navigation("Venue");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureSessionLecturer", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.LectureSession", "LectureSession")
+                        .WithMany("SessionLecturers")
+                        .HasForeignKey("LectureSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "Lecturer")
+                        .WithMany()
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LectureSession");
+
+                    b.Navigation("Lecturer");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureTimetableSlot", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.CourseOffering", "CourseOffering")
+                        .WithMany()
+                        .HasForeignKey("CourseOfferingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "Lecturer")
+                        .WithMany()
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.Subject", "Venue")
+                        .WithMany()
+                        .HasForeignKey("VenueId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CourseOffering");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Lecturer");
+
+                    b.Navigation("UpdatedByUser");
+
+                    b.Navigation("Venue");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.LevelSemesterConfig", b =>
@@ -1222,6 +2646,137 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionAttendance", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.LectureSession", "LectureSession")
+                        .WithMany("Attendance")
+                        .HasForeignKey("LectureSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "ModifiedByUser")
+                        .WithMany()
+                        .HasForeignKey("ModifiedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "RecordedByUser")
+                        .WithMany()
+                        .HasForeignKey("RecordedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LectureSession");
+
+                    b.Navigation("ModifiedByUser");
+
+                    b.Navigation("RecordedByUser");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionExternalLink", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.LectureSession", "LectureSession")
+                        .WithMany("ExternalLinks")
+                        .HasForeignKey("LectureSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("LectureSession");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.SessionMaterial", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.LectureSession", "LectureSession")
+                        .WithMany("Materials")
+                        .HasForeignKey("LectureSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LectureSession");
+
+                    b.Navigation("UploadedByUser");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.Student", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AcademicProgram", "AcademicProgram")
+                        .WithMany()
+                        .HasForeignKey("AcademicProgramId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicSession", "AcademicSession")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AdmissionApplication", "AdmissionApplication")
+                        .WithOne("Student")
+                        .HasForeignKey("LMS.Api.Data.Entities.Student", "AdmissionApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Api.Data.Entities.AcademicLevel", "Level")
+                        .WithMany()
+                        .HasForeignKey("LevelId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AcademicProgram");
+
+                    b.Navigation("AcademicSession");
+
+                    b.Navigation("AdmissionApplication");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Level");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.StudentFeeRecord", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AcademicSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.Student", "Student")
+                        .WithMany("FeeRecords")
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+
+                    b.Navigation("Student");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.UserPermission", b =>
                 {
                     b.HasOne("LMS.Api.Data.Entities.AppPermission", "Permission")
@@ -1278,6 +2833,11 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Levels");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.AdmissionApplication", b =>
+                {
+                    b.Navigation("Student");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.AppPermission", b =>
                 {
                     b.Navigation("RolePermissions");
@@ -1299,6 +2859,11 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("UserRoles");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.Assessment", b =>
+                {
+                    b.Navigation("Grades");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.Course", b =>
                 {
                     b.Navigation("Offerings");
@@ -1309,9 +2874,51 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("Courses");
                 });
 
-            modelBuilder.Entity("LMS.Api.Data.Entities.Faculty", b =>
+            modelBuilder.Entity("LMS.Api.Data.Entities.Department", b =>
                 {
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.Faculty", b =>
+                {
+                    b.Navigation("Departments");
+
+                    b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeCategory", b =>
+                {
+                    b.Navigation("Templates");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.FeeTemplate", b =>
+                {
+                    b.Navigation("Assignments");
+
+                    b.Navigation("LineItems");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.LectureSession", b =>
+                {
+                    b.Navigation("Attendance");
+
+                    b.Navigation("ExternalLinks");
+
+                    b.Navigation("Materials");
+
+                    b.Navigation("SessionLecturers");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.Student", b =>
+                {
+                    b.Navigation("FeeRecords");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.StudentFeeRecord", b =>
+                {
+                    b.Navigation("LateFeeApplications");
+
+                    b.Navigation("Payments");
                 });
 #pragma warning restore 612, 618
         }

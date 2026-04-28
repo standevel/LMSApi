@@ -79,19 +79,32 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICurriculumRepository, CurriculumRepository>();
         services.AddScoped<ICourseRepository, CourseRepository>();
         services.AddScoped<IFacultyRepository, FacultyRepository>();
+        services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IAcademicProgramService, AcademicProgramService>();
         services.AddScoped<IAcademicSessionService, AcademicSessionService>();
         services.AddScoped<ICurriculumService, CurriculumService>();
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<IFacultyService, FacultyService>();
+        services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<IGradebookService, GradebookService>();
         services.AddScoped<IAdmissionService, AdmissionService>();
         services.AddHttpClient<IEmailService, BrevoEmailService>();
         services.AddScoped<IActiveDirectoryService, EntraIdService>();
         services.AddScoped<IPdfService, OfferLetterPdfService>();
         services.AddScoped<ILetterTemplateService, LetterTemplateService>();
+
+        // Fee Management
+        services.AddScoped<IFeeService, FeeService>();
+        services.AddHttpClient<PaystackService>();
+        services.AddHttpClient<HydrogenService>();
+
+        // Timetable Management
+        services.AddScoped<ITimetableService, TimetableService>();
+        services.AddScoped<ILectureSessionService, LectureSessionService>();
+        services.AddScoped<ISessionManagementService, SessionManagementService>();
 
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
         services.AddScoped<IPermissionService, PermissionService>();

@@ -4,6 +4,7 @@ using LMS.Api.Data;
 using LMS.Api.Security;
 using Microsoft.AspNetCore.Diagnostics;
 using Scalar.AspNetCore; // Uncomment this if the Scalar package is installed and provides the extension
+using System.Threading;
 
 namespace LMS.Api.Extensions;
 
@@ -13,7 +14,7 @@ public static class WebApplicationExtensions
     {
         using var scope = app.Services.CreateScope();
         var dbInitializer = scope.ServiceProvider.GetRequiredService<IDbInitializer>();
-        await dbInitializer.InitializeAsync();
+        await dbInitializer.InitializeAsync(CancellationToken.None);
         return app;
     }
 
@@ -24,6 +25,15 @@ public static class WebApplicationExtensions
             app.UseHttpsRedirection();
         }
         app.UseCors(ServiceCollectionExtensions.FrontendCorsPolicy);
+
+        // Serve static files from uploads directory (must be early to bypass all auth)
+        var storageBasePath = app.Configuration["FileStorage:BasePath"]
+            ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(storageBasePath),
+            RequestPath = "/uploads"
+        });
 
         app.UseExceptionHandler(exceptionHandlerApp =>
         {
@@ -84,10 +94,14 @@ public static class WebApplicationExtensions
 
     public static WebApplication MapApplicationEndpoints(this WebApplication app)
     {
+        app.UseFastEndpoints(c =>
+        {
+            c.Serializer.Options.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        });
+
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi().AllowAnonymous();
-
 
             app.MapScalarApiReference("/docs", options =>
             {
@@ -97,7 +111,6 @@ public static class WebApplicationExtensions
             }).AllowAnonymous();
         }
 
-        app.UseFastEndpoints();
         return app;
     }
 }

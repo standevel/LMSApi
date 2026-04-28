@@ -22,9 +22,11 @@ public sealed class SubmitApplicationEndpoint(IAdmissionService admissionService
 
             var response = new AdmissionApplicationResponse(
                 app.Id,
-            app.ApplicationNumber,
-            app.StudentName,
- app.StudentEmail, app.JambRegNumber, app.AcademicSessionId,
+                app.ApplicationNumber,
+                app.FirstName,
+                app.LastName,
+                app.MiddleName,
+                app.StudentEmail, app.JambRegNumber, app.AcademicSessionId,
                 app.AcademicSession?.Name ?? string.Empty,
                 app.Persona, app.FacultyId, app.Faculty?.Name ?? string.Empty,
                 app.AcademicProgramId, app.AcademicProgram?.Name ?? string.Empty,
