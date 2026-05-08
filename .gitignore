@@ -1,0 +1,8 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+*.user
+appsettings.Development.json
+# appsettings.json should be tracked but with placeholders
+# secrets should ideally be in User Secrets or environment variables
