@@ -1,0 +1,637 @@
+2026-05-12 16:29:20.152 +01:00 [INF] Executed DbCommand (27ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-05-12 16:29:20.210 +01:00 [INF] Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+2026-05-12 16:29:20.246 +01:00 [INF] Executed DbCommand (30ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_getapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session', @LockMode = 'Exclusive';
+SELECT @result
+2026-05-12 16:29:20.325 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+BEGIN
+    CREATE TABLE [__EFMigrationsHistory] (
+        [MigrationId] nvarchar(150) NOT NULL,
+        [ProductVersion] nvarchar(32) NOT NULL,
+        CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
+    );
+END;
+2026-05-12 16:29:20.354 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-05-12 16:29:20.358 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT OBJECT_ID(N'[__EFMigrationsHistory]');
+2026-05-12 16:29:20.374 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [MigrationId], [ProductVersion]
+FROM [__EFMigrationsHistory]
+ORDER BY [MigrationId];
+2026-05-12 16:29:20.389 +01:00 [INF] No migrations were applied. The database is already up to date.
+2026-05-12 16:29:20.396 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+DECLARE @result int;
+EXEC @result = sp_releaseapplock @Resource = '__EFMigrationsLock', @LockOwner = 'Session';
+SELECT @result
+2026-05-12 16:29:20.677 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Name]
+FROM [Roles] AS [r]
+2026-05-12 16:29:20.722 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Code]
+FROM [Permissions] AS [p]
+2026-05-12 16:29:20.864 +01:00 [INF] Executed DbCommand (48ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+2026-05-12 16:29:20.890 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[Description]
+FROM [Permissions] AS [p]
+2026-05-12 16:29:20.942 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [r].[RoleId], [r].[PermissionId]
+FROM [RolePermissions] AS [r]
+2026-05-12 16:29:21.094 +01:00 [INF] Executed DbCommand (54ms) [Parameters=[@adminRole_Id='?' (DbType = Guid), @accessManagePermission_Id='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[RoleId], [r].[PermissionId], [r].[AssignedUtc]
+FROM [RolePermissions] AS [r]
+WHERE [r].[RoleId] = @adminRole_Id AND [r].[PermissionId] = @accessManagePermission_Id
+2026-05-12 16:29:21.155 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [AcademicSessions] AS [a]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:21.168 +01:00 [INF] Sessions already seeded. Skipping.
+2026-05-12 16:29:21.173 +01:00 [INF] Seeding Faculties...
+2026-05-12 16:29:21.279 +01:00 [INF] Executed DbCommand (65ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [a].[Id], [a].[AcademicProgramId], [a].[AcademicSessionId], [a].[AccountCreatedAt], [a].[ApplicationNumber], [a].[CreatedAt], [a].[EmergencyContactJson], [a].[EntraObjectId], [a].[FacultyId], [a].[FirstName], [a].[JambRegNumber], [a].[LastName], [a].[MiddleName], [a].[OfferAcceptedAt], [a].[OfferExpiresAt], [a].[OfficialEmail], [a].[Persona], [a].[Phone], [a].[ProgramReason], [a].[QualificationsJson], [a].[SponsorshipJson], [a].[Status], [a].[StudentEmail], [a].[StudentId], [a].[SubmittedAt], [a].[UpdatedAt]
+FROM [AdmissionApplications] AS [a]
+2026-05-12 16:29:21.465 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[Id], [p].[Code], [p].[DegreeAwarded], [p].[DepartmentId], [p].[Description], [p].[DurationYears], [p].[FacultyId], [p].[IsActive], [p].[MaxAdmissions], [p].[MinJambScore], [p].[Name], [p].[RequiredJambSubjectsJson], [p].[RequiredOLevelSubjectsJson], [p].[Type], [l].[Id], [l].[Name], [l].[Order], [l].[ProgramId]
+FROM [Programs] AS [p]
+LEFT JOIN [Levels] AS [l] ON [p].[Id] = [l].[ProgramId]
+ORDER BY [p].[Id]
+2026-05-12 16:29:21.675 +01:00 [INF] Removing 15 existing programs and their levels
+2026-05-12 16:29:22.092 +01:00 [INF] Executed DbCommand (168ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (DbType = Guid), @p18='?' (DbType = Guid), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (DbType = Guid), @p22='?' (DbType = Guid), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (DbType = Guid), @p26='?' (DbType = Guid), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (DbType = Guid), @p30='?' (DbType = Guid), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (DbType = Guid), @p34='?' (DbType = Guid), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (DbType = Guid), @p38='?' (DbType = Guid), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p14;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p15;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p16;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p17;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p18;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p19;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p20;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p21;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p22;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p23;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p24;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p25;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p26;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p27;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p28;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p29;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p30;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p31;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p32;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p33;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p34;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p35;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p36;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p37;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p38;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p39;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p40;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p41;
+2026-05-12 16:29:22.286 +01:00 [INF] Executed DbCommand (184ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (DbType = Guid), @p18='?' (DbType = Guid), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (DbType = Guid), @p22='?' (DbType = Guid), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (DbType = Guid), @p26='?' (DbType = Guid), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (DbType = Guid), @p30='?' (DbType = Guid), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (DbType = Guid), @p34='?' (DbType = Guid), @p35='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p14;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p15;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p16;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p17;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p18;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p19;
+DELETE FROM [Levels]
+OUTPUT 1
+WHERE [Id] = @p20;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p21;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p22;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p23;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p24;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p25;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p26;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p27;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p28;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p29;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p30;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p31;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p32;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p33;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p34;
+DELETE FROM [Programs]
+OUTPUT 1
+WHERE [Id] = @p35;
+2026-05-12 16:29:22.318 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+2026-05-12 16:29:22.337 +01:00 [INF] Removing 15 existing departments
+2026-05-12 16:29:22.376 +01:00 [INF] Executed DbCommand (23ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?' (DbType = Guid), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (DbType = Guid), @p10='?' (DbType = Guid), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (DbType = Guid), @p14='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p5;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p6;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p7;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p8;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p9;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p10;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p11;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p12;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p13;
+DELETE FROM [Departments]
+OUTPUT 1
+WHERE [Id] = @p14;
+2026-05-12 16:29:22.399 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-05-12 16:29:22.421 +01:00 [INF] Removing 6 existing faculties
+2026-05-12 16:29:22.464 +01:00 [INF] Executed DbCommand (31ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Guid), @p2='?' (DbType = Guid), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET NOCOUNT ON;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p0;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p1;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p2;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p3;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p4;
+DELETE FROM [Faculties]
+OUTPUT 1
+WHERE [Id] = @p5;
+2026-05-12 16:29:22.502 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = Date), @p2='?' (Size = 100), @p3='?' (Size = 200), @p4='?' (DbType = Date), @p5='?' (DbType = Guid), @p6='?' (DbType = Date), @p7='?' (Size = 100), @p8='?' (Size = 200), @p9='?' (DbType = Date), @p10='?' (DbType = Guid), @p11='?' (DbType = Date), @p12='?' (Size = 100), @p13='?' (Size = 200), @p14='?' (DbType = Date), @p15='?' (DbType = Guid), @p16='?' (DbType = Date), @p17='?' (Size = 100), @p18='?' (Size = 200), @p19='?' (DbType = Date), @p20='?' (DbType = Guid), @p21='?' (DbType = Date), @p22='?' (Size = 100), @p23='?' (Size = 200), @p24='?' (DbType = Date), @p25='?' (DbType = Guid), @p26='?' (DbType = Date), @p27='?' (Size = 100), @p28='?' (Size = 200), @p29='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Faculties] ([Id], [CreatedDate], [Label], [Name], [UpdatedDate])
+VALUES (@p0, @p1, @p2, @p3, @p4),
+(@p5, @p6, @p7, @p8, @p9),
+(@p10, @p11, @p12, @p13, @p14),
+(@p15, @p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23, @p24),
+(@p25, @p26, @p27, @p28, @p29);
+2026-05-12 16:29:22.506 +01:00 [INF] Created 6 faculties
+2026-05-12 16:29:22.525 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Departments] AS [d]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:22.530 +01:00 [INF] Seeding Departments...
+2026-05-12 16:29:22.535 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-05-12 16:29:22.560 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 20), @p2='?' (DbType = Date), @p3='?' (DbType = Guid), @p4='?' (Size = 200), @p5='?' (DbType = Date), @p6='?' (DbType = Guid), @p7='?' (Size = 20), @p8='?' (DbType = Date), @p9='?' (DbType = Guid), @p10='?' (Size = 200), @p11='?' (DbType = Date), @p12='?' (DbType = Guid), @p13='?' (Size = 20), @p14='?' (DbType = Date), @p15='?' (DbType = Guid), @p16='?' (Size = 200), @p17='?' (DbType = Date), @p18='?' (DbType = Guid), @p19='?' (Size = 20), @p20='?' (DbType = Date), @p21='?' (DbType = Guid), @p22='?' (Size = 200), @p23='?' (DbType = Date), @p24='?' (DbType = Guid), @p25='?' (Size = 20), @p26='?' (DbType = Date), @p27='?' (DbType = Guid), @p28='?' (Size = 200), @p29='?' (DbType = Date), @p30='?' (DbType = Guid), @p31='?' (Size = 20), @p32='?' (DbType = Date), @p33='?' (DbType = Guid), @p34='?' (Size = 200), @p35='?' (DbType = Date), @p36='?' (DbType = Guid), @p37='?' (Size = 20), @p38='?' (DbType = Date), @p39='?' (DbType = Guid), @p40='?' (Size = 200), @p41='?' (DbType = Date), @p42='?' (DbType = Guid), @p43='?' (Size = 20), @p44='?' (DbType = Date), @p45='?' (DbType = Guid), @p46='?' (Size = 200), @p47='?' (DbType = Date), @p48='?' (DbType = Guid), @p49='?' (Size = 20), @p50='?' (DbType = Date), @p51='?' (DbType = Guid), @p52='?' (Size = 200), @p53='?' (DbType = Date), @p54='?' (DbType = Guid), @p55='?' (Size = 20), @p56='?' (DbType = Date), @p57='?' (DbType = Guid), @p58='?' (Size = 200), @p59='?' (DbType = Date), @p60='?' (DbType = Guid), @p61='?' (Size = 20), @p62='?' (DbType = Date), @p63='?' (DbType = Guid), @p64='?' (Size = 200), @p65='?' (DbType = Date), @p66='?' (DbType = Guid), @p67='?' (Size = 20), @p68='?' (DbType = Date), @p69='?' (DbType = Guid), @p70='?' (Size = 200), @p71='?' (DbType = Date), @p72='?' (DbType = Guid), @p73='?' (Size = 20), @p74='?' (DbType = Date), @p75='?' (DbType = Guid), @p76='?' (Size = 200), @p77='?' (DbType = Date), @p78='?' (DbType = Guid), @p79='?' (Size = 20), @p80='?' (DbType = Date), @p81='?' (DbType = Guid), @p82='?' (Size = 200), @p83='?' (DbType = Date), @p84='?' (DbType = Guid), @p85='?' (Size = 20), @p86='?' (DbType = Date), @p87='?' (DbType = Guid), @p88='?' (Size = 200), @p89='?' (DbType = Date)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Departments] ([Id], [Code], [CreatedDate], [FacultyId], [Name], [UpdatedDate])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5),
+(@p6, @p7, @p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15, @p16, @p17),
+(@p18, @p19, @p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27, @p28, @p29),
+(@p30, @p31, @p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39, @p40, @p41),
+(@p42, @p43, @p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51, @p52, @p53),
+(@p54, @p55, @p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63, @p64, @p65),
+(@p66, @p67, @p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75, @p76, @p77),
+(@p78, @p79, @p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87, @p88, @p89);
+2026-05-12 16:29:22.565 +01:00 [INF] Created 15 departments mapped to correct faculties
+2026-05-12 16:29:22.605 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Programs] AS [p]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:22.610 +01:00 [INF] Seeding Academic Programs and Levels...
+2026-05-12 16:29:22.618 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [f].[Id], [f].[CreatedDate], [f].[Label], [f].[Name], [f].[UpdatedDate]
+FROM [Faculties] AS [f]
+2026-05-12 16:29:22.638 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CS'
+2026-05-12 16:29:22.657 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'SE'
+2026-05-12 16:29:22.681 +01:00 [INF] Executed DbCommand (7ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CY'
+2026-05-12 16:29:22.709 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ICT'
+2026-05-12 16:29:22.737 +01:00 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'MDS'
+2026-05-12 16:29:22.759 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'EE'
+2026-05-12 16:29:22.784 +01:00 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ME'
+2026-05-12 16:29:22.804 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'CEN'
+2026-05-12 16:29:22.824 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FMA'
+2026-05-12 16:29:22.844 +01:00 [INF] Executed DbCommand (5ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FAD'
+2026-05-12 16:29:22.863 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'TA'
+2026-05-12 16:29:22.878 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'ADA'
+2026-05-12 16:29:22.894 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'BM'
+2026-05-12 16:29:22.909 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'EC'
+2026-05-12 16:29:22.925 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [d].[Id], [d].[Code], [d].[CreatedDate], [d].[FacultyId], [d].[Name], [d].[UpdatedDate]
+FROM [Departments] AS [d]
+WHERE [d].[Code] = N'FIN'
+2026-05-12 16:29:22.951 +01:00 [INF] Executed DbCommand (12ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 20), @p2='?' (Size = 4000), @p3='?' (DbType = Guid), @p4='?' (Size = 1000), @p5='?' (DbType = Int32), @p6='?' (DbType = Guid), @p7='?' (DbType = Boolean), @p8='?' (DbType = Int32), @p9='?' (DbType = Int32), @p10='?' (Size = 200), @p11='?' (Size = 4000), @p12='?' (Size = 4000), @p13='?' (DbType = Int32), @p14='?' (DbType = Guid), @p15='?' (Size = 20), @p16='?' (Size = 4000), @p17='?' (DbType = Guid), @p18='?' (Size = 1000), @p19='?' (DbType = Int32), @p20='?' (DbType = Guid), @p21='?' (DbType = Boolean), @p22='?' (DbType = Int32), @p23='?' (DbType = Int32), @p24='?' (Size = 200), @p25='?' (Size = 4000), @p26='?' (Size = 4000), @p27='?' (DbType = Int32), @p28='?' (DbType = Guid), @p29='?' (Size = 20), @p30='?' (Size = 4000), @p31='?' (DbType = Guid), @p32='?' (Size = 1000), @p33='?' (DbType = Int32), @p34='?' (DbType = Guid), @p35='?' (DbType = Boolean), @p36='?' (DbType = Int32), @p37='?' (DbType = Int32), @p38='?' (Size = 200), @p39='?' (Size = 4000), @p40='?' (Size = 4000), @p41='?' (DbType = Int32), @p42='?' (DbType = Guid), @p43='?' (Size = 20), @p44='?' (Size = 4000), @p45='?' (DbType = Guid), @p46='?' (Size = 1000), @p47='?' (DbType = Int32), @p48='?' (DbType = Guid), @p49='?' (DbType = Boolean), @p50='?' (DbType = Int32), @p51='?' (DbType = Int32), @p52='?' (Size = 200), @p53='?' (Size = 4000), @p54='?' (Size = 4000), @p55='?' (DbType = Int32), @p56='?' (DbType = Guid), @p57='?' (Size = 20), @p58='?' (Size = 4000), @p59='?' (DbType = Guid), @p60='?' (Size = 1000), @p61='?' (DbType = Int32), @p62='?' (DbType = Guid), @p63='?' (DbType = Boolean), @p64='?' (DbType = Int32), @p65='?' (DbType = Int32), @p66='?' (Size = 200), @p67='?' (Size = 4000), @p68='?' (Size = 4000), @p69='?' (DbType = Int32), @p70='?' (DbType = Guid), @p71='?' (Size = 20), @p72='?' (Size = 4000), @p73='?' (DbType = Guid), @p74='?' (Size = 1000), @p75='?' (DbType = Int32), @p76='?' (DbType = Guid), @p77='?' (DbType = Boolean), @p78='?' (DbType = Int32), @p79='?' (DbType = Int32), @p80='?' (Size = 200), @p81='?' (Size = 4000), @p82='?' (Size = 4000), @p83='?' (DbType = Int32), @p84='?' (DbType = Guid), @p85='?' (Size = 20), @p86='?' (Size = 4000), @p87='?' (DbType = Guid), @p88='?' (Size = 1000), @p89='?' (DbType = Int32), @p90='?' (DbType = Guid), @p91='?' (DbType = Boolean), @p92='?' (DbType = Int32), @p93='?' (DbType = Int32), @p94='?' (Size = 200), @p95='?' (Size = 4000), @p96='?' (Size = 4000), @p97='?' (DbType = Int32), @p98='?' (DbType = Guid), @p99='?' (Size = 20), @p100='?' (Size = 4000), @p101='?' (DbType = Guid), @p102='?' (Size = 1000), @p103='?' (DbType = Int32), @p104='?' (DbType = Guid), @p105='?' (DbType = Boolean), @p106='?' (DbType = Int32), @p107='?' (DbType = Int32), @p108='?' (Size = 200), @p109='?' (Size = 4000), @p110='?' (Size = 4000), @p111='?' (DbType = Int32), @p112='?' (DbType = Guid), @p113='?' (Size = 20), @p114='?' (Size = 4000), @p115='?' (DbType = Guid), @p116='?' (Size = 1000), @p117='?' (DbType = Int32), @p118='?' (DbType = Guid), @p119='?' (DbType = Boolean), @p120='?' (DbType = Int32), @p121='?' (DbType = Int32), @p122='?' (Size = 200), @p123='?' (Size = 4000), @p124='?' (Size = 4000), @p125='?' (DbType = Int32), @p126='?' (DbType = Guid), @p127='?' (Size = 20), @p128='?' (Size = 4000), @p129='?' (DbType = Guid), @p130='?' (Size = 1000), @p131='?' (DbType = Int32), @p132='?' (DbType = Guid), @p133='?' (DbType = Boolean), @p134='?' (DbType = Int32), @p135='?' (DbType = Int32), @p136='?' (Size = 200), @p137='?' (Size = 4000), @p138='?' (Size = 4000), @p139='?' (DbType = Int32), @p140='?' (DbType = Guid), @p141='?' (Size = 20), @p142='?' (Size = 4000), @p143='?' (DbType = Guid), @p144='?' (Size = 1000), @p145='?' (DbType = Int32), @p146='?' (DbType = Guid), @p147='?' (DbType = Boolean), @p148='?' (DbType = Int32), @p149='?' (DbType = Int32), @p150='?' (Size = 200), @p151='?' (Size = 4000), @p152='?' (Size = 4000), @p153='?' (DbType = Int32), @p154='?' (DbType = Guid), @p155='?' (Size = 20), @p156='?' (Size = 4000), @p157='?' (DbType = Guid), @p158='?' (Size = 1000), @p159='?' (DbType = Int32), @p160='?' (DbType = Guid), @p161='?' (DbType = Boolean), @p162='?' (DbType = Int32), @p163='?' (DbType = Int32), @p164='?' (Size = 200), @p165='?' (Size = 4000), @p166='?' (Size = 4000), @p167='?' (DbType = Int32), @p168='?' (DbType = Guid), @p169='?' (Size = 20), @p170='?' (Size = 4000), @p171='?' (DbType = Guid), @p172='?' (Size = 1000), @p173='?' (DbType = Int32), @p174='?' (DbType = Guid), @p175='?' (DbType = Boolean), @p176='?' (DbType = Int32), @p177='?' (DbType = Int32), @p178='?' (Size = 200), @p179='?' (Size = 4000), @p180='?' (Size = 4000), @p181='?' (DbType = Int32), @p182='?' (DbType = Guid), @p183='?' (Size = 20), @p184='?' (Size = 4000), @p185='?' (DbType = Guid), @p186='?' (Size = 1000), @p187='?' (DbType = Int32), @p188='?' (DbType = Guid), @p189='?' (DbType = Boolean), @p190='?' (DbType = Int32), @p191='?' (DbType = Int32), @p192='?' (Size = 200), @p193='?' (Size = 4000), @p194='?' (Size = 4000), @p195='?' (DbType = Int32), @p196='?' (DbType = Guid), @p197='?' (Size = 20), @p198='?' (Size = 4000), @p199='?' (DbType = Guid), @p200='?' (Size = 1000), @p201='?' (DbType = Int32), @p202='?' (DbType = Guid), @p203='?' (DbType = Boolean), @p204='?' (DbType = Int32), @p205='?' (DbType = Int32), @p206='?' (Size = 200), @p207='?' (Size = 4000), @p208='?' (Size = 4000), @p209='?' (DbType = Int32)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Programs] ([Id], [Code], [DegreeAwarded], [DepartmentId], [Description], [DurationYears], [FacultyId], [IsActive], [MaxAdmissions], [MinJambScore], [Name], [RequiredJambSubjectsJson], [RequiredOLevelSubjectsJson], [Type])
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13),
+(@p14, @p15, @p16, @p17, @p18, @p19, @p20, @p21, @p22, @p23, @p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31, @p32, @p33, @p34, @p35, @p36, @p37, @p38, @p39, @p40, @p41),
+(@p42, @p43, @p44, @p45, @p46, @p47, @p48, @p49, @p50, @p51, @p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59, @p60, @p61, @p62, @p63, @p64, @p65, @p66, @p67, @p68, @p69),
+(@p70, @p71, @p72, @p73, @p74, @p75, @p76, @p77, @p78, @p79, @p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87, @p88, @p89, @p90, @p91, @p92, @p93, @p94, @p95, @p96, @p97),
+(@p98, @p99, @p100, @p101, @p102, @p103, @p104, @p105, @p106, @p107, @p108, @p109, @p110, @p111),
+(@p112, @p113, @p114, @p115, @p116, @p117, @p118, @p119, @p120, @p121, @p122, @p123, @p124, @p125),
+(@p126, @p127, @p128, @p129, @p130, @p131, @p132, @p133, @p134, @p135, @p136, @p137, @p138, @p139),
+(@p140, @p141, @p142, @p143, @p144, @p145, @p146, @p147, @p148, @p149, @p150, @p151, @p152, @p153),
+(@p154, @p155, @p156, @p157, @p158, @p159, @p160, @p161, @p162, @p163, @p164, @p165, @p166, @p167),
+(@p168, @p169, @p170, @p171, @p172, @p173, @p174, @p175, @p176, @p177, @p178, @p179, @p180, @p181),
+(@p182, @p183, @p184, @p185, @p186, @p187, @p188, @p189, @p190, @p191, @p192, @p193, @p194, @p195),
+(@p196, @p197, @p198, @p199, @p200, @p201, @p202, @p203, @p204, @p205, @p206, @p207, @p208, @p209);
+2026-05-12 16:29:22.976 +01:00 [INF] Executed DbCommand (9ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 100), @p2='?' (DbType = Int32), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (Size = 100), @p6='?' (DbType = Int32), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (Size = 100), @p10='?' (DbType = Int32), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (Size = 100), @p14='?' (DbType = Int32), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (Size = 100), @p18='?' (DbType = Int32), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (Size = 100), @p22='?' (DbType = Int32), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (Size = 100), @p26='?' (DbType = Int32), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (Size = 100), @p30='?' (DbType = Int32), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (Size = 100), @p34='?' (DbType = Int32), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (Size = 100), @p38='?' (DbType = Int32), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (Size = 100), @p42='?' (DbType = Int32), @p43='?' (DbType = Guid), @p44='?' (DbType = Guid), @p45='?' (Size = 100), @p46='?' (DbType = Int32), @p47='?' (DbType = Guid), @p48='?' (DbType = Guid), @p49='?' (Size = 100), @p50='?' (DbType = Int32), @p51='?' (DbType = Guid), @p52='?' (DbType = Guid), @p53='?' (Size = 100), @p54='?' (DbType = Int32), @p55='?' (DbType = Guid), @p56='?' (DbType = Guid), @p57='?' (Size = 100), @p58='?' (DbType = Int32), @p59='?' (DbType = Guid), @p60='?' (DbType = Guid), @p61='?' (Size = 100), @p62='?' (DbType = Int32), @p63='?' (DbType = Guid), @p64='?' (DbType = Guid), @p65='?' (Size = 100), @p66='?' (DbType = Int32), @p67='?' (DbType = Guid), @p68='?' (DbType = Guid), @p69='?' (Size = 100), @p70='?' (DbType = Int32), @p71='?' (DbType = Guid), @p72='?' (DbType = Guid), @p73='?' (Size = 100), @p74='?' (DbType = Int32), @p75='?' (DbType = Guid), @p76='?' (DbType = Guid), @p77='?' (Size = 100), @p78='?' (DbType = Int32), @p79='?' (DbType = Guid), @p80='?' (DbType = Guid), @p81='?' (Size = 100), @p82='?' (DbType = Int32), @p83='?' (DbType = Guid), @p84='?' (DbType = Guid), @p85='?' (Size = 100), @p86='?' (DbType = Int32), @p87='?' (DbType = Guid), @p88='?' (DbType = Guid), @p89='?' (Size = 100), @p90='?' (DbType = Int32), @p91='?' (DbType = Guid), @p92='?' (DbType = Guid), @p93='?' (Size = 100), @p94='?' (DbType = Int32), @p95='?' (DbType = Guid), @p96='?' (DbType = Guid), @p97='?' (Size = 100), @p98='?' (DbType = Int32), @p99='?' (DbType = Guid), @p100='?' (DbType = Guid), @p101='?' (Size = 100), @p102='?' (DbType = Int32), @p103='?' (DbType = Guid), @p104='?' (DbType = Guid), @p105='?' (Size = 100), @p106='?' (DbType = Int32), @p107='?' (DbType = Guid), @p108='?' (DbType = Guid), @p109='?' (Size = 100), @p110='?' (DbType = Int32), @p111='?' (DbType = Guid), @p112='?' (DbType = Guid), @p113='?' (Size = 100), @p114='?' (DbType = Int32), @p115='?' (DbType = Guid), @p116='?' (DbType = Guid), @p117='?' (Size = 100), @p118='?' (DbType = Int32), @p119='?' (DbType = Guid), @p120='?' (DbType = Guid), @p121='?' (Size = 100), @p122='?' (DbType = Int32), @p123='?' (DbType = Guid), @p124='?' (DbType = Guid), @p125='?' (Size = 100), @p126='?' (DbType = Int32), @p127='?' (DbType = Guid), @p128='?' (DbType = Guid), @p129='?' (Size = 100), @p130='?' (DbType = Int32), @p131='?' (DbType = Guid), @p132='?' (DbType = Guid), @p133='?' (Size = 100), @p134='?' (DbType = Int32), @p135='?' (DbType = Guid), @p136='?' (DbType = Guid), @p137='?' (Size = 100), @p138='?' (DbType = Int32), @p139='?' (DbType = Guid), @p140='?' (DbType = Guid), @p141='?' (Size = 100), @p142='?' (DbType = Int32), @p143='?' (DbType = Guid), @p144='?' (DbType = Guid), @p145='?' (Size = 100), @p146='?' (DbType = Int32), @p147='?' (DbType = Guid), @p148='?' (DbType = Guid), @p149='?' (Size = 100), @p150='?' (DbType = Int32), @p151='?' (DbType = Guid), @p152='?' (DbType = Guid), @p153='?' (Size = 100), @p154='?' (DbType = Int32), @p155='?' (DbType = Guid), @p156='?' (DbType = Guid), @p157='?' (Size = 100), @p158='?' (DbType = Int32), @p159='?' (DbType = Guid), @p160='?' (DbType = Guid), @p161='?' (Size = 100), @p162='?' (DbType = Int32), @p163='?' (DbType = Guid), @p164='?' (DbType = Guid), @p165='?' (Size = 100), @p166='?' (DbType = Int32), @p167='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Levels] ([Id], [Name], [Order], [ProgramId])
+VALUES (@p0, @p1, @p2, @p3),
+(@p4, @p5, @p6, @p7),
+(@p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15),
+(@p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31),
+(@p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39),
+(@p40, @p41, @p42, @p43),
+(@p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51),
+(@p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63),
+(@p64, @p65, @p66, @p67),
+(@p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75),
+(@p76, @p77, @p78, @p79),
+(@p80, @p81, @p82, @p83),
+(@p84, @p85, @p86, @p87),
+(@p88, @p89, @p90, @p91),
+(@p92, @p93, @p94, @p95),
+(@p96, @p97, @p98, @p99),
+(@p100, @p101, @p102, @p103),
+(@p104, @p105, @p106, @p107),
+(@p108, @p109, @p110, @p111),
+(@p112, @p113, @p114, @p115),
+(@p116, @p117, @p118, @p119),
+(@p120, @p121, @p122, @p123),
+(@p124, @p125, @p126, @p127),
+(@p128, @p129, @p130, @p131),
+(@p132, @p133, @p134, @p135),
+(@p136, @p137, @p138, @p139),
+(@p140, @p141, @p142, @p143),
+(@p144, @p145, @p146, @p147),
+(@p148, @p149, @p150, @p151),
+(@p152, @p153, @p154, @p155),
+(@p156, @p157, @p158, @p159),
+(@p160, @p161, @p162, @p163),
+(@p164, @p165, @p166, @p167);
+2026-05-12 16:29:22.989 +01:00 [INF] Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (Size = 100), @p2='?' (DbType = Int32), @p3='?' (DbType = Guid), @p4='?' (DbType = Guid), @p5='?' (Size = 100), @p6='?' (DbType = Int32), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?' (Size = 100), @p10='?' (DbType = Int32), @p11='?' (DbType = Guid), @p12='?' (DbType = Guid), @p13='?' (Size = 100), @p14='?' (DbType = Int32), @p15='?' (DbType = Guid), @p16='?' (DbType = Guid), @p17='?' (Size = 100), @p18='?' (DbType = Int32), @p19='?' (DbType = Guid), @p20='?' (DbType = Guid), @p21='?' (Size = 100), @p22='?' (DbType = Int32), @p23='?' (DbType = Guid), @p24='?' (DbType = Guid), @p25='?' (Size = 100), @p26='?' (DbType = Int32), @p27='?' (DbType = Guid), @p28='?' (DbType = Guid), @p29='?' (Size = 100), @p30='?' (DbType = Int32), @p31='?' (DbType = Guid), @p32='?' (DbType = Guid), @p33='?' (Size = 100), @p34='?' (DbType = Int32), @p35='?' (DbType = Guid), @p36='?' (DbType = Guid), @p37='?' (Size = 100), @p38='?' (DbType = Int32), @p39='?' (DbType = Guid), @p40='?' (DbType = Guid), @p41='?' (Size = 100), @p42='?' (DbType = Int32), @p43='?' (DbType = Guid), @p44='?' (DbType = Guid), @p45='?' (Size = 100), @p46='?' (DbType = Int32), @p47='?' (DbType = Guid), @p48='?' (DbType = Guid), @p49='?' (Size = 100), @p50='?' (DbType = Int32), @p51='?' (DbType = Guid), @p52='?' (DbType = Guid), @p53='?' (Size = 100), @p54='?' (DbType = Int32), @p55='?' (DbType = Guid), @p56='?' (DbType = Guid), @p57='?' (Size = 100), @p58='?' (DbType = Int32), @p59='?' (DbType = Guid), @p60='?' (DbType = Guid), @p61='?' (Size = 100), @p62='?' (DbType = Int32), @p63='?' (DbType = Guid), @p64='?' (DbType = Guid), @p65='?' (Size = 100), @p66='?' (DbType = Int32), @p67='?' (DbType = Guid), @p68='?' (DbType = Guid), @p69='?' (Size = 100), @p70='?' (DbType = Int32), @p71='?' (DbType = Guid), @p72='?' (DbType = Guid), @p73='?' (Size = 100), @p74='?' (DbType = Int32), @p75='?' (DbType = Guid), @p76='?' (DbType = Guid), @p77='?' (Size = 100), @p78='?' (DbType = Int32), @p79='?' (DbType = Guid), @p80='?' (DbType = Guid), @p81='?' (Size = 100), @p82='?' (DbType = Int32), @p83='?' (DbType = Guid)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+INSERT INTO [Levels] ([Id], [Name], [Order], [ProgramId])
+VALUES (@p0, @p1, @p2, @p3),
+(@p4, @p5, @p6, @p7),
+(@p8, @p9, @p10, @p11),
+(@p12, @p13, @p14, @p15),
+(@p16, @p17, @p18, @p19),
+(@p20, @p21, @p22, @p23),
+(@p24, @p25, @p26, @p27),
+(@p28, @p29, @p30, @p31),
+(@p32, @p33, @p34, @p35),
+(@p36, @p37, @p38, @p39),
+(@p40, @p41, @p42, @p43),
+(@p44, @p45, @p46, @p47),
+(@p48, @p49, @p50, @p51),
+(@p52, @p53, @p54, @p55),
+(@p56, @p57, @p58, @p59),
+(@p60, @p61, @p62, @p63),
+(@p64, @p65, @p66, @p67),
+(@p68, @p69, @p70, @p71),
+(@p72, @p73, @p74, @p75),
+(@p76, @p77, @p78, @p79),
+(@p80, @p81, @p82, @p83);
+2026-05-12 16:29:23.009 +01:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [r].[Id], [r].[Description], [r].[Name]
+FROM [Roles] AS [r]
+WHERE [r].[Name] = N'Lecturer'
+2026-05-12 16:29:23.047 +01:00 [INF] Executed DbCommand (4ms) [Parameters=[@l_Email='?' (Size = 256), @l_Oid='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Users] AS [u]
+        WHERE [u].[Email] = @l_Email OR [u].[EntraObjectId] = @l_Oid) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:23.051 +01:00 [INF] Lecturer john.doe@wigweuniversity.edu.ng already exists. Skipping.
+2026-05-12 16:29:23.059 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[@l_Email='?' (Size = 256), @l_Oid='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Users] AS [u]
+        WHERE [u].[Email] = @l_Email OR [u].[EntraObjectId] = @l_Oid) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:23.062 +01:00 [INF] Lecturer jane.smith@wigweuniversity.edu.ng already exists. Skipping.
+2026-05-12 16:29:23.083 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [DocumentTypes] AS [d]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:23.086 +01:00 [INF] Document types already seeded. Skipping.
+2026-05-12 16:29:23.102 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [SponsorOrganizations] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:23.106 +01:00 [INF] Sponsors already seeded. Skipping.
+2026-05-12 16:29:23.120 +01:00 [INF] Executed DbCommand (3ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT CASE
+    WHEN EXISTS (
+        SELECT 1
+        FROM [Subjects] AS [s]) THEN CAST(1 AS bit)
+    ELSE CAST(0 AS bit)
+END
+2026-05-12 16:29:23.123 +01:00 [INF] Subjects already seeded. Skipping.
+2026-05-12 16:29:23.125 +01:00 [INF] Database initialization completed successfully.
+2026-05-12 16:29:23.240 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 67618b43-bfd0-483c-9750-bd5703101cbf, Domain: wigweuniversity.edu.ng
+2026-05-12 16:29:23.314 +01:00 [INF] Entra ID Service initialized successfully
+2026-05-12 16:29:23.470 +01:00 [INF] Registered 155 endpoints in 10,687 milliseconds.
+2026-05-12 16:29:23.500 +01:00 [INF] User profile is available. Using 'C:\Users\StanleyNwaegwu\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-05-12 16:29:23.635 +01:00 [INF] Now listening on: http://localhost:5000
+2026-05-12 16:29:23.637 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-05-12 16:29:23.639 +01:00 [INF] Hosting environment: Production
+2026-05-12 16:29:23.641 +01:00 [INF] Content root path: C:\Work\LMS\LMS-API\publish

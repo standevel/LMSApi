@@ -58,7 +58,25 @@ public sealed class IdentifyEndpoint(IAdmissionService admissionService)
                     d.DocumentType?.Code ?? string.Empty,
                     d.Status.ToString(),
                     d.RejectionReason
-                ))
+                )),
+                null, // StudentUserId
+                null, // AcceptanceFeeRecordId
+                null, // AcceptanceFeeAmount
+                null, // AcceptanceFeeBalance
+                null, // AcceptanceFeeStatus
+                false, // RequiresAcceptanceFee
+                // New fields
+                app.ApplicantType.ToString(),
+                app.PreviousInstitutionName,
+                app.PreviousInstitutionCountry,
+                app.PreviousCGPA,
+                app.CreditsEarned,
+                app.StartingLevelId,
+                app.StartingLevel?.Name,
+                app.Nationality,
+                app.PassportNumber,
+                app.EnglishProficiencyScore,
+                app.EnglishProficiencyType?.ToString()
             );
 
             await SendSuccessAsync(response, ct);

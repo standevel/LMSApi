@@ -32,6 +32,17 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<Subject> Subjects => Set<Subject>();
     public DbSet<LetterTemplate> LetterTemplates => Set<LetterTemplate>();
 
+    // --- New entities for international/direct entry/transfer/exchange support ---
+    public DbSet<Country> Countries => Set<Country>();
+    public DbSet<CreditTransferRule> CreditTransferRules => Set<CreditTransferRule>();
+    public DbSet<GPAScaleConversion> GPAScaleConversions => Set<GPAScaleConversion>();
+    public DbSet<CourseEquivalency> CourseEquivalencies => Set<CourseEquivalency>();
+    public DbSet<ProgramCreditMapping> ProgramCreditMappings => Set<ProgramCreditMapping>();
+    public DbSet<ProgramPrerequisite> ProgramPrerequisites => Set<ProgramPrerequisite>();
+    public DbSet<GradingScale> GradingScales => Set<GradingScale>();
+    public DbSet<DirectEntryGradeConfiguration> DirectEntryGradeConfigurations => Set<DirectEntryGradeConfiguration>();
+    public DbSet<CredentialEvaluation> CredentialEvaluations => Set<CredentialEvaluation>();
+
     // Fee Management
     public DbSet<FeeCategory> FeeCategories => Set<FeeCategory>();
     public DbSet<FeeTemplate> FeeTemplates => Set<FeeTemplate>();
@@ -342,10 +353,25 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
             entity.Property(x => x.OfferExpiresAt);
             entity.Property(x => x.OfferAcceptedAt);
             entity.Property(x => x.AccountCreatedAt);
+            entity.Property(x => x.ApplicantType).HasConversion<int>().IsRequired();
+            entity.Property(x => x.PreviousCGPA).HasPrecision(18, 2);
+            entity.Property(x => x.EnglishProficiencyType).HasConversion<int>();
+            entity.Property(x => x.EnglishProficiencyScore).HasMaxLength(20);
+            entity.Property(x => x.Nationality).HasMaxLength(100);
+            entity.Property(x => x.PassportNumber).HasMaxLength(50);
+            entity.Property(x => x.PreviousInstitutionName).HasMaxLength(200);
+            entity.Property(x => x.PreviousInstitutionCountry).HasMaxLength(100);
+            entity.Property(x => x.VisaRequired);
+            entity.Property(x => x.VisaApplicationNumber).HasMaxLength(100);
+            entity.Property(x => x.FinancialProofProvided);
+            entity.Property(x => x.FinancialProofAmount).HasMaxLength(50);
+            entity.Property(x => x.FinancialProofCurrency).HasMaxLength(10);
+            entity.Property(x => x.IsExchangeProgram);
 
             entity.HasOne(x => x.AcademicSession).WithMany().HasForeignKey(x => x.AcademicSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.AcademicProgram).WithMany().HasForeignKey(x => x.AcademicProgramId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.StartingLevel).WithMany().HasForeignKey(x => x.StartingLevelId).OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(x => x.Documents).WithMany().UsingEntity("AdmissionApplicationDocuments");
 
@@ -743,6 +769,155 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
             entity.HasIndex(x => x.AdmissionApplicationId).IsUnique();
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
+
+        // --- New entity configurations ---
+        modelBuilder.Entity<Country>(entity =>
+        {
+            entity.ToTable("Countries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(200);
+            entity.Property(x => x.Region).HasConversion<string>().HasMaxLength(50);
+            entity.Property(x => x.CallingCode).HasMaxLength(10);
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.DisplayOrder).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
         });
+
+        modelBuilder.Entity<CreditTransferRule>(entity =>
+        {
+            entity.ToTable("CreditTransferRules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SourceCountryCode).HasMaxLength(10);
+            entity.Property(x => x.CreditsPerYear).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.MaxTransferablePercentage).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.MaxTransferableCredits).IsRequired();
+            entity.Property(x => x.MinCGPA).HasColumnType("decimal(4,2)").IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.Program)
+                .WithMany()
+                .HasForeignKey(x => x.ProgramId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GPAScaleConversion>(entity =>
+        {
+            entity.ToTable("GPAScaleConversions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CountryCode).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.ScaleName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ScaleMax).HasColumnType("decimal(4,2)").IsRequired();
+            entity.Property(x => x.ScaleMin).HasColumnType("decimal(4,2)").IsRequired();
+            entity.Property(x => x.EquivalentCGPA).HasColumnType("decimal(4,2)").IsRequired();
+            entity.Property(x => x.MinPassingScore).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+        });
+
+        modelBuilder.Entity<CourseEquivalency>(entity =>
+        {
+            entity.ToTable("CourseEquivalencies");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SourceInstitution).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.SourceCourseCode).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.SourceCourseName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SourceCredits).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.TargetCredits).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.MappingNotes).HasMaxLength(2000);
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.TargetCourse)
+                .WithMany()
+                .HasForeignKey(x => x.TargetCourseId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ProgramCreditMapping>(entity =>
+        {
+            entity.ToTable("ProgramCreditMappings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CreditsPerLevel).IsRequired();
+            entity.Property(x => x.MaxTransferablePercentage).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.MaxTransferableCredits).IsRequired();
+            entity.Property(x => x.MinCreditsAtLMS).IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.Program)
+                .WithMany()
+                .HasForeignKey(x => x.ProgramId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProgramPrerequisite>(entity =>
+        {
+            entity.ToTable("ProgramPrerequisites");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RequiredSubjectCode).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RequiredSubjectName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.MinGrade).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.IsCore).IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.Program)
+                .WithMany()
+                .HasForeignKey(x => x.ProgramId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<GradingScale>(entity =>
+        {
+            entity.ToTable("GradingScales");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CountryCode).HasMaxLength(10);
+            entity.Property(x => x.QualificationType).HasMaxLength(50);
+            entity.Property(x => x.GradesJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+        });
+
+        modelBuilder.Entity<DirectEntryGradeConfiguration>(entity =>
+        {
+            entity.ToTable("DirectEntryGradeConfigurations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QualificationType).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.GradesJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.GradingScale)
+                .WithMany(x => x.DirectEntryConfigurations)
+                .HasForeignKey(x => x.GradingScaleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CredentialEvaluation>(entity =>
+        {
+            entity.ToTable("CredentialEvaluations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Evaluator).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.EvaluationReportId).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.EvaluationDate).IsRequired();
+            entity.Property(x => x.EquivalencyDegree).HasMaxLength(100);
+            entity.Property(x => x.EquivalencyMajor).HasMaxLength(200);
+            entity.Property(x => x.EquivalencyGPA).HasColumnType("decimal(4,2)");
+            entity.Property(x => x.EquivalencyScale).HasMaxLength(20);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.ReportDocumentUrl).HasMaxLength(2000);
+            entity.Property(x => x.ReportDocumentFileName).HasMaxLength(500);
+            entity.Property(x => x.CreatedAt).IsRequired();
+
+            entity.HasOne(x => x.Application)
+                .WithMany(x => x.CredentialEvaluations)
+                .HasForeignKey(x => x.ApplicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });        });
     }
 }

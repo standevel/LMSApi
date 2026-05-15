@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using LMS.Api.Data.Entities;
+using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Services;
 
@@ -18,6 +19,8 @@ public interface IAdmissionService
     Task<AcademicSession?> GetActiveAdmissionSessionAsync();
     Task<IEnumerable<SponsorOrganization>> GetAdmissionSponsorsAsync();
     Task<IEnumerable<Subject>> GetAdmissionSubjectsAsync();
+    Task<IEnumerable<AcademicLevel>> GetAcademicLevelsAsync();
+    Task<IEnumerable<DocumentType>> GetRequiredDocumentTypesAsync(ApplicantType applicantType, Guid? programId = null);
 
     // Admin Methods
     Task<AdmissionApplication?> GetApplicationByIdAsync(Guid id);
@@ -26,13 +29,26 @@ public interface IAdmissionService
     Task<AdmissionApplication> RespondToOfferAsync(Guid id, bool acceptOffer);
     Task<IEnumerable<AutoAdmitResult>> AutoAdmitAsync(Guid sessionId, bool isDryRun);
     Task<AcademicProgram> UpdateProgramCriteriaAsync(Guid programId, int minScore, int maxAdmissions, string jambSubjectsJson, string oLevelSubjectsJson);
+    Task<TransferValidationResult> ValidateTransferEligibilityAsync(Guid applicationId);
 
     // Registrar Methods - Student Account Creation
     Task<StudentAccountCreationResult> CreateStudentAccountAsync(Guid applicationId, CancellationToken ct = default);
     Task<List<PendingStudentAccountDto>> GetPendingStudentAccountsAsync(CancellationToken ct = default);
+    
+    // Document Auto-Suggestion
+    Task<DocumentSuggestionResult> GetSuggestedDocumentsAsync(ApplicantType applicantType, string? nationality = null, Guid? programId = null);
 }
 
 public record AutoAdmitResult(Guid ApplicationId, string FirstName, string LastName, string? MiddleName, string ProgramName, int JambScore, bool IsAdmitted, string? Reason);
+
+public record TransferValidationResult(
+    bool IsEligible,
+    string? Reason,
+    decimal? MinimumCGPA,
+    int? MinimumCredits,
+    Guid? EligibleStartingLevelId,
+    string? EligibleStartingLevelName
+);
 
 public class StudentAccountCreationResult
 {
@@ -90,3 +106,9 @@ public class PendingStudentAccountDto
     [System.Text.Json.Serialization.JsonPropertyName("offerAcceptedAt")]
     public DateTime? OfferAcceptedAt { get; set; }
 }
+
+public record DocumentSuggestionResult(
+    IEnumerable<DocumentType> Required,
+    IEnumerable<DocumentType> Recommended,
+    string? Reason
+);

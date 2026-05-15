@@ -29,6 +29,8 @@ public static class WebApplicationExtensions
         // Serve static files from uploads directory (must be early to bypass all auth)
         var storageBasePath = app.Configuration["FileStorage:BasePath"]
             ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        Directory.CreateDirectory(storageBasePath);
+
         app.UseStaticFiles(new StaticFileOptions
         {
             FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(storageBasePath),
