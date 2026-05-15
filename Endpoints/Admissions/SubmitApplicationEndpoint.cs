@@ -26,20 +26,51 @@ public sealed class SubmitApplicationEndpoint(IAdmissionService admissionService
                 app.FirstName,
                 app.LastName,
                 app.MiddleName,
-                app.StudentEmail, app.JambRegNumber, app.AcademicSessionId,
+                app.StudentEmail,
+                app.JambRegNumber,
+                app.AcademicSessionId,
                 app.AcademicSession?.Name ?? string.Empty,
-                app.Persona, app.FacultyId, app.Faculty?.Name ?? string.Empty,
-                app.AcademicProgramId, app.AcademicProgram?.Name ?? string.Empty,
-                app.ProgramReason, app.QualificationsJson, app.Phone,
-                app.EmergencyContactJson, app.SponsorshipJson,
-                app.Status.ToString(), app.CreatedAt, app.SubmittedAt,
+                app.Persona,
+                app.FacultyId,
+                app.Faculty?.Name ?? string.Empty,
+                app.AcademicProgramId,
+                app.AcademicProgram?.Name ?? string.Empty,
+                app.ProgramReason,
+                app.QualificationsJson,
+                app.Phone,
+                app.EmergencyContactJson,
+                app.SponsorshipJson,
+                app.Status.ToString(),
+                app.CreatedAt,
+                app.SubmittedAt,
                 app.Documents.Select(d => new DocumentResponse(
-                    d.Id, d.FileName, d.FileUrl, d.DocumentTypeId,
+                    d.Id,
+                    d.FileName,
+                    d.FileUrl,
+                    d.DocumentTypeId,
                     d.DocumentType?.Name ?? "Admission Document",
                     d.DocumentType?.Code ?? string.Empty,
                     d.Status.ToString(),
                     d.RejectionReason
-                ))
+                )),
+                null, // StudentUserId
+                null, // AcceptanceFeeRecordId
+                null, // AcceptanceFeeAmount
+                null, // AcceptanceFeeBalance
+                null, // AcceptanceFeeStatus
+                false, // RequiresAcceptanceFee
+                // New fields
+                app.ApplicantType.ToString(),
+                app.PreviousInstitutionName,
+                app.PreviousInstitutionCountry,
+                app.PreviousCGPA,
+                app.CreditsEarned,
+                app.StartingLevelId,
+                app.StartingLevel?.Name,
+                app.Nationality,
+                app.PassportNumber,
+                app.EnglishProficiencyScore,
+                app.EnglishProficiencyType?.ToString()
             );
 
             await SendSuccessAsync(response, ct);

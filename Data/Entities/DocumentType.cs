@@ -21,6 +21,13 @@ public sealed class DocumentType
     public bool IsActive { get; set; } = true;
     public bool IsCompulsory { get; set; }
 
+    // Conditional flags for applicant types
+    public bool InternationalOnly { get; set; } = false;
+    public bool DirectEntryOnly { get; set; } = false;
+    public bool TransferOnly { get; set; } = false;
+    public bool NigeriaOnly { get; set; } = false;
+    public bool ExchangeOnly { get; set; } = false;
+
     // Default permission rules (JSON)
     // Example: { "AllowedRoles": ["Admin", "Registrar"], "AllowOwner": true }
     public string DefaultAccessRules { get; set; } = "{}";

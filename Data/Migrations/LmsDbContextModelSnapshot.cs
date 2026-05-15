@@ -173,6 +173,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime?>("AccountCreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("ApplicantType")
+                        .HasColumnType("int");
+
                     b.Property<string>("ApplicationNumber")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -180,9 +183,19 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("CreditsEarned")
+                        .HasColumnType("int");
+
                     b.Property<string>("EmergencyContactJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EnglishProficiencyScore")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("EnglishProficiencyType")
+                        .HasColumnType("int");
 
                     b.Property<string>("EntraObjectId")
                         .HasColumnType("nvarchar(450)");
@@ -190,9 +203,23 @@ namespace LMS.Api.Data.Migrations
                     b.Property<Guid?>("FacultyId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("FinancialProofAmount")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("FinancialProofCurrency")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<bool?>("FinancialProofProvided")
+                        .HasColumnType("bit");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsExchangeProgram")
+                        .HasColumnType("bit");
 
                     b.Property<string>("JambRegNumber")
                         .IsRequired()
@@ -206,6 +233,10 @@ namespace LMS.Api.Data.Migrations
                     b.Property<string>("MiddleName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Nationality")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<DateTime?>("OfferAcceptedAt")
                         .HasColumnType("datetime2");
 
@@ -215,6 +246,10 @@ namespace LMS.Api.Data.Migrations
                     b.Property<string>("OfficialEmail")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PassportNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("Persona")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -222,6 +257,18 @@ namespace LMS.Api.Data.Migrations
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("PreviousCGPA")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PreviousInstitutionCountry")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PreviousInstitutionName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("ProgramReason")
                         .IsRequired()
@@ -234,6 +281,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<string>("SponsorshipJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("StartingLevelId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -254,6 +304,13 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("VisaApplicationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<bool?>("VisaRequired")
+                        .HasColumnType("bit");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AcademicProgramId");
@@ -264,6 +321,8 @@ namespace LMS.Api.Data.Migrations
                         .HasFilter("[EntraObjectId] IS NOT NULL");
 
                     b.HasIndex("FacultyId");
+
+                    b.HasIndex("StartingLevelId");
 
                     b.HasIndex("JambRegNumber", "AcademicSessionId");
 
@@ -852,6 +911,15 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("DirectEntryOnly")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ExchangeOnly")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("InternationalOnly")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -862,6 +930,12 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("NigeriaOnly")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("TransferOnly")
+                        .HasColumnType("bit");
 
                     b.HasKey("Id");
 
@@ -2079,11 +2153,18 @@ namespace LMS.Api.Data.Migrations
                         .HasForeignKey("FacultyId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("LMS.Api.Data.Entities.AcademicLevel", "StartingLevel")
+                        .WithMany()
+                        .HasForeignKey("StartingLevelId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AcademicProgram");
 
                     b.Navigation("AcademicSession");
 
                     b.Navigation("Faculty");
+
+                    b.Navigation("StartingLevel");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.Assessment", b =>

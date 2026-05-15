@@ -11,7 +11,7 @@ public interface IDbInitializer
     Task InitializeAsync(CancellationToken ct = default);
 } 
 
-public sealed class DbInitializer(LmsDbContext dbContext, ILogger<DbInitializer> logger) : IDbInitializer
+public sealed partial class DbInitializer(LmsDbContext dbContext, ILogger<DbInitializer> logger) : IDbInitializer
 {
     public async Task InitializeAsync(CancellationToken ct = default)
     {
@@ -26,7 +26,11 @@ public sealed class DbInitializer(LmsDbContext dbContext, ILogger<DbInitializer>
         await SeedLecturersAsync(ct);
         await SeedDocumentTypesAsync(ct);
         await SeedSponsorsAsync(ct);
-        await SeedSubjectsAsync(ct);
+await SeedSubjectsAsync(ct);
+await SeedCountriesAsync(ct);
+        await SeedGradingScalesAsync(ct);
+        await SeedCreditTransferRulesAsync(ct);
+        await SeedProgramCreditMappingsAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
     }
@@ -432,21 +436,155 @@ public sealed class DbInitializer(LmsDbContext dbContext, ILogger<DbInitializer>
     }
     private async Task SeedDocumentTypesAsync(CancellationToken ct)
     {
-        if (await dbContext.DocumentTypes.AnyAsync(ct))
+        // Add new document types if they don't exist (additive approach)
+        var existingCodes = await dbContext.DocumentTypes
+            .AsNoTracking()
+            .Select(d => d.Code)
+            .ToListAsync(ct);
+
+        var newDocumentTypes = new List<DocumentType>();
+
+        // Existing core Nigeria-specific document types (ensure they are marked NigeriaOnly)
+        if (!existingCodes.Contains("JAMB_RESULT"))
         {
-            logger.LogInformation("Document types already seeded. Skipping.");
-            return;
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "JAMB Result",
+                Code = "JAMB_RESULT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                NigeriaOnly = true,
+                IsActive = true
+            });
         }
 
-        logger.LogInformation("Seeding Document Types...");
-        dbContext.DocumentTypes.AddRange(
-            new DocumentType { Name = "JAMB Result", Code = "JAMB_RESULT", Category = DocumentCategory.Admission, IsCompulsory = true },
-            new DocumentType { Name = "O-Level Result", Code = "OLEVEL_RESULT", Category = DocumentCategory.Admission, IsCompulsory = true },
-            new DocumentType { Name = "Birth Certificate", Code = "BIRTH_CERT", Category = DocumentCategory.Admission, IsCompulsory = false },
-            new DocumentType { Name = "State of Origin", Code = "STATE_ORIGIN", Category = DocumentCategory.Admission, IsCompulsory = false },
-            new DocumentType { Name = "Sponsorship Document", Code = "SPONSOR_DOCUMENT", Category = DocumentCategory.Admission, IsCompulsory = false }
-        );
-        await dbContext.SaveChangesAsync(ct);
+        if (!existingCodes.Contains("OLEVEL_RESULT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "O-Level Result",
+                Code = "OLEVEL_RESULT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                NigeriaOnly = true,
+                IsActive = true
+            });
+        }
+
+        // Base documents (not Nigeria-specific)
+        if (!existingCodes.Contains("BIRTH_CERT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Birth Certificate",
+                Code = "BIRTH_CERT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("STATE_ORIGIN"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "State of Origin",
+                Code = "STATE_ORIGIN",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                NigeriaOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("SPONSOR_DOCUMENT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Sponsorship Document",
+                Code = "SPONSOR_DOCUMENT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                IsActive = true
+            });
+        }
+
+        // New international/transfer/direct entry document types
+        if (!existingCodes.Contains("PASSPORT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "International Passport",
+                Code = "PASSPORT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                InternationalOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("TRANSCRIPT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Transcript/Result",
+                Code = "TRANSCRIPT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                TransferOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("TRANSFER_LETTER"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Transfer Letter",
+                Code = "TRANSFER_LETTER",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                TransferOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("ENGLISH_TEST"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "English Proficiency Test",
+                Code = "ENGLISH_TEST",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                InternationalOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("ALEVEL_RESULTS"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "A-Level/IJMB/NAPLEX Results",
+                Code = "ALEVEL_RESULTS",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = false,
+                DirectEntryOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (newDocumentTypes.Any())
+        {
+            dbContext.DocumentTypes.AddRange(newDocumentTypes);
+            await dbContext.SaveChangesAsync(ct);
+            logger.LogInformation("Added {count} new document types", newDocumentTypes.Count);
+        }
+        else
+        {
+            logger.LogInformation("All document types already exist. Skipping.");
+        }
     }
 
     private async Task SeedSponsorsAsync(CancellationToken ct)

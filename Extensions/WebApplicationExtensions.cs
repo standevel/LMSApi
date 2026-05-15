@@ -33,6 +33,7 @@ public static class WebApplicationExtensions
         {
             Directory.CreateDirectory(resolvedPath);
         }
+
         app.UseStaticFiles(new StaticFileOptions
         {
             FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(resolvedPath),

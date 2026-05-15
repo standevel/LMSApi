@@ -19,7 +19,8 @@ public sealed class GetDocumentTypesEndpoint(IDocumentService documentService)
         var types = await documentService.GetActiveDocumentTypesAsync(DocumentCategory.Admission);
 
         var response = types.Select(t => new DocumentTypeResponse(
-            t.Id, t.Name, t.Code, t.Category.ToString(), t.IsCompulsory
+            t.Id, t.Name, t.Code, t.Category.ToString(), t.IsCompulsory,
+            t.InternationalOnly, t.DirectEntryOnly, t.TransferOnly, t.NigeriaOnly
         ));
 
         await SendSuccessAsync(response, ct);

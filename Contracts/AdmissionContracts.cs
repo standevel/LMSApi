@@ -39,8 +39,60 @@ public sealed record AdmissionApplicationResponse(
     decimal? AcceptanceFeeAmount = null,
     decimal? AcceptanceFeeBalance = null,
     string? AcceptanceFeeStatus = null,
-    bool RequiresAcceptanceFee = false
+    bool RequiresAcceptanceFee = false,
+    // New fields for transfer/international/direct entry
+    string? ApplicantType = null,
+    string? PreviousInstitutionName = null,
+    string? PreviousInstitutionCountry = null,
+    decimal? PreviousCGPA = null,
+    int? CreditsEarned = null,
+    Guid? StartingLevelId = null,
+    string? StartingLevelName = null,
+    string? Nationality = null,
+    string? PassportNumber = null,
+    string? EnglishProficiencyScore = null,
+    string? EnglishProficiencyType = null,
+    // --- Phase 1: Country & Region ---
+    string? CountryOfOrigin = null,
+    string? CountryName = null,
+    string? Region = null,
+    // --- Phase 1: Enhanced Visa Fields ---
+    string? VisaStatus = null,
+    string? VisaType = null,
+    DateTime? VisaExpiryDate = null,
+    string? ImmigrationStatus = null,
+    decimal? FinancialProofAmount = null,
+    Guid? FinancialProofDocumentId = null,
+    // --- Phase 3: Transfer Fields ---
+    decimal? ConvertedCGPA = null,
+    string? CGPAScaleName = null,
+    decimal? CGPAScaleMax = null,
+    decimal? TransferableCredits = null,
+    int? TransferLevelSuggestion = null,
+    int? IntendedSemester = null,
+    // --- Phase 4: Exchange Fields ---
+    string? ExchangeProgramType = null,
+    string? ExchangeStatus = null,
+    string? HomeInstitutionName = null,
+    string? HomeInstitutionCountry = null,
+    Guid? ExchangePartnerAgreementId = null,
+    int? ExchangeDurationMonths = null,
+    DateTime? ExchangeStartDate = null,
+    DateTime? ExchangeEndDate = null,
+    string? HomeInstitutionStanding = null,
+    bool? HomeInstitutionVerified = null,
+    DateTime? HomeInstitutionVerifiedAt = null,
+    // --- Phase 2: Direct Entry Fields ---
+    string? DirectEntryQualification = null,
+    string? DirectEntryGrade = null,
+    decimal? DirectEntryPoints = null,
+    string? DirectEntryInstitution = null,
+    int? DirectEntryYear = null,
+    string? DirectEntrySubject1 = null,
+    string? DirectEntrySubject2 = null,
+    string? DirectEntrySubject3 = null
 );
+
 
 public sealed record DocumentResponse(
     Guid Id,
@@ -75,6 +127,18 @@ public sealed class SaveApplicationRequest
     public string EmergencyContactJson { get; set; } = string.Empty;
     public string SponsorshipJson { get; set; } = string.Empty;
     public IEnumerable<Guid>? DocumentIds { get; set; }
+
+    // New fields for transfer/international/direct entry
+    public string? ApplicantType { get; set; }
+    public string? PreviousInstitutionName { get; set; }
+    public string? PreviousInstitutionCountry { get; set; }
+    public decimal? PreviousCGPA { get; set; }
+    public int? CreditsEarned { get; set; }
+    public Guid? StartingLevelId { get; set; }
+    public string? Nationality { get; set; }
+    public string? PassportNumber { get; set; }
+    public string? EnglishProficiencyScore { get; set; }
+    public string? EnglishProficiencyType { get; set; }
 }
 
 public sealed record DocumentTypeResponse(
@@ -82,11 +146,16 @@ public sealed record DocumentTypeResponse(
     string Name,
     string Code,
     string Category,
-    bool IsCompulsory
+    bool IsCompulsory,
+    bool InternationalOnly = false,
+    bool DirectEntryOnly = false,
+    bool TransferOnly = false,
+    bool NigeriaOnly = false
 );
 
 public sealed record FacultyResponse(Guid Id, string Name, string Label);
 public sealed record ProgramResponse(Guid Id, string Name, string Code);
+public sealed record AcademicLevelResponse(Guid Id, string Name, int Order, Guid ProgramId, string ProgramName);
 public sealed record AcademicSessionResponse(Guid Id, string Name, DateTime StartDate, DateTime EndDate, bool IsActive);
 public sealed record SponsorOrganizationResponse(Guid Id, string Name, string Code);
 public sealed record SubjectResponse(Guid Id, string Name);

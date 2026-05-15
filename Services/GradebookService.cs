@@ -75,6 +75,11 @@ public sealed class GradebookService : IGradebookService
         if (request.DefaultExamWeight.HasValue)
             config.DefaultExamWeight = request.DefaultExamWeight.Value;
 
+        // Validate that category weights sum to 100%
+        var totalWeight = config.DefaultCA1Weight + config.DefaultCA2Weight + config.DefaultCA3Weight + config.DefaultExamWeight;
+        if (totalWeight != 100m)
+            return Error.Validation("Weight.SumInvalid", $"Category weights must sum to 100%. Current total: {totalWeight}%");
+
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedById = userId;
 
@@ -781,6 +786,10 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
+        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, ct);
+        if (authResult.IsError)
+            return authResult.FirstError;
+
         var approval = await _dbContext.GradeApprovals
             .FirstOrDefaultAsync(x => x.CourseOfferingId == courseOfferingId && x.Level == request.Level, ct);
 
@@ -825,6 +834,10 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
+        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, ct);
+        if (authResult.IsError)
+            return authResult.FirstError;
+
         var approval = await _dbContext.GradeApprovals
             .FirstOrDefaultAsync(x => x.CourseOfferingId == courseOfferingId && x.Level == request.Level, ct);
 
@@ -843,6 +856,26 @@ public sealed class GradebookService : IGradebookService
             approval.Id.ToString(), $"Rejected at {request.Level} level: {request.Comments}", ct);
 
         return MapToApprovalDto(approval);
+    }
+
+    /// <summary>
+    /// Validates that the user has authority to approve/reject grades for the given course offering.
+    /// Allowed if user has an admin role OR is the assigned lecturer for the offering.
+    /// </summary>
+    private async Task<ErrorOr<Success>> ValidateApprovalAuthorityAsync(CourseOffering offering, Guid userId, CancellationToken ct)
+    {
+        var userRoles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync(ct);
+
+        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
+        var isLecturer = offering.LecturerId == userId;
+
+        if (!isAdmin && !isLecturer)
+            return Error.Forbidden("Approval.AccessDenied", "You are not authorized to approve or reject grades for this course");
+
+        return Result.Success;
     }
 
     #endregion
@@ -953,6 +986,127 @@ public sealed class GradebookService : IGradebookService
             publication.Id.ToString(), "Unpublished grades", ct);
 
         return Result.Deleted;
+    }
+
+    /// <summary>
+    /// Checks if the user has authority to perform grade management actions for the given course offering.
+    /// Allowed if user has an admin role OR is the assigned lecturer for the offering.
+    /// </summary>
+    private async Task<ErrorOr<Success>> ValidateGradeManagementAuthorityAsync(CourseOffering offering, Guid userId, CancellationToken ct)
+    {
+        var userRoles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync(ct);
+
+        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
+        var isLecturer = offering.LecturerId == userId;
+
+        if (!isAdmin && !isLecturer)
+            return Error.Forbidden("GradeManagement.AccessDenied", "You are not authorized to manage grades for this course");
+
+        return Result.Success;
+    }
+
+    /// <summary>
+    /// Unlocks all grades for a course offering so they can be edited again.
+    /// Intended for use after unpublishing grades that require corrections.
+    /// </summary>
+    public async Task<ErrorOr<int>> UnlockGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default)
+    {
+        var offering = await _dbContext.CourseOfferings.FindAsync(courseOfferingId);
+        if (offering == null)
+            return Error.NotFound("Course.NotFound", "Course offering not found");
+
+        var authResult = await ValidateGradeManagementAuthorityAsync(offering, userId, ct);
+        if (authResult.IsError)
+            return authResult.FirstError;
+
+        var assessments = await _dbContext.Assessments
+            .Where(x => x.CourseOfferingId == courseOfferingId)
+            .ToListAsync(ct);
+
+        var grades = await _dbContext.Grades
+            .Where(g => assessments.Select(a => a.Id).Contains(g.AssessmentId) && g.IsLocked)
+            .ToListAsync(ct);
+
+        var unlockedCount = 0;
+        foreach (var grade in grades)
+        {
+            grade.IsLocked = false;
+            unlockedCount++;
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await _auditService.LogAsync("UnlockGrades", "Gradebook",
+            courseOfferingId.ToString(), $"Unlocked {unlockedCount} grades", ct);
+
+        return unlockedCount;
+    }
+
+    #endregion
+
+    #region Course Listing
+
+    /// <summary>
+    /// Returns all course offerings visible to the requesting user for use as a course selector.
+    /// Admins/HOD/Deans see all courses; regular lecturers see only their own.
+    /// An optional searchTerm filters by course code or title.
+    /// </summary>
+    public async Task<ErrorOr<List<CourseOfferingSummaryDto>>> GetAllCoursesForGradebookAsync(Guid userId, string? searchTerm = null, CancellationToken ct = default)
+    {
+        var userRoles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync(ct);
+
+        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
+
+        var query = _dbContext.CourseOfferings
+            .Include(x => x.Course)
+            .Include(x => x.Program)
+            .Include(x => x.Level)
+            .Include(x => x.AcademicSession)
+            .Include(x => x.Lecturer)
+            .AsQueryable();
+
+        if (!isAdmin)
+            query = query.Where(x => x.LecturerId == userId);
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var term = searchTerm.Trim().ToLower();
+            query = query.Where(x =>
+                x.Course.Code.ToLower().Contains(term) ||
+                x.Course.Title.ToLower().Contains(term));
+        }
+
+        var offerings = await query
+            .OrderByDescending(x => x.AcademicSession.StartDate)
+            .ThenBy(x => x.Course.Code)
+            .ToListAsync(ct);
+
+        var result = new List<CourseOfferingSummaryDto>();
+        foreach (var offering in offerings)
+        {
+            var isPublished = await _dbContext.GradePublications
+                .AnyAsync(x => x.CourseOfferingId == offering.Id && x.IsVisibleToStudents, ct);
+
+            result.Add(new CourseOfferingSummaryDto(
+                offering.Id,
+                offering.Course.Code,
+                offering.Course.Title,
+                offering.Program.Name,
+                offering.Level.Name,
+                offering.AcademicSession.Name,
+                (int)offering.Semester,
+                isPublished,
+                offering.Lecturer?.DisplayName,
+                offering.AcademicSession.IsActive));
+        }
+
+        return result;
     }
 
     #endregion
@@ -1166,7 +1320,7 @@ public sealed class GradebookService : IGradebookService
 
     private decimal CalculateUnweightedAverage(decimal ca1, decimal ca2, decimal ca3, decimal exam)
     {
-        var scores = new[] { ca1, ca2, ca3, exam }.Where(s => s > 0).ToList();
+        var scores = new[] { ca1, ca2, ca3, exam }.Where(s => s >= 0).ToList();
         return scores.Any() ? scores.Average() : 0;
     }
 

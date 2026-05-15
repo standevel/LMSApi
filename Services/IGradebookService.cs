@@ -41,6 +41,10 @@ public interface IGradebookService
     Task<ErrorOr<GradePublicationDto>> GetPublicationStatusAsync(Guid courseOfferingId, CancellationToken ct = default);
     Task<ErrorOr<GradePublicationDto>> PublishGradesAsync(Guid courseOfferingId, PublishGradesRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> UnpublishGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<int>> UnlockGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
+    
+    // Course Listing (for course selector)
+    Task<ErrorOr<List<CourseOfferingSummaryDto>>> GetAllCoursesForGradebookAsync(Guid userId, string? searchTerm = null, CancellationToken ct = default);
     
     // Student View
     Task<ErrorOr<StudentGradeViewDto>> GetStudentGradesAsync(Guid courseOfferingId, Guid studentId, CancellationToken ct = default);

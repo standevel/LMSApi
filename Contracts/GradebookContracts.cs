@@ -198,3 +198,17 @@ public record StudentAssessmentGradeDto(
     decimal MaxMarks,
     decimal Weight,
     decimal WeightedScore);
+
+// ==================== COURSE LISTING (Course Selector) ====================
+
+public record CourseOfferingSummaryDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    string ProgramName,
+    string LevelName,
+    string AcademicSessionName,
+    int Semester,
+    bool IsPublished,
+    string? LecturerName,
+    bool IsSessionActive);

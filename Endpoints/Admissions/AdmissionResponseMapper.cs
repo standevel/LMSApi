@@ -72,6 +72,18 @@ internal static class AdmissionResponseMapper
             feeRecord?.TotalAmount,
             feeRecord?.Balance,
             feeRecord?.Status.ToString(),
-            feeRecord is not null && feeRecord.TotalAmount > 0
+            feeRecord is not null && feeRecord.TotalAmount > 0,
+            // New fields
+            app.ApplicantType.ToString(),
+            app.PreviousInstitutionName,
+            app.PreviousInstitutionCountry,
+            app.PreviousCGPA,
+            app.CreditsEarned,
+            app.StartingLevelId,
+            app.StartingLevel?.Name,
+            app.Nationality,
+            app.PassportNumber,
+            app.EnglishProficiencyScore,
+            app.EnglishProficiencyType?.ToString()
         );
 }
