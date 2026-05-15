@@ -9,7 +9,7 @@ namespace LMS.Api.Data;
 public interface IDbInitializer
 {
     Task InitializeAsync(CancellationToken ct = default);
-}
+} 
 
 public sealed partial class DbInitializer(LmsDbContext dbContext, ILogger<DbInitializer> logger) : IDbInitializer
 {
