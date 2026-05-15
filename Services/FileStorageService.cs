@@ -1,3 +1,4 @@
+using LMS.Api.Extensions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -13,7 +14,7 @@ public class FileStorageService : IFileStorageService
         IConfiguration configuration,
         ILogger<FileStorageService> logger)
     {
-        _storageBasePath = configuration["FileStorage:BasePath"] ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        _storageBasePath = FileStoragePathHelper.ResolveBasePath(configuration["FileStorage:BasePath"]);
         _logger = logger;
         
         // Ensure base directory exists

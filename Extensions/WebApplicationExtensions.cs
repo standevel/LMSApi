@@ -17,7 +17,6 @@ public static class WebApplicationExtensions
         await dbInitializer.InitializeAsync(CancellationToken.None);
         return app;
     }
-
     public static WebApplication UseApplicationMiddleware(this WebApplication app)
     {
         if (!app.Environment.IsDevelopment())
@@ -27,11 +26,16 @@ public static class WebApplicationExtensions
         app.UseCors(ServiceCollectionExtensions.FrontendCorsPolicy);
 
         // Serve static files from uploads directory (must be early to bypass all auth)
-        var storageBasePath = app.Configuration["FileStorage:BasePath"]
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+        var storageBasePathConfig = app.Configuration["FileStorage:BasePath"];
+        var resolvedPath = FileStoragePathHelper.ResolveBasePath(storageBasePathConfig);
+
+        if (!Directory.Exists(resolvedPath))
+        {
+            Directory.CreateDirectory(resolvedPath);
+        }
         app.UseStaticFiles(new StaticFileOptions
         {
-            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(storageBasePath),
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(resolvedPath),
             RequestPath = "/uploads"
         });
 
