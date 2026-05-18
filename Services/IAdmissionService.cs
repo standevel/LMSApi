@@ -37,7 +37,69 @@ public interface IAdmissionService
     
     // Document Auto-Suggestion
     Task<DocumentSuggestionResult> GetSuggestedDocumentsAsync(ApplicantType applicantType, string? nationality = null, Guid? programId = null);
+
+    // Transfer student enhancements
+    Task<TransferCreditResult> CalculateTransferableCreditsAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
+
+    Task<GradeConversionResult> ConvertCGPAAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
+
+    // Exchange student support
+    Task<ExchangeEligibilityResult> ValidateExchangeEligibilityAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
+
+    // Direct entry prerequisite validation
+    Task<PrerequisiteValidationResult> ValidateDirectEntryPrerequisitesAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
+
+    // Direct entry enhancement methods
+    Task<DirectEntryPointsResult> CalculateDirectEntryPointsAsync(
+        DirectEntryQualification qualification,
+        DirectEntryGrade grade,
+        CancellationToken ct = default);
+
+    Task<LevelSuggestionResult> SuggestStartingLevelForQualificationAsync(
+        DirectEntryQualification qualification,
+        CancellationToken ct = default);
+
+    // Visa & immigration validation
+    Task<VisaValidationResult> ValidateVisaRequirementsAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
+
+    // Home institution verification (transfer/exchange students)
+    Task<HomeInstitutionValidationResult> ValidateHomeInstitutionRequirementsAsync(
+        Guid applicationId,
+        CancellationToken ct = default);
 }
+
+public record VisaValidationResult(
+    bool IsCompliant,
+    string? Reason,
+    bool VisaRequired,
+    bool VisaApplied,
+    bool FinancialProofProvided,
+    bool PassportValid);
+
+public record ExchangeEligibilityResult(
+    bool IsEligible,
+    string? Reason,
+    bool HomeInstitutionApproved,
+    bool DeansCertificateProvided,
+    bool AcademicStandingVerified,
+    bool PartnerAgreementActive);
+
+public record PrerequisiteValidationResult(
+    bool IsEligible,
+    string? Reason,
+    IEnumerable<RequiredSubject> MissingSubjects);
+
+public record RequiredSubject(string SubjectCode, string SubjectName, string MinGrade, bool Met);
 
 public record AutoAdmitResult(Guid ApplicationId, string FirstName, string LastName, string? MiddleName, string ProgramName, int JambScore, bool IsAdmitted, string? Reason);
 
@@ -112,3 +174,11 @@ public record DocumentSuggestionResult(
     IEnumerable<DocumentType> Recommended,
     string? Reason
 );
+
+public record HomeInstitutionValidationResult(
+    bool IsEligible,
+    string? Reason,
+    bool HomeInstitutionApproved,
+    bool DeansCertificateProvided,
+    bool AcademicStandingVerified,
+    bool AcademicStandingGood);

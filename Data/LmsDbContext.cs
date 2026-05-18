@@ -366,7 +366,6 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
             entity.Property(x => x.FinancialProofProvided);
             entity.Property(x => x.FinancialProofAmount).HasMaxLength(50);
             entity.Property(x => x.FinancialProofCurrency).HasMaxLength(10);
-            entity.Property(x => x.IsExchangeProgram);
 
             entity.HasOne(x => x.AcademicSession).WithMany().HasForeignKey(x => x.AcademicSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Faculty).WithMany().HasForeignKey(x => x.FacultyId).OnDelete(DeleteBehavior.Restrict);
@@ -769,6 +768,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
             entity.HasIndex(x => x.AdmissionApplicationId).IsUnique();
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
+        });
 
         // --- New entity configurations ---
         modelBuilder.Entity<Country>(entity =>
@@ -918,6 +918,6 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
                 .WithMany(x => x.CredentialEvaluations)
                 .HasForeignKey(x => x.ApplicationId)
                 .OnDelete(DeleteBehavior.Cascade);
-        });        });
+        });
     }
 }

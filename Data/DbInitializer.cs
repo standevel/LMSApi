@@ -575,6 +575,72 @@ await SeedCountriesAsync(ct);
             });
         }
 
+        // Exchange student specific document types
+        if (!existingCodes.Contains("EXCHANGE_AGREEMENT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Exchange Partner Agreement",
+                Code = "EXCHANGE_AGREEMENT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                ExchangeOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("DEANS_CERTIFICATE"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Dean's Certificate",
+                Code = "DEANS_CERTIFICATE",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                ExchangeOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("ACADEMIC_STANDING"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Academic Standing Letter",
+                Code = "ACADEMIC_STANDING",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                ExchangeOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("HOME_INSTITUTION_TRANSCRIPT"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Home Institution Transcript",
+                Code = "HOME_INSTITUTION_TRANSCRIPT",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                ExchangeOnly = true,
+                IsActive = true
+            });
+        }
+
+        if (!existingCodes.Contains("HOME_INSTITUTION_APPROVAL"))
+        {
+            newDocumentTypes.Add(new DocumentType
+            {
+                Name = "Home Institution Approval Letter",
+                Code = "HOME_INSTITUTION_APPROVAL",
+                Category = DocumentCategory.Admission,
+                IsCompulsory = true,
+                ExchangeOnly = true,
+                IsActive = true
+            });
+        }
+
         if (newDocumentTypes.Any())
         {
             dbContext.DocumentTypes.AddRange(newDocumentTypes);
@@ -641,4 +707,5 @@ await SeedCountriesAsync(ct);
         }
         await dbContext.SaveChangesAsync(ct);
     }
+
 }

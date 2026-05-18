@@ -17,8 +17,15 @@ public sealed class AdmissionService(
     IActiveDirectoryService adService,
     IPdfService pdfService,
     IConfiguration configuration,
-    ILogger<AdmissionService> logger) : IAdmissionService
+    ILogger<AdmissionService> logger,
+    ICreditTransferService creditTransferService,
+    IGradeConversionService gradeConversionService,
+    ICourseEquivalencyService courseEquivalencyService,
+    ICredentialEvaluationService credentialEvaluationService) : IAdmissionService
 {
+    private readonly ICreditTransferService _creditTransferService = creditTransferService;
+    private readonly IGradeConversionService _gradeConversionService = gradeConversionService;
+    private readonly ICourseEquivalencyService _courseEquivalencyService = courseEquivalencyService;
     public async Task<AdmissionApplication?> VerifyIdentityAsync(string email, string jambRegNumber)
     {
         if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(jambRegNumber))
@@ -255,7 +262,7 @@ public sealed class AdmissionService(
                 if (app.VisaRequired == true && string.IsNullOrEmpty(app.VisaApplicationNumber))
                     throw new InvalidOperationException("Visa application number is required when visa is required.");
                 if (app.FinancialProofProvided == true && 
-                    (string.IsNullOrEmpty(app.FinancialProofAmount) || string.IsNullOrEmpty(app.FinancialProofCurrency)))
+                    (!app.FinancialProofAmount.HasValue || string.IsNullOrEmpty(app.FinancialProofCurrency)))
                     throw new InvalidOperationException("Financial proof amount and currency are required when financial proof is provided.");
                 break;
 
@@ -1273,5 +1280,594 @@ public sealed class AdmissionService(
         }
 
         return new DocumentSuggestionResult(requiredDocs, recommendedDocs.Distinct(), reason);
+    }
+
+    // --- Transfer Student Enhancement Methods ---
+
+    public async Task<TransferCreditResult> CalculateTransferableCreditsAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new TransferCreditResult(0, 0, 0, 0, false, "Application not found.");
+        }
+
+        if (app.ApplicantType != ApplicantType.Transfer)
+        {
+            return new TransferCreditResult(0, 0, 0, 0, false, "Not a transfer application.");
+        }
+
+        if (!app.AcademicProgramId.HasValue)
+        {
+            return new TransferCreditResult(0, 0, 0, 0, false, "No program selected.");
+        }
+
+        var result = await _creditTransferService.CalculateTransferableCreditsAsync(
+            app.AcademicProgramId.Value,
+            app.PreviousInstitutionCountry,
+            app.CreditsEarned ?? 0,
+            app.PreviousCGPA ?? 0,
+            ct);
+
+        // Update application with calculated values
+        app.TransferableCredits = result.TransferableCredits;
+        app.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+
+        return result;
+    }
+
+    public async Task<GradeConversionResult> ConvertCGPAAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new GradeConversionResult(0, null, null, null, false, "Application not found.");
+        }
+
+        if (!app.PreviousCGPA.HasValue)
+        {
+            return new GradeConversionResult(0, null, null, null, false, "No CGPA to convert.");
+        }
+
+        // Determine scale from context: if PreviousInstitutionCountry is set, use that; otherwise infer from CGPA value
+        var scaleMax = app.CGPAScaleMax ?? (app.PreviousCGPA <= 5m ? 5.0m : 10.0m);
+        var scaleMin = app.CGPAScaleMin ?? 0m;
+
+        var result = await _gradeConversionService.ConvertCGPAAsync(
+            app.PreviousInstitutionCountry ?? "NG",
+            app.CGPAScaleName,
+            app.PreviousCGPA.Value,
+            scaleMax,
+            scaleMin,
+            ct);
+
+        // Update application with converted values
+        app.ConvertedCGPA = result.ConvertedCGPA;
+        app.CGPAScaleName = result.ScaleName ?? app.CGPAScaleName;
+        app.CGPAScaleMax = result.OriginalScaleMax ?? app.CGPAScaleMax;
+        app.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+
+        return result;
+    }
+
+    // --- Exchange Student Support ---
+
+    public async Task<ExchangeEligibilityResult> ValidateExchangeEligibilityAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new ExchangeEligibilityResult(false, "Application not found.", false, false, false, false);
+        }
+
+        if (app.ExchangeProgramType == ExchangeProgramType.None)
+        {
+            return new ExchangeEligibilityResult(false, "Not an exchange program application.", false, false, false, false);
+        }
+
+        var errors = new List<string>();
+
+        // Validate home institution name
+        if (string.IsNullOrEmpty(app.HomeInstitutionName))
+        {
+            errors.Add("Home institution name is required for exchange students.");
+        }
+
+        // Validate home institution approval document
+        var homeInstitutionApproved = app.HomeInstitutionApprovalDocumentId.HasValue;
+        if (!homeInstitutionApproved)
+        {
+            errors.Add("Home institution approval document is required.");
+        }
+
+        // Validate dean's certificate
+        var deansCertificateProvided = app.DeansCertificateDocumentId.HasValue;
+        if (!deansCertificateProvided)
+        {
+            errors.Add("Dean's certificate is required.");
+        }
+
+        // Validate academic standing
+        var academicStandingVerified = app.HomeInstitutionStanding.HasValue && app.HomeInstitutionStanding.Value == AcademicStanding.GoodStanding;
+        if (!academicStandingVerified)
+        {
+            errors.Add("Academic standing must be 'Good Standing' for exchange eligibility.");
+        }
+
+        // Validate exchange partner agreement
+        var partnerAgreementActive = app.ExchangePartnerAgreementId.HasValue;
+        if (!partnerAgreementActive)
+        {
+            errors.Add("Active exchange partner agreement is required.");
+        }
+
+        // Validate exchange dates if provided
+        if (app.ExchangeStartDate.HasValue && app.ExchangeEndDate.HasValue)
+        {
+            if (app.ExchangeEndDate.Value <= app.ExchangeStartDate.Value)
+            {
+                errors.Add("Exchange end date must be after start date.");
+            }
+        }
+
+        return new ExchangeEligibilityResult(
+            errors.Count == 0,
+            errors.Count > 0 ? string.Join(" ", errors) : null,
+            homeInstitutionApproved,
+            deansCertificateProvided,
+            academicStandingVerified,
+            partnerAgreementActive);
+    }
+
+    // --- Direct Entry Prerequisite Validation ---
+
+    public async Task<PrerequisiteValidationResult> ValidateDirectEntryPrerequisitesAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicProgram)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new PrerequisiteValidationResult(false, "Application not found.", Enumerable.Empty<RequiredSubject>());
+        }
+
+        if (app.ApplicantType != ApplicantType.DirectEntry)
+        {
+            return new PrerequisiteValidationResult(false, "Not a direct entry application.", Enumerable.Empty<RequiredSubject>());
+        }
+
+        if (app.AcademicProgramId == null)
+        {
+            return new PrerequisiteValidationResult(false, "No program selected.", Enumerable.Empty<RequiredSubject>());
+        }
+
+        // Get required prerequisites for the program
+        var prerequisites = await dbContext.ProgramPrerequisites
+            .Where(p => p.ProgramId == app.AcademicProgramId && p.IsActive)
+            .ToListAsync(ct);
+
+        if (!prerequisites.Any())
+        {
+            return new PrerequisiteValidationResult(true, "No prerequisites configured for this program.", Enumerable.Empty<RequiredSubject>());
+        }
+
+        // Parse direct entry subjects from application
+        var applicantSubjects = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(app.DirectEntrySubject1)) applicantSubjects["subject1"] = app.DirectEntrySubject1;
+        if (!string.IsNullOrEmpty(app.DirectEntrySubject2)) applicantSubjects["subject2"] = app.DirectEntrySubject2;
+        if (!string.IsNullOrEmpty(app.DirectEntrySubject3)) applicantSubjects["subject3"] = app.DirectEntrySubject3;
+
+        // Also parse from qualifications JSON
+        try
+        {
+            if (!string.IsNullOrEmpty(app.QualificationsJson))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(app.QualificationsJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("subjects", out var subjectsEl) && subjectsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var subj in subjectsEl.EnumerateArray())
+                    {
+                        var code = subj.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "";
+                        var grade = subj.TryGetProperty("grade", out var g) ? g.GetString() ?? "" : "";
+                        if (!string.IsNullOrEmpty(code))
+                            applicantSubjects[code] = grade;
+                    }
+                }
+            }
+        }
+        catch { /* Ignore parse errors */ }
+
+        var missingSubjects = new List<RequiredSubject>();
+
+        foreach (var prereq in prerequisites.Where(p => p.IsCore))
+        {
+            var isMet = applicantSubjects.Any(kv =>
+                kv.Key.Equals(prereq.RequiredSubjectCode, StringComparison.OrdinalIgnoreCase) ||
+                kv.Key.Equals(prereq.RequiredSubjectName, StringComparison.OrdinalIgnoreCase));
+
+            if (!isMet)
+            {
+                missingSubjects.Add(new RequiredSubject(
+                    prereq.RequiredSubjectCode,
+                    prereq.RequiredSubjectName,
+                    prereq.MinGrade,
+                    false));
+            }
+            else
+            {
+                missingSubjects.Add(new RequiredSubject(
+                    prereq.RequiredSubjectCode,
+                    prereq.RequiredSubjectName,
+                    prereq.MinGrade,
+                    true));
+            }
+        }
+
+        return new PrerequisiteValidationResult(
+            missingSubjects.Count == 0,
+            missingSubjects.Count > 0 ? "Missing required prerequisite subjects." : null,
+            missingSubjects.Where(s => !s.Met));
+    }
+
+    // --- Visa & Immigration Validation ---
+
+    public async Task<VisaValidationResult> ValidateVisaRequirementsAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new VisaValidationResult(false, "Application not found.", false, false, false, false);
+        }
+
+        var errors = new List<string>();
+        bool visaRequired = false;
+        bool visaApplied = false;
+        bool financialProofProvided = false;
+        bool passportValid = false;
+
+        // Passport validation
+        if (!string.IsNullOrEmpty(app.PassportNumber))
+            passportValid = true;
+        else
+            errors.Add("Passport number is required.");
+
+        // Determine if visa is required based on country/region
+        var region = app.Region;
+        if (app.ApplicantType == ApplicantType.International || !string.IsNullOrEmpty(app.CountryOfOrigin))
+        {
+            visaRequired = true;
+
+            // Visa application validation
+            if (!string.IsNullOrEmpty(app.VisaApplicationNumber))
+                visaApplied = true;
+            else
+                errors.Add("Visa application number is required for international applicants.");
+
+            if (app.VisaExpiryDate.HasValue && app.VisaExpiryDate.Value < DateTime.UtcNow.AddMonths(6))
+                errors.Add("Visa must be valid for at least 6 months from now.");
+
+            // Financial proof validation
+            if (app.FinancialProofAmount.HasValue && app.FinancialProofAmount.Value > 0)
+                financialProofProvided = true;
+            else
+                errors.Add("Financial proof is required for international applicants.");
+        }
+
+        // Immigration status check
+        if (app.ImmigrationStatus.HasValue && app.ImmigrationStatus.Value != ImmigrationStatus.NotApplicable)
+        {
+            // Immigration status is set but can be validated separately
+        }
+
+        return new VisaValidationResult(
+            errors.Count == 0,
+            errors.Count > 0 ? string.Join(" ", errors) : null,
+            visaRequired,
+            visaApplied,
+            financialProofProvided,
+            passportValid);
+    }
+
+    public async Task<HomeInstitutionValidationResult> ValidateHomeInstitutionRequirementsAsync(
+        Guid applicationId,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new HomeInstitutionValidationResult(false, "Application not found.", false, false, false, false);
+        }
+
+        var errors = new List<string>();
+        bool homeInstitutionApproved = false;
+        bool deansCertificateProvided = false;
+        bool academicStandingVerified = false;
+        bool academicStandingGood = false;
+
+        // Only validate for transfer or exchange applicants
+        var isTransfer = app.ApplicantType == ApplicantType.Transfer;
+        var isExchange = app.ApplicantType == ApplicantType.Exchange;
+        if (!isTransfer && !isExchange)
+        {
+            return new HomeInstitutionValidationResult(false, "Home institution verification only applies to transfer or exchange applicants.", false, false, false, false);
+        }
+
+        // Home institution approval document check
+        if (app.HomeInstitutionApprovalDocumentId.HasValue)
+        {
+            homeInstitutionApproved = true;
+        }
+        else
+        {
+            errors.Add("Home institution approval document is required.");
+        }
+
+        // Dean's certificate check
+        if (app.DeansCertificateDocumentId.HasValue)
+        {
+            deansCertificateProvided = true;
+        }
+        else
+        {
+            errors.Add("Dean's certificate is required.");
+        }
+
+        // Academic standing check
+        if (app.HomeInstitutionStanding.HasValue)
+        {
+            academicStandingVerified = true;
+            if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.GoodStanding)
+            {
+                academicStandingGood = true;
+            }
+            else if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.Probation)
+            {
+                errors.Add("Academic standing is 'Probation' — additional review required.");
+            }
+            else if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.Suspended)
+            {
+                errors.Add("Academic standing is 'Suspended' — applicant is not eligible.");
+            }
+        }
+        else
+        {
+            errors.Add("Academic standing from home institution is required.");
+        }
+
+        // For exchange students, also verify partner agreement
+        if (isExchange)
+        {
+            if (app.ExchangePartnerAgreementId.HasValue)
+            {
+                // Could add additional validation to check agreement status
+            }
+            else
+            {
+                errors.Add("Exchange partner agreement is required.");
+            }
+        }
+
+        return new HomeInstitutionValidationResult(
+            errors.Count == 0,
+            errors.Count > 0 ? string.Join(" ", errors) : null,
+            homeInstitutionApproved,
+            deansCertificateProvided,
+            academicStandingVerified,
+            academicStandingGood);
+    }
+
+    // --- Direct Entry Enhancement Methods ---
+
+    public async Task<DirectEntryPointsResult> CalculateDirectEntryPointsAsync(
+        DirectEntryQualification qualification,
+        DirectEntryGrade grade,
+        CancellationToken ct = default)
+    {
+        // Try to get points from GradingScale table first
+        var gradingScale = await dbContext.GradingScales
+            .FirstOrDefaultAsync(s => s.QualificationType == qualification.ToString() && s.IsActive, ct);
+
+        if (gradingScale != null)
+        {
+            try
+            {
+                var grades = System.Text.Json.JsonSerializer.Deserialize<List<GradingScaleGradeEntry>>(gradingScale.GradesJson);
+                if (grades != null)
+                {
+                    var gradeName = grade switch
+                    {
+                        DirectEntryGrade.AStar => "A*",
+                        DirectEntryGrade.A => "A",
+                        DirectEntryGrade.B => "B",
+                        DirectEntryGrade.C => "C",
+                        DirectEntryGrade.D => "D",
+                        DirectEntryGrade.E => "E",
+                        DirectEntryGrade.U => "U",
+                        DirectEntryGrade.FirstClass => "First Class",
+                        DirectEntryGrade.SecondClassUpper => "Second Class Upper",
+                        DirectEntryGrade.SecondClassLower => "Second Class Lower",
+                        DirectEntryGrade.ThirdClass => "Third Class",
+                        DirectEntryGrade.Pass => "Pass",
+                        DirectEntryGrade.DistinctionStar => "Distinction*",
+                        DirectEntryGrade.Distinction => "Distinction",
+                        DirectEntryGrade.Merit => "Merit",
+                        DirectEntryGrade.PassBTEC => "Pass",
+                        DirectEntryGrade.IB7 => "7",
+                        DirectEntryGrade.IB6 => "6",
+                        DirectEntryGrade.IB5 => "5",
+                        DirectEntryGrade.IB4 => "4",
+                        DirectEntryGrade.IB3 => "3",
+                        DirectEntryGrade.IB2 => "2",
+                        DirectEntryGrade.IB1 => "1",
+                        DirectEntryGrade.APlus => "A+",
+                        DirectEntryGrade.BPlus => "B+",
+                        DirectEntryGrade.CPlus => "C+",
+                        DirectEntryGrade.DPlus => "D+",
+                        DirectEntryGrade.EPlus => "E+",
+                        DirectEntryGrade.A1 => "A1",
+                        DirectEntryGrade.B2 => "B2",
+                        DirectEntryGrade.B3 => "B3",
+                        DirectEntryGrade.C4 => "C4",
+                        DirectEntryGrade.C5 => "C5",
+                        DirectEntryGrade.C6 => "C6",
+                        DirectEntryGrade.D7 => "D7",
+                        DirectEntryGrade.E8 => "E8",
+                        DirectEntryGrade.F => "F",
+                        _ => "Other"
+                    };
+
+                    var matchedGrade = grades.FirstOrDefault(g => g.Grade.Equals(gradeName, StringComparison.OrdinalIgnoreCase));
+                    if (matchedGrade != null)
+                    {
+                        return new DirectEntryPointsResult(matchedGrade.Points, true, $"Found in GradingScale: {gradeName}");
+                    }
+                }
+            }
+            catch { /* Fall back to configuration */ }
+        }
+
+        // Fall back to appsettings DirectEntryGrading configuration
+        var qualificationKey = qualification.ToString();
+        var gradeKey = grade switch
+        {
+            DirectEntryGrade.AStar => "AStar",
+            DirectEntryGrade.A => "A",
+            DirectEntryGrade.B => "B",
+            DirectEntryGrade.C => "C",
+            DirectEntryGrade.D => "D",
+            DirectEntryGrade.E => "E",
+            DirectEntryGrade.U => "U",
+            DirectEntryGrade.FirstClass => "FirstClass",
+            DirectEntryGrade.SecondClassUpper => "SecondClassUpper",
+            DirectEntryGrade.SecondClassLower => "SecondClassLower",
+            DirectEntryGrade.ThirdClass => "ThirdClass",
+            DirectEntryGrade.Pass => "Pass",
+            DirectEntryGrade.DistinctionStar => "DistinctionStar",
+            DirectEntryGrade.Distinction => "Distinction",
+            DirectEntryGrade.Merit => "Merit",
+            DirectEntryGrade.PassBTEC => "PassBTEC",
+            DirectEntryGrade.IB7 => "IB7",
+            DirectEntryGrade.IB6 => "IB6",
+            DirectEntryGrade.IB5 => "IB5",
+            DirectEntryGrade.IB4 => "IB4",
+            DirectEntryGrade.IB3 => "IB3",
+            DirectEntryGrade.IB2 => "IB2",
+            DirectEntryGrade.IB1 => "IB1",
+            DirectEntryGrade.APlus => "APlus",
+            DirectEntryGrade.BPlus => "BPlus",
+            DirectEntryGrade.CPlus => "CPlus",
+            DirectEntryGrade.DPlus => "DPlus",
+            DirectEntryGrade.EPlus => "EPlus",
+            DirectEntryGrade.A1 => "A1",
+            DirectEntryGrade.B2 => "B2",
+            DirectEntryGrade.B3 => "B3",
+            DirectEntryGrade.C4 => "C4",
+            DirectEntryGrade.C5 => "C5",
+            DirectEntryGrade.C6 => "C6",
+            DirectEntryGrade.D7 => "D7",
+            DirectEntryGrade.E8 => "E8",
+            DirectEntryGrade.F => "F",
+            _ => "Other"
+        };
+
+        var points = GetPointsFromConfig(qualificationKey, gradeKey);
+        var defaultConfig = configuration.GetSection($"DirectEntryGrading:Default");
+        var minPassing = defaultConfig.GetValue<double?>("MinPassingPoints") ?? 1.0;
+
+        var isPassing = points >= minPassing;
+
+        return new DirectEntryPointsResult(points, isPassing, $"Calculated from configuration: {qualificationKey} -> {gradeKey}");
+    }
+
+    private double GetPointsFromConfig(string qualificationKey, string gradeKey)
+    {
+        var section = configuration.GetSection($"DirectEntryGrading:{qualificationKey}:{gradeKey}");
+        if (section.Exists())
+        {
+            return section.GetValue<double>(gradeKey);
+        }
+
+        // Fall back to Default
+        var defaultSection = configuration.GetSection("DirectEntryGrading:Default");
+        if (defaultSection.Exists())
+        {
+            return defaultSection.GetValue<double>("MinPoints");
+        }
+
+        return 0.0;
+    }
+
+    public async Task<LevelSuggestionResult> SuggestStartingLevelForQualificationAsync(
+        DirectEntryQualification qualification,
+        CancellationToken ct = default)
+    {
+        // Nigerian convention: HND -> 300, ND -> 200, Diploma -> 200
+        // International: A-Level/IB -> 100, Cambridge Advanced -> 100
+        int? suggestedLevel = qualification switch
+        {
+            DirectEntryQualification.HND => (int?)300,
+            DirectEntryQualification.ND => (int?)200,
+            DirectEntryQualification.Diploma => (int?)200,
+            DirectEntryQualification.None => (int?)100,
+            DirectEntryQualification.ALevel => (int?)100,
+            DirectEntryQualification.IB => (int?)100,
+            DirectEntryQualification.CambridgeAdvanced => (int?)100,
+            DirectEntryQualification.AdvancedAdvanced => (int?)100,
+            DirectEntryQualification.BTEC => (int?)100,
+            DirectEntryQualification.IJMB => (int?)100,
+            _ => null
+        };
+
+        var levelName = suggestedLevel switch
+        {
+            100 => "100 Level (Freshman)",
+            200 => "200 Level (Sophomore)",
+            300 => "300 Level (Junior)",
+            400 => "400 Level (Senior)",
+            _ => null
+        };
+
+        // If we have ProgramCreditMapping, refine the suggestion
+        if (suggestedLevel.HasValue)
+        {
+            // Just return the suggestion; actual credit calculation happens elsewhere
+            return new LevelSuggestionResult(
+                suggestedLevel,
+                levelName,
+                0m,
+                true,
+                $"Suggested based on qualification type: {qualification}");
+        }
+
+        return new LevelSuggestionResult(
+            null,
+            null,
+            0m,
+            false,
+            $"No starting level suggestion for qualification type: {qualification}");
     }
 }

@@ -40,7 +40,7 @@ public sealed record AdmissionApplicationResponse(
     decimal? AcceptanceFeeBalance = null,
     string? AcceptanceFeeStatus = null,
     bool RequiresAcceptanceFee = false,
-    // New fields for transfer/international/direct entry
+    // --- Applicant Type & International/Transfer Info ---
     string? ApplicantType = null,
     string? PreviousInstitutionName = null,
     string? PreviousInstitutionCountry = null,
@@ -56,21 +56,23 @@ public sealed record AdmissionApplicationResponse(
     string? CountryOfOrigin = null,
     string? CountryName = null,
     string? Region = null,
-    // --- Phase 1: Enhanced Visa Fields ---
+    // --- Phase 1: Enhanced Visa & Immigration Fields ---
     string? VisaStatus = null,
     string? VisaType = null,
     DateTime? VisaExpiryDate = null,
     string? ImmigrationStatus = null,
     decimal? FinancialProofAmount = null,
+    string? FinancialProofCurrency = null,
     Guid? FinancialProofDocumentId = null,
-    // --- Phase 3: Transfer Fields ---
+    // --- Phase 3: Transfer Student Fields ---
     decimal? ConvertedCGPA = null,
     string? CGPAScaleName = null,
     decimal? CGPAScaleMax = null,
+    decimal? CGPAScaleMin = null,
     decimal? TransferableCredits = null,
     int? TransferLevelSuggestion = null,
     int? IntendedSemester = null,
-    // --- Phase 4: Exchange Fields ---
+    // --- Phase 4: Exchange Program Fields ---
     string? ExchangeProgramType = null,
     string? ExchangeStatus = null,
     string? HomeInstitutionName = null,
@@ -82,6 +84,7 @@ public sealed record AdmissionApplicationResponse(
     string? HomeInstitutionStanding = null,
     bool? HomeInstitutionVerified = null,
     DateTime? HomeInstitutionVerifiedAt = null,
+    string? HomeInstitutionVerifiedBy = null,
     // --- Phase 2: Direct Entry Fields ---
     string? DirectEntryQualification = null,
     string? DirectEntryGrade = null,
@@ -90,7 +93,11 @@ public sealed record AdmissionApplicationResponse(
     int? DirectEntryYear = null,
     string? DirectEntrySubject1 = null,
     string? DirectEntrySubject2 = null,
-    string? DirectEntrySubject3 = null
+    string? DirectEntrySubject3 = null,
+    // --- Phase 4: Document IDs ---
+    Guid? HomeInstitutionApprovalDocumentId = null,
+    Guid? DeansCertificateDocumentId = null,
+    Guid? HomeInstitutionTranscriptDocumentId = null
 );
 
 
@@ -119,8 +126,8 @@ public sealed class SaveApplicationRequest
     public string JambRegNumber { get; set; } = string.Empty;
     public Guid AcademicSessionId { get; set; }
     public string Persona { get; set; } = string.Empty;
-    public string? FacultyId { get; set; }  // Changed to string to handle empty values
-    public string? AcademicProgramId { get; set; }  // Changed to string to handle empty values
+    public string? FacultyId { get; set; }
+    public string? AcademicProgramId { get; set; }
     public string ProgramReason { get; set; } = string.Empty;
     public string QualificationsJson { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
@@ -128,7 +135,7 @@ public sealed class SaveApplicationRequest
     public string SponsorshipJson { get; set; } = string.Empty;
     public IEnumerable<Guid>? DocumentIds { get; set; }
 
-    // New fields for transfer/international/direct entry
+    // --- Applicant Type & International/Transfer Info ---
     public string? ApplicantType { get; set; }
     public string? PreviousInstitutionName { get; set; }
     public string? PreviousInstitutionCountry { get; set; }
@@ -139,6 +146,57 @@ public sealed class SaveApplicationRequest
     public string? PassportNumber { get; set; }
     public string? EnglishProficiencyScore { get; set; }
     public string? EnglishProficiencyType { get; set; }
+
+    // --- Phase 1: Country & Region ---
+    public string? CountryOfOrigin { get; set; }
+    public string? CountryName { get; set; }
+    public string? Region { get; set; }
+
+    // --- Phase 1: Enhanced Visa & Immigration Fields ---
+    public string? VisaStatus { get; set; }
+    public string? VisaType { get; set; }
+    public DateTime? VisaExpiryDate { get; set; }
+    public string? ImmigrationStatus { get; set; }
+    public decimal? FinancialProofAmount { get; set; }
+    public string? FinancialProofCurrency { get; set; }
+    public Guid? FinancialProofDocumentId { get; set; }
+
+    // --- Phase 2: Direct Entry Fields ---
+    public string? DirectEntryQualification { get; set; }
+    public string? DirectEntryGrade { get; set; }
+    public decimal? DirectEntryPoints { get; set; }
+    public string? DirectEntryInstitution { get; set; }
+    public int? DirectEntryYear { get; set; }
+    public string? DirectEntrySubject1 { get; set; }
+    public string? DirectEntrySubject2 { get; set; }
+    public string? DirectEntrySubject3 { get; set; }
+
+    // --- Phase 3: Transfer Student Fields ---
+    public decimal? ConvertedCGPA { get; set; }
+    public string? CGPAScaleName { get; set; }
+    public decimal? CGPAScaleMax { get; set; }
+    public decimal? CGPAScaleMin { get; set; }
+    public decimal? TransferableCredits { get; set; }
+    public int? TransferLevelSuggestion { get; set; }
+    public int? IntendedSemester { get; set; }
+
+    // --- Phase 4: Exchange Program Fields ---
+    public string? ExchangeProgramType { get; set; }
+    public string? ExchangeStatus { get; set; }
+    public string? HomeInstitutionName { get; set; }
+    public string? HomeInstitutionCountry { get; set; }
+    public Guid? ExchangePartnerAgreementId { get; set; }
+    public int? ExchangeDurationMonths { get; set; }
+    public DateTime? ExchangeStartDate { get; set; }
+    public DateTime? ExchangeEndDate { get; set; }
+    public string? HomeInstitutionStanding { get; set; }
+    public bool? HomeInstitutionVerified { get; set; }
+    public DateTime? HomeInstitutionVerifiedAt { get; set; }
+
+    // --- Phase 4: Document IDs ---
+    public Guid? HomeInstitutionApprovalDocumentId { get; set; }
+    public Guid? DeansCertificateDocumentId { get; set; }
+    public Guid? HomeInstitutionTranscriptDocumentId { get; set; }
 }
 
 public sealed record DocumentTypeResponse(

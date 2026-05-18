@@ -106,6 +106,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILectureSessionService, LectureSessionService>();
         services.AddScoped<ISessionManagementService, SessionManagementService>();
 
+        // Admission enhancement services
+        services.AddScoped<ICreditTransferService, CreditTransferService>();
+        services.AddScoped<IGradeConversionService, GradeConversionService>();
+        services.AddScoped<ICourseEquivalencyService, CourseEquivalencyService>();
+        services.AddScoped<ICredentialEvaluationService, CredentialEvaluationService>();
+
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<ITokenService, JwtTokenService>();

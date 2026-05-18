@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Data.Entities;
@@ -66,6 +67,7 @@ public sealed class AdmissionApplication
     public decimal? ConvertedCGPA { get; set; }                // CGPA converted to LMS standard
     public string? CGPAScaleName { get; set; }                 // Original scale name
     public decimal? CGPAScaleMax { get; set; }                 // Original scale max
+    public decimal? CGPAScaleMin { get; set; }                 // Original scale min
     public decimal? TransferableCredits { get; set; }          // Calculated transferable credits
     public int? TransferLevelSuggestion { get; set; }          // Suggested starting level based on credits
     public int? IntendedSemester { get; set; }                 // 1 = First, 2 = Second
@@ -87,6 +89,7 @@ public sealed class AdmissionApplication
     public string? HomeInstitutionVerifiedBy { get; set; }
 
     // Keep legacy flag for backward compatibility
+    [NotMapped]
     public bool IsExchangeProgram => ExchangeProgramType != ExchangeProgramType.None;
 
     // --- Phase 2: Direct Entry Enhanced Fields ---
