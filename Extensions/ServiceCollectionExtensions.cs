@@ -23,7 +23,12 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplicationCore(this IServiceCollection services)
     {
         services.AddFastEndpoints();
-        services.AddOpenApi();
+        services.AddOpenApiDocument(opts =>
+        {
+            opts.DocumentName = "v1";
+            opts.Title = "LMS API";
+            opts.Version = "v1";
+        });
         services.AddMemoryCache();
         services.AddHttpContextAccessor();
         return services;

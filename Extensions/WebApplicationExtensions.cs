@@ -106,13 +106,14 @@ public static class WebApplicationExtensions
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapOpenApi().AllowAnonymous();
+            app.MapOpenApi("v1").AllowAnonymous();
 
             app.MapScalarApiReference("/docs", options =>
             {
                 options.Title = "LMS API";
                 options.DarkMode = true;
                 options.Theme = ScalarTheme.DeepSpace;
+                options.AddDocument("v1");
             }).AllowAnonymous();
         }
 
