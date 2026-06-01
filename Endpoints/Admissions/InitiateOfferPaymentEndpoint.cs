@@ -13,8 +13,13 @@ public sealed class InitiateOfferPaymentEndpoint(LmsDbContext dbContext, IFeeSer
 {
     public override void Configure()
     {
-        Post("/api/admissions/offers/{Id}/payments/initiate");
+        Post("admissions/offers/{Id}/payments/initiate");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Initiate Offer Payment") 
+            .WithTags("Admissions")
+            .WithSummary("Initiate a payment gateway transaction for acceptance fee"));
     }
 
     public override async Task HandleAsync(InitiateOfferPaymentRequest req, CancellationToken ct)

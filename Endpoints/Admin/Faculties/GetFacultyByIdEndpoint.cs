@@ -14,8 +14,9 @@ public sealed class GetFacultyByIdEndpoint(IFacultyService facultyService)
 {
     public override void Configure()
     {
-        Get("/api/admin/faculties/{id:guid}");
+        Get("admin/faculties/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Get faculty by ID";

@@ -11,8 +11,9 @@ public sealed class EnrollStudentEndpoint(ICurriculumService curriculumService)
 {
     public override void Configure()
     {
-        Post("/api/admin/programs/enroll");
+        Post("admin/programs/enroll");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Enroll a student";

@@ -11,7 +11,7 @@ public sealed class CreateCurriculumEndpoint(ICurriculumService curriculumServic
 {
     public override void Configure()
     {
-        Post("/api/admin/programs/{ProgramId}/curricula");
+        Post("admin/programs/{ProgramId}/curricula");
         Group<AdminGroup>();
         Summary(s =>
         {

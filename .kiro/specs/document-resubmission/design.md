@@ -10,8 +10,8 @@ The feature integrates with the existing FastEndpoints backend (ASP.NET Core) an
 
 ```mermaid
 graph TD
-    A[Angular: DocumentResubmissionComponent] -->|GET /api/admissions/documents/:id| B[GetDocumentForResubmissionEndpoint]
-    A -->|POST /api/admissions/resubmit/:documentId| C[ResubmitDocumentEndpoint]
+    A[Angular: DocumentResubmissionComponent] -->|GET admissions/documents/:id| B[GetDocumentForResubmissionEndpoint]
+    A -->|POST admissions/resubmit/:documentId| C[ResubmitDocumentEndpoint]
     B --> D[IDocumentService.GetDocumentByIdAsync]
     C --> E[IFileStorageService.SaveFileAsync]
     C --> F[IDocumentService.UploadDocumentAsync]
@@ -20,7 +20,7 @@ graph TD
     F --> H
     G --> I[(AdmissionApplicationDocuments join table)]
     G --> H
-    J[Angular: ApplicationDocumentStatusComponent] -->|GET /api/admissions/documents/:id| B
+    J[Angular: ApplicationDocumentStatusComponent] -->|GET admissions/documents/:id| B
     J -->|navigate on Resubmit| A
     K[AdmissionApplicationComponent dashboard] -->|View Document Status button| J
     K -->|step 7 Check Status link| J
@@ -34,7 +34,7 @@ graph TD
 sequenceDiagram
     participant U as Applicant Browser
     participant A as Angular Component
-    participant API as GET /api/admissions/documents/:id
+    participant API as GET admissions/documents/:id
     participant DB as Database
 
     U->>A: Navigate to /apply/resubmit/:documentId (top-level sibling route)
@@ -51,8 +51,8 @@ sequenceDiagram
 sequenceDiagram
     participant U as Applicant Browser
     participant A as Angular Component
-    participant Upload as POST /api/admissions/upload
-    participant Resubmit as POST /api/admissions/resubmit/:documentId
+    participant Upload as POST admissions/upload
+    participant Resubmit as POST admissions/resubmit/:documentId
     participant FS as IFileStorageService
     participant DS as IDocumentService
     participant AS as IAdmissionService
@@ -83,7 +83,7 @@ sequenceDiagram
     participant U as Applicant Browser
     participant Dash as /apply dashboard
     participant Status as ApplicationDocumentStatusComponent
-    participant API as GET /api/admissions/identify
+    participant API as GET admissions/identify
     participant DB as Database
 
     U->>Dash: Lands on /apply (already identified, app is submitted)
@@ -102,7 +102,7 @@ sequenceDiagram
 
 ### Backend: GetDocumentForResubmissionEndpoint
 
-**Route**: `GET /api/admissions/documents/:id/resubmission-context`
+**Route**: `GET admissions/documents/:id/resubmission-context`
 
 **Purpose**: Returns all context needed to render the resubmission page for a given rejected document.
 
@@ -135,7 +135,7 @@ public sealed record DocumentResubmissionContextResponse(
 
 ### Backend: ResubmitDocumentEndpoint
 
-**Route**: `POST /api/admissions/resubmit/:documentId`
+**Route**: `POST admissions/resubmit/:documentId`
 
 **Purpose**: Atomically replaces the rejected document in the application with a newly uploaded one and resets status to Pending.
 
@@ -658,7 +658,7 @@ Step 7 (Review) of the application form also shows a "Check Document Status" lin
 ### Backend: Fetching Resubmission Context
 
 ```http
-GET /api/admissions/documents/3fa85f64-5717-4562-b3fc-2c963f66afa6/resubmission-context
+GET admissions/documents/3fa85f64-5717-4562-b3fc-2c963f66afa6/resubmission-context
 
 Response 200:
 {
@@ -679,7 +679,7 @@ Response 200:
 ### Backend: Resubmitting
 
 ```http
-POST /api/admissions/resubmit/3fa85f64-5717-4562-b3fc-2c963f66afa6
+POST admissions/resubmit/3fa85f64-5717-4562-b3fc-2c963f66afa6
 Content-Type: application/json
 
 {
@@ -777,7 +777,7 @@ ngOnInit() {
 
 ### Upload Failure (500/network)
 
-**Condition**: `POST /api/admissions/upload` fails
+**Condition**: `POST admissions/upload` fails
 **Response**: Error message shown below upload area
 **Recovery**: User can retry; resubmit button re-enabled
 

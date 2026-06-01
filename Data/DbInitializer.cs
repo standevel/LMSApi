@@ -200,55 +200,21 @@ await SeedCountriesAsync(ct);
 
     private async Task SeedFacultiesAsync(CancellationToken ct)
     {
+        // Only seed if no faculties exist (idempotent)
+        if (await dbContext.Faculties.AnyAsync(ct))
+        {
+            logger.LogInformation("Faculties already seeded. Skipping.");
+            return;
+        }
+
         logger.LogInformation("Seeding Faculties...");
-        
-        // Clear existing data in correct order to handle foreign key constraints
-        var existingAdmissionApps = await dbContext.AdmissionApplications.ToListAsync(ct);
-        if (existingAdmissionApps.Any())
-        {
-            logger.LogInformation("Removing {count} existing admission applications", existingAdmissionApps.Count);
-            dbContext.AdmissionApplications.RemoveRange(existingAdmissionApps);
-            await dbContext.SaveChangesAsync(ct);
-        }
 
-        var existingPrograms = await dbContext.Programs.Include(p => p.Levels).ToListAsync(ct);
-        if (existingPrograms.Any())
-        {
-            logger.LogInformation("Removing {count} existing programs and their levels", existingPrograms.Count);
-            var levels = existingPrograms.SelectMany(p => p.Levels).ToList();
-            if (levels.Any())
-            {
-                dbContext.Levels.RemoveRange(levels);
-            }
-            dbContext.Programs.RemoveRange(existingPrograms);
-            await dbContext.SaveChangesAsync(ct);
-        }
-
-        var existingDepartments = await dbContext.Departments.ToListAsync(ct);
-        if (existingDepartments.Any())
-        {
-            logger.LogInformation("Removing {count} existing departments", existingDepartments.Count);
-            dbContext.Departments.RemoveRange(existingDepartments);
-            await dbContext.SaveChangesAsync(ct);
-        }
-
-        var existingFaculties = await dbContext.Faculties.ToListAsync(ct);
-        if (existingFaculties.Any())
-        {
-            logger.LogInformation("Removing {count} existing faculties", existingFaculties.Count);
-            dbContext.Faculties.RemoveRange(existingFaculties);
-            await dbContext.SaveChangesAsync(ct);
-        }
-
-        // Create the correct faculties
         var faculties = new List<Faculty>
         {
-            new Faculty { Name = "Arts", Label = "College" },
             new Faculty { Name = "Engineering", Label = "College" },
             new Faculty { Name = "Management and Social Sciences", Label = "College" },
-            new Faculty { Name = "Science and Computing", Label = "College" },
-            new Faculty { Name = "Allied Health", Label = "College" },
-            new Faculty { Name = "Agriculture and Natural Sciences", Label = "College" }
+            new Faculty { Name = "Arts", Label = "College" },
+            new Faculty { Name = "Science and Computing", Label = "College" }
         };
         
         dbContext.Faculties.AddRange(faculties);
@@ -282,28 +248,28 @@ await SeedCountriesAsync(ct);
 
         var departments = new List<Department>
         {
-            // Arts
-            new() { Name = "Film & Media Arts", Code = "FMA", FacultyId = arts.Id },
-            new() { Name = "Fine Arts & Design", Code = "FAD", FacultyId = arts.Id },
-            new() { Name = "Theatre Arts", Code = "TA", FacultyId = arts.Id },
-
-            // Engineering
+            // Engineering College
             new() { Name = "Electrical Engineering", Code = "EE", FacultyId = engineering.Id },
             new() { Name = "Mechanical Engineering", Code = "ME", FacultyId = engineering.Id },
             new() { Name = "Computer Engineering", Code = "CEN", FacultyId = engineering.Id },
 
-            // Management and Social Sciences
-            new() { Name = "Accounting & Data Analytics", Code = "ADA", FacultyId = mgmtSocial.Id },
-            new() { Name = "Business Management", Code = "BM", FacultyId = mgmtSocial.Id },
-            new() { Name = "Economics", Code = "EC", FacultyId = mgmtSocial.Id },
-            new() { Name = "Finance & Financial Technology", Code = "FIN", FacultyId = mgmtSocial.Id },
+            // Management and Social Sciences College
+            new() { Name = "Accounting and Finance", Code = "AF", FacultyId = mgmtSocial.Id },
+            new() { Name = "Business Administration", Code = "BA", FacultyId = mgmtSocial.Id },
 
-            // Science and Computing
+            // Arts College
+            new() { Name = "Communication and Digital Media Studies", Code = "CDM", FacultyId = arts.Id },
+            new() { Name = "Film and Screen Studies", Code = "FS", FacultyId = arts.Id },
+            new() { Name = "Fine Arts and Design", Code = "FA", FacultyId = arts.Id },
+            new() { Name = "Theatre and Performing Arts", Code = "TP", FacultyId = arts.Id },
+
+            // Science and Computing College
             new() { Name = "Computer Science", Code = "CS", FacultyId = scienceComputing.Id },
             new() { Name = "Software Engineering", Code = "SE", FacultyId = scienceComputing.Id },
             new() { Name = "Cyber Security", Code = "CY", FacultyId = scienceComputing.Id },
-            new() { Name = "Information & Communications Technology", Code = "ICT", FacultyId = scienceComputing.Id },
-            new() { Name = "Mathematics & Data Science", Code = "MDS", FacultyId = scienceComputing.Id }
+            new() { Name = "Information and Communications Technology", Code = "ICT", FacultyId = scienceComputing.Id },
+            new() { Name = "Mathematics", Code = "MA", FacultyId = scienceComputing.Id },
+            new() { Name = "Data Science", Code = "DS", FacultyId = scienceComputing.Id },
         };
 
         dbContext.Departments.AddRange(departments);
@@ -335,47 +301,59 @@ await SeedCountriesAsync(ct);
             return;
         }
 
-        // Get departments
+        // Get departments by code
         var csDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "CS", ct);
         var seDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "SE", ct);
         var cyDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "CY", ct);
         var ictDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "ICT", ct);
-        var mdsDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "MDS", ct);
+        var maDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "MA", ct);
+        var dsDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "DS", ct);
         var eeDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "EE", ct);
         var meDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "ME", ct);
         var cenDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "CEN", ct);
-        var fmaDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FMA", ct);
-        var fadDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FAD", ct);
-        var taDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "TA", ct);
-        var adaDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "ADA", ct);
-        var bmDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "BM", ct);
-        var ecDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "EC", ct);
-        var finDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FIN", ct);
+        var afDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "AF", ct);
+        var baDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "BA", ct);
+        var cdmDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "CDM", ct);
+        var fsDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FS", ct);
+        var faDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FA", ct);
+        var tpDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "TP", ct);
 
         var programs = new List<AcademicProgram>
         {
-            // Science and Computing
-            new() { Name = "B.Sc. Computer Science", Code = "BCS", FacultyId = scienceComputing.Id, DepartmentId = csDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Software Engineering", Code = "BSE", FacultyId = scienceComputing.Id, DepartmentId = seDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Cyber Security", Code = "BCY", FacultyId = scienceComputing.Id, DepartmentId = cyDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Information & Communications Technology", Code = "BICT", FacultyId = scienceComputing.Id, DepartmentId = ictDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Mathematics & Data Science", Code = "BMDS", FacultyId = scienceComputing.Id, DepartmentId = mdsDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            // Engineering College
+            new() { Name = "B.Eng. Electrical Engineering", Code = "BEE", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "B.Eng. Mechatronics Engineering", Code = "BMECH", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "Specialization Track Energy & Environment", Code = "BSEE", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "B.Eng. Mechanical Engineering", Code = "BME", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "B.Eng. Mechatronics Engineering", Code = "BMEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "Specialization Track Energy & Environment", Code = "BSEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "B.Eng. Computer Engineering", Code = "BCEN", DepartmentId = cenDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            new() { Name = "Specialization Track Robotics Engineering", Code = "BCRO", DepartmentId = cenDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
 
-            // Engineering
-            new() { Name = "B.Eng. Electrical Engineering", Code = "BEE", FacultyId = engineering.Id, DepartmentId = eeDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
-            new() { Name = "B.Eng. Mechanical Engineering", Code = "BME", FacultyId = engineering.Id, DepartmentId = meDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
-            new() { Name = "B.Eng. Computer Engineering", Code = "BCEN", FacultyId = engineering.Id, DepartmentId = cenDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
+            // Management and Social Sciences College
+            new() { Name = "B.Sc. Accounting and Data Analytics", Code = "BADA", DepartmentId = afDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Finance", Code = "BFIN", DepartmentId = afDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Finance (Financial Technology)", Code = "BFT", DepartmentId = afDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Business Administration", Code = "BBAM", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Innovation and Social Entrepreneurship", Code = "BINE", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Economics", Code = "BECO", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
 
-            // Arts
-            new() { Name = "B.A. Film & Media Studies", Code = "BFMS", FacultyId = arts.Id, DepartmentId = fmaDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.A. Fine Arts & Design", Code = "BFAD", FacultyId = arts.Id, DepartmentId = fadDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.A. Theatre Arts", Code = "BTA", FacultyId = arts.Id, DepartmentId = taDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            // Arts College
+            new() { Name = "BA Animation and Visual Communications", Code = "BAVC", DepartmentId = cdmDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "BSc Communication and Digital Media", Code = "BCDM", DepartmentId = cdmDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "BSc Film and Media Studies", Code = "BFMS", DepartmentId = fsDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "BA Fine Arts", Code = "BFA", DepartmentId = faDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "BA Theatre Arts", Code = "BTA", DepartmentId = tpDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
 
-            // Management and Social Sciences
-            new() { Name = "B.Sc. Accounting & Data Analytics", Code = "BADA", FacultyId = mgmtSocial.Id, DepartmentId = adaDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Business Management", Code = "BBM", FacultyId = mgmtSocial.Id, DepartmentId = bmDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Economics", Code = "BEC", FacultyId = mgmtSocial.Id, DepartmentId = ecDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-            new() { Name = "B.Sc. Finance & Financial Technology", Code = "BFIN", FacultyId = mgmtSocial.Id, DepartmentId = finDept?.Id, Type = ProgramType.Undergraduate, DurationYears = 4 }
+            // Science and Computing College
+            new() { Name = "B.Sc. Computer Science", Code = "BCS", DepartmentId = csDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Software Engineering", Code = "BSE", DepartmentId = seDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Cyber Security", Code = "BCY", DepartmentId = cyDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Information and Communications Technology", Code = "BICT", DepartmentId = ictDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Mathematics", Code = "BMA", DepartmentId = maDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Data Science", Code = "BDTS", DepartmentId = dsDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Robotics (Artificial Intelligence)", Code = "BRAI", DepartmentId = aiDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
+            new() { Name = "B.Sc. Forensic Science", Code = "BFSC", DepartmentId = dsaiDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
         };
 
         dbContext.Programs.AddRange(programs);
@@ -392,7 +370,7 @@ await SeedCountriesAsync(ct);
                     Order = i
                 });
             }
-        }
+        }   
         await dbContext.SaveChangesAsync(ct);
     }
 
@@ -521,7 +499,7 @@ await SeedCountriesAsync(ct);
                 InternationalOnly = true,
                 IsActive = true
             });
-        }
+        } 
 
         if (!existingCodes.Contains("TRANSCRIPT"))
         {

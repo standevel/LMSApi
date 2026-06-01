@@ -34,7 +34,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. WHEN the Portal loads, THE Portal SHALL fetch the authenticated student's `objectId` from the auth service and the active `AcademicSession` from the session service, then call `GET /api/fees/bill/{studentId}/{sessionId}` to retrieve the Bill.
+1. WHEN the Portal loads, THE Portal SHALL fetch the authenticated student's `objectId` from the auth service and the active `AcademicSession` from the session service, then call `GET fees/bill/{studentId}/{sessionId}` to retrieve the Bill.
 2. WHEN the Bill is successfully retrieved, THE Portal SHALL display the session name, total obligation (`TotalAmount`), total remitted (`AmountPaid`), and outstanding balance (`Balance`) on the billing card.
 3. WHEN the Bill status is `Paid`, THE Portal SHALL render the billing card with a visually distinct "paid" state (e.g., green background) and hide the payment action button.
 4. WHEN the Bill status is `Waived`, THE Portal SHALL display a "Waived" badge and hide the payment action button.
@@ -51,7 +51,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. WHEN the Portal loads, THE Portal SHALL call `GET /api/fees/payments/student/{studentId}` and display all returned `FeePayment` records in a transaction table.
+1. WHEN the Portal loads, THE Portal SHALL call `GET fees/payments/student/{studentId}` and display all returned `FeePayment` records in a transaction table.
 2. THE Portal SHALL display for each payment: the date/time (`paidAt`), payment method (`paymentMethod`), amount, and verification status (`status`).
 3. WHEN a payment has `status === 'Rejected'`, THE Portal SHALL display the `rejectionReason` beneath the status badge.
 4. WHEN the payment history is empty, THE Portal SHALL display an empty-state message: "No transactions recorded yet."
@@ -65,7 +65,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. WHEN the student clicks the Paystack payment button, THE Portal SHALL call `POST /api/fees/payments/initiate` with `gateway: "Paystack"`, the `studentFeeRecordId`, the full outstanding `balance` as the amount, the student's email, name, and a `callbackUrl` pointing to the current page URL (path only, no query params).
+1. WHEN the student clicks the Paystack payment button, THE Portal SHALL call `POST fees/payments/initiate` with `gateway: "Paystack"`, the `studentFeeRecordId`, the full outstanding `balance` as the amount, the student's email, name, and a `callbackUrl` pointing to the current page URL (path only, no query params).
 2. WHEN the initiation response contains a `checkoutUrl`, THE Portal SHALL redirect the browser to that URL.
 3. WHILE a gateway initiation request is in-flight, THE Portal SHALL disable both gateway buttons and the manual upload submit button to prevent duplicate submissions.
 4. IF the gateway initiation request fails, THEN THE Portal SHALL display an error Toast: "Failed to initiate Paystack payment. Please try again." and re-enable the payment buttons.
@@ -81,7 +81,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. WHEN the student clicks the Hydrogen Pay button, THE Portal SHALL call `POST /api/fees/payments/initiate` with `gateway: "Hydrogen"`, the `studentFeeRecordId`, the full outstanding `balance`, the student's email, name, and a `callbackUrl` pointing to the current page URL (path only, no query params).
+1. WHEN the student clicks the Hydrogen Pay button, THE Portal SHALL call `POST fees/payments/initiate` with `gateway: "Hydrogen"`, the `studentFeeRecordId`, the full outstanding `balance`, the student's email, name, and a `callbackUrl` pointing to the current page URL (path only, no query params).
 2. WHEN the initiation response contains a `checkoutUrl`, THE Portal SHALL redirect the browser to that URL.
 3. WHILE a gateway initiation request is in-flight, THE Portal SHALL disable both gateway buttons and the manual upload submit button.
 4. IF the gateway initiation request fails, THEN THE Portal SHALL display an error Toast: "Failed to initiate Hydrogen payment. Please try again." and re-enable the payment buttons.
@@ -100,7 +100,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 2. WHEN the student selects a file, THE Portal SHALL display the selected filename as confirmation.
 3. THE Portal SHALL provide a text input for the bank reference number.
 4. WHEN the student clicks "Submit", THE Portal SHALL validate that both a file and a non-empty reference number are provided before submitting.
-5. WHEN both inputs are valid, THE Portal SHALL call `POST /api/fees/payments/manual` as a `multipart/form-data` request containing `studentFeeRecordId`, `amount` (the current balance), `referenceNumber`, and the receipt file.
+5. WHEN both inputs are valid, THE Portal SHALL call `POST fees/payments/manual` as a `multipart/form-data` request containing `studentFeeRecordId`, `amount` (the current balance), `referenceNumber`, and the receipt file.
 6. WHEN the manual payment is submitted successfully, THE Portal SHALL display a success Toast: "Receipt submitted. The Finance team will verify your payment within 48 hours." and reload the payment history.
 7. IF the manual payment submission fails, THEN THE Portal SHALL display an error Toast: "Failed to submit receipt. Please check your connection and try again."
 8. WHILE the manual payment submission is in-flight, THE Portal SHALL disable the submit button to prevent duplicate submissions.
@@ -129,10 +129,10 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. THE `GET /api/fees/bill/{studentId}/{sessionId}` endpoint SHALL permit access to users with the `Student` role (already configured).
+1. THE `GET fees/bill/{studentId}/{sessionId}` endpoint SHALL permit access to users with the `Student` role (already configured).
 2. WHEN a student requests a bill for a `studentId` that does not match their own authenticated identity, THE endpoint SHALL return HTTP 403 Forbidden.
 3. WHEN a student requests a bill that does not exist, THE endpoint SHALL return HTTP 404 with a descriptive error message.
-4. THE `GET /api/fees/payments/student/{studentId}` endpoint SHALL permit access to users with the `Student` role (already configured).
+4. THE `GET fees/payments/student/{studentId}` endpoint SHALL permit access to users with the `Student` role (already configured).
 5. WHEN a student requests payment history for a `studentId` that does not match their own authenticated identity, THE endpoint SHALL return HTTP 403 Forbidden.
 
 ---
@@ -143,7 +143,7 @@ The Student Fee Payment Portal is a feature within the Wigwe University LMS that
 
 #### Acceptance Criteria
 
-1. THE System SHALL expose `GET /api/fees/my-bill?sessionId={sessionId}` accessible to users with the `Student` role.
+1. THE System SHALL expose `GET fees/my-bill?sessionId={sessionId}` accessible to users with the `Student` role.
 2. WHEN a student calls this endpoint, THE endpoint SHALL resolve the student's identity from the authenticated JWT claims and return the corresponding `StudentBillResponse`.
 3. WHEN no bill exists for the student in the given session, THE endpoint SHALL return HTTP 404.
 4. WHEN no `sessionId` query parameter is provided, THE endpoint SHALL use the currently active academic session.

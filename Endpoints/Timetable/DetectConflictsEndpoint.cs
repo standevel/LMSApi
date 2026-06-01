@@ -12,12 +12,16 @@ public class DetectConflictsRequest
 }
 
 public class DetectConflictsEndpoint(ITimetableService timetableService)
-    : ApiEndpoint<DetectConflictsRequest, ConflictDetectionResult>
+    : ApiEndpoint<DetectConflictsRequest, LMS.Api.Services.ConflictDetectionResult>
 {
     public override void Configure()
     {
-        Post("/api/timetable/detect-conflicts");
+        Post("timetable/detect-conflicts");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("DetectConflicts")
+            .WithTags("Timetable")
+            .WithSummary("Endpoint for DetectConflicts"));
     }
 
     public override async Task HandleAsync(DetectConflictsRequest req, CancellationToken ct)

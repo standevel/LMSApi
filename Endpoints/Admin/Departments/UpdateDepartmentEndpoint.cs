@@ -22,8 +22,9 @@ public sealed class UpdateDepartmentEndpoint(IDepartmentService departmentServic
 {
     public override void Configure()
     {
-        Put("/api/admin/departments/{id:guid}");
+        Put("admin/departments/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Update a department";

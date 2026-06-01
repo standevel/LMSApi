@@ -10,8 +10,9 @@ public sealed class CloneCurriculumEndpoint(ICurriculumService curriculumService
 {
     public override void Configure()
     {
-        Post("/api/admin/curricula/{id}/clone");
+        Post("admin/curricula/{id}/clone");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Clone an existing curriculum";

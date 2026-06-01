@@ -9,8 +9,9 @@ public sealed class AddFeeLineItemEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/templates/{id}/items");
+        Post("fees/templates/{id}/items");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(AddFeeLineItemRequest req, CancellationToken ct)
@@ -33,8 +34,9 @@ public sealed class UpdateFeeLineItemEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Put("/api/fees/items/{id}");
+        Put("fees/items/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(UpdateFeeLineItemRequest req, CancellationToken ct)
@@ -57,8 +59,9 @@ public sealed class DeleteFeeLineItemEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Delete("/api/fees/items/{id}");
+        Delete("fees/items/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

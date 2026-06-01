@@ -7,8 +7,12 @@ public sealed class HealthEndpoint : EndpointWithoutRequest<ApiResponse<HealthRe
 {
     public override void Configure()
     {
-        Get("/api/health");
+        Get("health");
         AllowAnonymous();
+        Description(d => d
+            .WithName("HealthCheck")
+            .WithTags("Health")
+            .WithSummary("Check the health status of the API"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

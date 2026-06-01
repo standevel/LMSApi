@@ -12,6 +12,12 @@ public static class WebApplicationExtensions
 {
     public static async Task<WebApplication> EnsureDatabaseInitializedAsync(this WebApplication app)
     {
+        var applyMigrations = app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup");
+        if (!applyMigrations)
+        {
+            return app;
+        }
+
         using var scope = app.Services.CreateScope();
         var dbInitializer = scope.ServiceProvider.GetRequiredService<IDbInitializer>();
         await dbInitializer.InitializeAsync(CancellationToken.None);
@@ -102,20 +108,16 @@ public static class WebApplicationExtensions
         app.UseFastEndpoints(c =>
         {
             c.Serializer.Options.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+            c.Endpoints.RoutePrefix = "api";
         });
 
-        if (app.Environment.IsDevelopment())
+        app.MapOpenApi();
+        app.MapScalarApiReference("/docs", options =>
         {
-            app.MapOpenApi("v1").AllowAnonymous();
-
-            app.MapScalarApiReference("/docs", options =>
-            {
-                options.Title = "LMS API";
-                options.DarkMode = true;
-                options.Theme = ScalarTheme.DeepSpace;
-                options.AddDocument("v1");
-            }).AllowAnonymous();
-        }
+            options.Title = "LMS API";
+            options.DarkMode = true;
+            options.Theme = ScalarTheme.DeepSpace;
+        }).AllowAnonymous();
 
         return app;
     }

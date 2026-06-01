@@ -1,6 +1,10 @@
 using System.Net.Http.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using LMS.Api.Data.Entities;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
 
 namespace LMS.Api.Services;
 
@@ -20,14 +24,21 @@ public sealed class BrevoEmailService(
             throw new InvalidOperationException("Brevo API Key is not configured. Cannot send emails.");
         }
 
-        var payload = new
+        // Build payload dynamically so we never send a null attachment field (Brevo rejects it)
+        var payloadDict = new Dictionary<string, object>
         {
-            sender = new { name = _senderName, email = _senderEmail },
-            to = new[] { new { email = toEmail } },
-            subject = subject,
-            htmlContent = htmlContent,
-            attachment = attachment
+            ["sender"] = new { name = _senderName, email = _senderEmail },
+            ["to"] = new[] { new { email = toEmail } },
+            ["subject"] = subject,
+            ["htmlContent"] = htmlContent
         };
+
+        if (attachment != null)
+        {
+            payloadDict["attachment"] = attachment;
+        }
+
+        var payload = (object)payloadDict;
 
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email");
         request.Headers.Add("api-key", _apiKey);
@@ -182,5 +193,59 @@ public sealed class BrevoEmailService(
                 <p style='font-size: 12px; color: #666;'>Wigwe University IT Support<br>Email: support@wigweuniversity.edu.ng</p>
             </div>";
         return SendEmailAsync(toEmail, subject, content);
+    }
+
+    public Task SendTestEmailAsync(string toEmail, string subject, string message)
+    {
+        var encodedMessage = System.Net.WebUtility.HtmlEncode(message);
+        var content = $@"
+            <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
+                <h2 style='color: #006B62;'>Test Email</h2>
+                <p>{encodedMessage}</p>
+                <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
+                <p style='font-size: 12px; color: #666;'>This is a test email from Wigwe University LMS API.</p>
+            </div>";
+        return SendEmailAsync(toEmail, subject, content);
+    }
+
+    public async Task SendApplicationReminderEmailAsync(string toEmail, string studentName, string applicationNumber, AdmissionStatus status)
+    {
+        var subject = "Action Required: Complete Your Admission Process - Wigwe University";
+        var content = $@"
+            <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
+                <h2 style='color: #D4AF37;'>Important: Action Required</h2>
+                <p>Dear {studentName},</p>
+                <p>This is a reminder regarding your admission application <strong>{applicationNumber}</strong> to Wigwe University.</p>
+                <p>Please ensure you have completed the following steps to receive your offer letter:</p>
+                <ol style='line-height: 1.8;'>
+                    <li><strong>JAMB CAPS Portal:</strong> Ensure Wigwe University is selected as your FIRST CHOICE in the JAMB CAPS portal.</li>
+                    <li><strong>O'Level Results:</strong> Upload your O'Level results to JAMB to ensure you receive your offer letter.</li>
+                </ol>
+                <p style='background: #fff3cd; padding: 15px; border-left: 4px solid #D4AF37; margin: 20px 0;'>
+                    <strong>Important:</strong> If these steps are not completed, JAMB may not be able to process your admission offer.
+                </p>
+                <p>If you have already completed these steps, please disregard this message.</p>
+                <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
+                <p style='font-size: 12px; color: #666;'>Wigwe University Admissions Office<br>
+                Email: admissions@wigweuniversity.edu.ng</p>
+            </div>";
+        await SendEmailAsync(toEmail, subject, content);
+    }
+
+    public async Task SendBulkApplicationRemindersAsync(IEnumerable<(string Email, string StudentName, string ApplicationNumber, AdmissionStatus Status)> recipients)
+    {
+        foreach (var recipient in recipients)
+        {
+            try
+            {
+                await SendApplicationReminderEmailAsync(recipient.Email, recipient.StudentName, recipient.ApplicationNumber, recipient.Status);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[EMAIL-BULK-ERROR] Failed to send reminder email to {Email} for application {ApplicationNumber}", 
+                    recipient.Email, recipient.ApplicationNumber);
+                throw;
+            }
+        }
     }
 }

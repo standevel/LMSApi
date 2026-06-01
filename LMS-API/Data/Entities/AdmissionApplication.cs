@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Data.Entities;
@@ -16,7 +17,6 @@ public enum AdmissionStatus
     Rejected,
     Waitlisted
 }
-
 public sealed class AdmissionApplication
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -27,7 +27,13 @@ public sealed class AdmissionApplication
     public string LastName { get; set; } = string.Empty;
     public string? MiddleName { get; set; }
     public string StudentEmail { get; set; } = string.Empty;
-    public string JambRegNumber { get; set; } = string.Empty;
+    private string _jambRegNumber = string.Empty;
+    public string JambRegNumber
+    {
+        get => _jambRegNumber;
+        set => _jambRegNumber = value?.ToUpperInvariant() ?? string.Empty;
+    }
+    public DateTime? DateOfBirth { get; set; }
 
     // Applicant Type & International/Transfer Info
     public ApplicantType ApplicantType { get; set; } = ApplicantType.UTME;
@@ -81,7 +87,7 @@ public sealed class AdmissionApplication
     public int? ExchangeDurationMonths { get; set; }
     public DateTime? ExchangeStartDate { get; set; }
     public DateTime? ExchangeEndDate { get; set; }
-    public AcademicStanding? HomeInstitutionStanding { get; set; }
+    public LMS.Api.Data.Enums.AcademicStanding? HomeInstitutionStanding { get; set; }
 
     // Exchange verification
     public bool HomeInstitutionVerified { get; set; } = false;
@@ -112,6 +118,7 @@ public sealed class AdmissionApplication
 
     // Academic Choice
     public Guid AcademicSessionId { get; set; }
+    [JsonIgnore]
     public AcademicSession AcademicSession { get; set; } = null!;
 
     public string Persona { get; set; } = string.Empty;
@@ -128,6 +135,9 @@ public sealed class AdmissionApplication
 
     // Contact & Sponsorship
     public string Phone { get; set; } = string.Empty;
+    public string EmergencyContactName { get; set; } = string.Empty;
+    public string EmergencyContactPhone { get; set; } = string.Empty;
+    public string EmergencyContactEmail { get; set; } = string.Empty;
     public string EmergencyContactJson { get; set; } = "{}";
     public string SponsorshipJson { get; set; } = "{}";
 

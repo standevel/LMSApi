@@ -16,8 +16,12 @@ public sealed class AddExternalLinkEndpoint : ApiEndpoint<AddExternalLinkRequest
 
     public override void Configure()
     {
-        Post("/api/lecture-sessions/{id}/external-links");
+        Post("lecture-sessions/{id}/external-links");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Description(d => d
+            .WithName("AddExternalLink")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Add an external link to a lecture session"));
     }
 
     public override async Task HandleAsync(AddExternalLinkRequest req, CancellationToken ct)

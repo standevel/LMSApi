@@ -10,8 +10,12 @@ public sealed class IdentifyEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Post("/api/admissions/identify");
+        Post("admissions/identify");
         AllowAnonymous();
+        Description(d => d
+            .WithName("Identify Applicant") 
+            .WithTags("Admissions")
+            .WithSummary("Identify a potential applicant by email and JAMB registration number"));
     }
 
     public override async Task HandleAsync(IdentifyRequest req, CancellationToken ct)

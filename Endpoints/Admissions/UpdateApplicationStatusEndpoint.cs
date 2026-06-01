@@ -18,8 +18,13 @@ public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionS
 {
     public override void Configure()
     {
-        Patch("/api/admissions/status/{Id}");
+        Patch("admissions/status/{Id}");
         Policies(LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Update Application Status") 
+            .WithTags("Admissions")
+            .WithSummary("Update the status of an admission application (e.g., under_review, approved, rejected)"));
     }
 
     public override async Task HandleAsync(UpdateStatusRequest req, CancellationToken ct)

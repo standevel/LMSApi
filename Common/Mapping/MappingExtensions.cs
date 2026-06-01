@@ -12,7 +12,7 @@ public static class MappingExtensions
         p.Code,
         p.Description,
         p.DegreeAwarded,
-        p.Faculty?.ToDto() ?? new FacultyDto(p.FacultyId, "N/A", "N/A", DateOnly.MinValue, DateOnly.MinValue),
+        p.Department?.ToDto() ?? new DepartmentDto(p.DepartmentId, "N/A", "N/A", new FacultyDto(Guid.Empty, "N/A", "N/A", DateOnly.MinValue, DateOnly.MinValue), DateOnly.MinValue, DateOnly.MinValue),
         p.Type,
         p.DurationYears,
         p.IsActive,
@@ -106,4 +106,71 @@ public static class MappingExtensions
         x.AdmissionSession?.Name ?? string.Empty,
         x.Status,
         x.IsActive);
+
+    // New ToDto methods for Communication entities
+    public static AnnouncementDto ToDto(this Announcement a) => new(
+        a.Id,
+        a.Title,
+        a.Content,
+        a.AuthorId,
+        a.Author?.DisplayName ?? a.Author?.Email ?? "N/A",
+        a.IsGlobal,
+        a.CreatedAt,
+        a.UpdatedAt,
+        a.IsActive,
+        a.ExpiresAt
+    );
+
+    public static DiscussionThreadDto ToDto(this DiscussionThread t) => new(
+        t.Id,
+        t.Title,
+        t.AuthorId,
+        t.Author?.DisplayName ?? t.Author?.Email ?? "N/A",
+        t.CourseOfferingId,
+        t.CourseOffering?.Course?.Title ?? "N/A",
+        t.IsPinned,
+        t.IsLocked,
+        t.CreatedAt,
+        t.UpdatedAt,
+        t.IsActive,
+        t.Posts.Count(p => p.IsActive) // Only count active posts
+    );
+
+    public static DiscussionPostDto ToDto(this DiscussionPost p) => new(
+        p.Id,
+        p.DiscussionThreadId,
+        p.AuthorId,
+        p.Author?.DisplayName ?? p.Author?.Email ?? "N/A",
+        p.Content,
+        p.CreatedAt,
+        p.UpdatedAt,
+        p.IsActive
+    );
+
+    public static NotificationDto ToDto(this Notification n) => new(
+        n.Id,
+        n.RecipientId,
+        n.Recipient?.DisplayName ?? n.Recipient?.Email ?? "N/A",
+        n.SenderId,
+        n.Sender?.DisplayName ?? n.Sender?.Email ?? "N/A",
+        n.Title,
+        n.Message,
+        n.NotificationType,
+        n.IsRead,
+        n.CreatedAt,
+        n.ReadAt,
+        n.RelatedUrl
+    );
+
+    public static MessageDto ToDto(this Message m) => new(
+        m.Id,
+        m.SenderId,
+        m.Sender?.DisplayName ?? m.Sender?.Email ?? "N/A",
+        m.RecipientId,
+        m.Recipient?.DisplayName ?? m.Recipient?.Email ?? "N/A",
+        m.Content,
+        m.SentAt,
+        m.IsRead,
+        m.ReadAt
+    );
 }

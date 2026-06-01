@@ -8,8 +8,12 @@ public class GetAvailableTimeSlotsEndpoint(ITimetableService timetableService)
 {
     public override void Configure()
     {
-        Get("/api/timetable/available-slots/{LecturerId}/{DayOfWeek}");
+        Get("timetable/available-slots/{LecturerId}/{DayOfWeek}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetAvailableTimeSlots")
+            .WithTags("Timetable")
+            .WithSummary("Retrieve available time slots for a lecturer on a specific day"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

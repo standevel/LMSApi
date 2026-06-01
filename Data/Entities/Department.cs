@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -9,8 +10,10 @@ public sealed class Department
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public Guid FacultyId { get; set; }
+    [JsonIgnore]
     public Faculty Faculty { get; set; } = null!;
     public DateOnly CreatedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
     public DateOnly UpdatedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
+    [JsonIgnore]
     public ICollection<AcademicProgram> Programs { get; set; } = [];
 }

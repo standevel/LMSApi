@@ -18,8 +18,13 @@ public sealed class AutoAdmitEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Post("/api/admissions/auto-admit");
+        Post("admissions/auto-admit");
         Policies(LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Auto Admit") 
+            .WithTags("Admissions")
+            .WithSummary("Automatically evaluate and admit eligible applicants based on predefined criteria"));
     }
 
     public override async Task HandleAsync(AutoAdmitRequest req, CancellationToken ct)

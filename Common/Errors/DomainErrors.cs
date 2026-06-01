@@ -76,4 +76,59 @@ public static class DomainErrors
             "Department.DuplicateCode",
             "A department with this code already exists");
     }
+
+    public static class DiscussionThread
+    {
+        public static Error NotFound => Error.NotFound(
+            "DiscussionThread.NotFound",
+            "Discussion thread not found");
+    }
+
+    public static class DiscussionPost
+    {
+        public static Error NotFound => Error.NotFound(
+            "DiscussionPost.NotFound",
+            "Discussion post not found");
+    }
+
+    public static class Notification
+    {
+        public static Error NotFound => Error.NotFound(
+            "Notification.NotFound",
+            "Notification not found");
+    }
+
+    public static class Message
+    {
+        public static Error NotFound => Error.NotFound(
+            "Message.NotFound",
+            "Message not found");
+    }
+
+    public static class Reporting
+    {
+        public static Error StudentNotFound => Error.NotFound(
+            "Reporting.StudentNotFound",
+            "Student record not found");
+
+        public static Error GpaNotAvailable => Error.NotFound(
+            "Reporting.GpaNotAvailable",
+            "GPA data is not available for the specified student or session");
+
+        public static Error TranscriptNotFound => Error.NotFound(
+            "Reporting.TranscriptNotFound",
+            "Transcript request not found");
+
+        public static Error DegreeAuditNotFound => Error.NotFound(
+            "Reporting.DegreeAuditNotFound",
+            "Degree audit not found");
+
+        public static Error DegreeRequirementNotFound => Error.NotFound(
+            "Reporting.DegreeRequirementNotFound",
+            "Degree requirement not found");
+
+        public static Error ReportCacheExpired => Error.NotFound(
+            "Reporting.ReportCacheExpired",
+            "Report cache has expired");
+    }
 }

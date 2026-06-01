@@ -18,8 +18,9 @@ public sealed class LoginEndpoint(ILocalAuthService localAuthService)
 {
     public override void Configure()
     {
-        Post("/api/auth/login");
+        Post("auth/login");
         AllowAnonymous();
+        Tags("Authentication");
     }
 
     public override async Task HandleAsync(LoginRequest req, CancellationToken ct)

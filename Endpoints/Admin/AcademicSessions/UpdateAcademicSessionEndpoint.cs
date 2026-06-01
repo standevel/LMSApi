@@ -11,8 +11,9 @@ public sealed class UpdateAcademicSessionEndpoint(IAcademicSessionService sessio
 {
     public override void Configure()
     {
-        Put("/api/admin/sessions/{id}");
+        Put("admin/sessions/{id}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Update an academic session";

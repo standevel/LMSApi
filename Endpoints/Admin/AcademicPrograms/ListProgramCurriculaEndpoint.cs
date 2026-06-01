@@ -11,7 +11,7 @@ public sealed class ListProgramCurriculaEndpoint(ICurriculumService curriculumSe
 {
     public override void Configure()
     {
-        Get("/api/admin/programs/{ProgramId}/curricula");
+        Get("admin/programs/{ProgramId}/curricula");
         Group<AdminGroup>();
         Summary(s =>
         {

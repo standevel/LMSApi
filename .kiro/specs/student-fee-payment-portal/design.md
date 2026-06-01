@@ -15,19 +15,19 @@ The frontend component fetches the student's bill and payment history on load, h
 ```mermaid
 graph TD
     subgraph Frontend [Angular 18 — LMS-UI]
-        A[StudentFeePortal.component.ts<br/>/dashboard/student/fees] -->|GET /api/fees/my-bill| B
-        A -->|GET /api/fees/payments/student/:id| C
-        A -->|POST /api/fees/payments/initiate| D
-        A -->|POST /api/fees/payments/manual| E
+        A[StudentFeePortal.component.ts<br/>/dashboard/student/fees] -->|GET fees/my-bill| B
+        A -->|GET fees/payments/student/:id| C
+        A -->|POST fees/payments/initiate| D
+        A -->|POST fees/payments/manual| E
         A -->|reads| F[AuthStore<br/>user.id / user.email]
         A -->|reads| G[AcademicSessionService<br/>active session]
     end
 
     subgraph Backend [ASP.NET Core — LMS-API]
-        B[GetMyBillEndpoint<br/>GET /api/fees/my-bill]
-        C[GetPaymentHistoryEndpoint<br/>GET /api/fees/payments/student/:id<br/>+ ownership check]
-        D[InitiateGatewayPaymentEndpoint<br/>POST /api/fees/payments/initiate]
-        E[RecordManualPaymentEndpoint<br/>POST /api/fees/payments/manual]
+        B[GetMyBillEndpoint<br/>GET fees/my-bill]
+        C[GetPaymentHistoryEndpoint<br/>GET fees/payments/student/:id<br/>+ ownership check]
+        D[InitiateGatewayPaymentEndpoint<br/>POST fees/payments/initiate]
+        E[RecordManualPaymentEndpoint<br/>POST fees/payments/manual]
         B --> H[IFeeService]
         C --> H
         D --> H
@@ -45,7 +45,7 @@ graph TD
 
 **Data flow for gateway payment:**
 
-1. Component calls `POST /api/fees/payments/initiate` → receives `checkoutUrl`
+1. Component calls `POST fees/payments/initiate` → receives `checkoutUrl`
 2. Browser redirects to gateway checkout page
 3. Gateway redirects back to `/dashboard/student/fees?reference=...` (or `tx_ref=...`)
 4. Component `ngOnInit` detects callback params, shows toast, cleans URL, reloads data after 3 s
@@ -57,7 +57,7 @@ graph TD
 
 ### Backend — New Endpoint
 
-**`GetMyBillEndpoint`** — `GET /api/fees/my-bill?sessionId={sessionId}`
+**`GetMyBillEndpoint`** — `GET fees/my-bill?sessionId={sessionId}`
 
 - Inherits `ApiEndpointWithoutRequest<StudentBillResponse>`
 - Requires `Student` role
@@ -69,11 +69,11 @@ graph TD
 
 ### Backend — Ownership Guards on Existing Endpoints
 
-**`GetStudentBillEndpoint`** (`GET /api/fees/bill/{studentId}/{sessionId}`)
+**`GetStudentBillEndpoint`** (`GET fees/bill/{studentId}/{sessionId}`)
 
 Add an ownership check: if the caller has only the `Student` role (not Admin/Finance/SuperAdmin/Registry), verify that the route `studentId` matches `context.Items["CurrentUserId"]`. Return 403 if not.
 
-**`GetPaymentHistoryEndpoint`** (`GET /api/fees/payments/student/{studentId}`)
+**`GetPaymentHistoryEndpoint`** (`GET fees/payments/student/{studentId}`)
 
 Same ownership check pattern.
 
@@ -227,7 +227,7 @@ _For any_ component state where a payment request is in-flight (`paying === true
 
 ### Property 7: Manual payment form requires both file and reference
 
-_For any_ submission attempt where either the receipt file is absent or the reference number is empty (or whitespace-only), the `POST /api/fees/payments/manual` call should not be made and the form should remain in its current state.
+_For any_ submission attempt where either the receipt file is absent or the reference number is empty (or whitespace-only), the `POST fees/payments/manual` call should not be made and the form should remain in its current state.
 
 **Validates: Requirements 5.4**
 
@@ -251,7 +251,7 @@ _For any_ URL query string, if it contains `reference` or `trxref`, the callback
 
 ### Property 10: Student ownership — cross-student access is always forbidden
 
-_For any_ authenticated student making a request to `GET /api/fees/bill/{studentId}/{sessionId}` or `GET /api/fees/payments/student/{studentId}` where the route `studentId` does not match the caller's own identity, the response status should be 403 Forbidden.
+_For any_ authenticated student making a request to `GET fees/bill/{studentId}/{sessionId}` or `GET fees/payments/student/{studentId}` where the route `studentId` does not match the caller's own identity, the response status should be 403 Forbidden.
 
 **Validates: Requirements 7.2, 7.5**
 
@@ -259,7 +259,7 @@ _For any_ authenticated student making a request to `GET /api/fees/bill/{student
 
 ### Property 11: My-bill endpoint returns the caller's own bill
 
-_For any_ authenticated student calling `GET /api/fees/my-bill`, the `studentId` field in the returned `StudentBillResponse` should equal the caller's own identity (resolved from JWT claims), never another student's ID.
+_For any_ authenticated student calling `GET fees/my-bill`, the `studentId` field in the returned `StudentBillResponse` should equal the caller's own identity (resolved from JWT claims), never another student's ID.
 
 **Validates: Requirements 8.2**
 

@@ -10,7 +10,8 @@ public sealed class ListProgramCreditMappingsEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/admission-config/program-credit-mappings");
+        Get("admin/admission-config/program-credit-mappings");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -47,7 +48,8 @@ public sealed class CreateProgramCreditMappingEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admin/admission-config/program-credit-mappings");
+        Post("admin/admission-config/program-credit-mappings");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CreateProgramCreditMappingRequest req, CancellationToken ct)
@@ -77,7 +79,8 @@ public sealed class UpdateProgramCreditMappingEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Patch("/api/admin/admission-config/program-credit-mappings/{Id}");
+        Patch("admin/admission-config/program-credit-mappings/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(UpdateProgramCreditMappingRequest req, CancellationToken ct)
@@ -108,7 +111,8 @@ public sealed class DeleteProgramCreditMappingEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Delete("/api/admin/admission-config/program-credit-mappings/{Id}");
+        Delete("admin/admission-config/program-credit-mappings/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(DeleteProgramCreditMappingRequest req, CancellationToken ct)

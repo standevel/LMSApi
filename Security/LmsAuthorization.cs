@@ -32,7 +32,8 @@ public static class LmsAuthorizationExtensions
     {
         services.AddAuthorization(options =>
         {
-            options.FallbackPolicy = options.DefaultPolicy;
+            // Do not set FallbackPolicy to allow anonymous for endpoints without explicit auth requirements
+            // Endpoints should opt-in to authentication via [AllowAnonymous(false)] or policies
 
             options.AddPolicy(
                 LmsPolicies.Management,

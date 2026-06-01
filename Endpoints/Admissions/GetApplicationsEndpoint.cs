@@ -18,8 +18,14 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Get("/api/admissions/applications");
+        Get("admissions/applications");
         Policies(LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Applications")
+            .WithTags("Admissions")
+            .WithSummary("List all admission applications with optional filtering by status and session. By default returns Draft and Submitted applications for registry view.")
+            .WithDescription("Note: When Status is not specified, applications with Draft or Submitted status are returned."));
     }
 
     public override async Task HandleAsync(GetApplicationsRequest req, CancellationToken ct)
@@ -32,7 +38,12 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
 
         var apps = await admissionService.GetApplicationsAsync(status, req.SessionId);
 
-        var response = apps.Select(app => AdmissionResponseMapper.Map(app));
+        // For registry view, filter to Draft and Submitted by default
+        var filteredApps = status.HasValue
+            ? apps
+            : apps.Where(a => a.Status == AdmissionStatus.Draft || a.Status == AdmissionStatus.Submitted);
+
+        var response = filteredApps.Select(app => AdmissionResponseMapper.Map(app));
 
         await SendSuccessAsync(response, ct);
     }

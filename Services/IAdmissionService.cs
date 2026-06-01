@@ -15,9 +15,12 @@ public interface IAdmissionService
     Task<IEnumerable<AdmissionApplication>> GetHistoryByJambAsync(string jambRegNumber);
     Task<IEnumerable<Faculty>> GetFacultiesAsync();
     Task<IEnumerable<AcademicProgram>> GetProgramsByFacultyAsync(Guid facultyId);
+    Task<IEnumerable<Department>> GetDepartmentsByFacultyAsync(Guid facultyId);
+    Task<IEnumerable<AcademicProgram>> GetProgramsByDepartmentAsync(Guid departmentId);
     Task<IEnumerable<AcademicSession>> GetAdmissionSessionsAsync();
     Task<AcademicSession?> GetActiveAdmissionSessionAsync();
     Task<IEnumerable<SponsorOrganization>> GetAdmissionSponsorsAsync();
+    Task<SponsorOrganization> CreateSponsorAsync(string name, string? email = null, string? phone = null, CancellationToken ct = default);
     Task<IEnumerable<Subject>> GetAdmissionSubjectsAsync();
     Task<IEnumerable<AcademicLevel>> GetAcademicLevelsAsync();
     Task<IEnumerable<DocumentType>> GetRequiredDocumentTypesAsync(ApplicantType applicantType, Guid? programId = null);
@@ -76,6 +79,10 @@ public interface IAdmissionService
     Task<HomeInstitutionValidationResult> ValidateHomeInstitutionRequirementsAsync(
         Guid applicationId,
         CancellationToken ct = default);
+
+    // Registry reminder methods
+    Task<ReminderSendResult> SendReminderAsync(Guid applicationId, CancellationToken ct = default);
+    Task<BulkReminderResult> SendBulkRemindersAsync(IEnumerable<Guid> applicationIds, CancellationToken ct = default);
 }
 
 public record VisaValidationResult(
@@ -182,3 +189,16 @@ public record HomeInstitutionValidationResult(
     bool DeansCertificateProvided,
     bool AcademicStandingVerified,
     bool AcademicStandingGood);
+
+public record ReminderSendResult(
+    bool Success,
+    Guid ApplicationId,
+    string? ErrorMessage,
+    string? StudentEmail,
+    string? StudentName);
+
+public record BulkReminderResult(
+    int TotalCount,
+    int SentCount,
+    int FailedCount,
+    IEnumerable<ReminderSendResult> Results);

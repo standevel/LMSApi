@@ -15,8 +15,9 @@ public sealed class GetSystemGradingConfigurationEndpoint : ApiEndpointWithoutRe
 
     public override void Configure()
     {
-        Get("/api/gradebook/system-configuration");
+        Get("gradebook/system-configuration");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

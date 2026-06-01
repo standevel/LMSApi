@@ -126,33 +126,33 @@ This implementation plan covers the creation of a lecture session management sys
 
 - [x] 8. Create API endpoints
   - [x] 8.1 Create GenerateSessionsFromTimetableEndpoint
-    - Define POST endpoint at /api/lecture-sessions/generate
+    - Define POST endpoint at lecture-sessions/generate
     - Map request to service method
     - Handle validation errors and return appropriate error responses
     - Return SessionGenerationResult
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6_
   - [x] 8.2 Create GenerateBulkSessionsForSemesterEndpoint
-    - Define POST endpoint at /api/lecture-sessions/generate-bulk
+    - Define POST endpoint at lecture-sessions/generate-bulk
     - Map request to service method
     - Handle validation errors and return appropriate error responses
     - Return BulkSessionGenerationResult
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
   - [x] 8.3 Create CreateManualSessionEndpoint
-    - Define POST endpoint at /api/lecture-sessions/manual
+    - Define POST endpoint at lecture-sessions/manual
     - Map request to service method
     - Handle validation errors and return appropriate error responses
     - Return created LectureSession
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
   - [x] 8.4 Create GetTimetableSlotsForOfferingEndpoint
-    - Define GET endpoint at /api/lecture-sessions/timetable-slots/{offeringId}
+    - Define GET endpoint at lecture-sessions/timetable-slots/{offeringId}
     - Return list of timetable slots for the offering
     - _Requirements: 1.1, 6.3_
   - [x] 8.5 Create GetAllCourseOfferingsForSessionEndpoint
-    - Define GET endpoint at /api/lecture-sessions/course-offerings/{academicSessionId}
+    - Define GET endpoint at lecture-sessions/course-offerings/{academicSessionId}
     - Return list of course offerings with timetable slot counts
     - _Requirements: 7.1_
   - [x] 8.6 Create ValidateSessionConflictsEndpoint
-    - Define POST endpoint at /api/lecture-sessions/validate-conflicts
+    - Define POST endpoint at lecture-sessions/validate-conflicts
     - Map request to DetectConflictsAsync service method
     - Return list of ConflictWarning objects
     - _Requirements: 4.1, 4.2, 4.3, 4.4_

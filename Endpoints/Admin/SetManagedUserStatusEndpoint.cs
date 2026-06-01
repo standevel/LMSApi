@@ -16,8 +16,9 @@ public sealed class SetManagedUserStatusEndpoint(IAdminAuthzService adminAuthzSe
 {
     public override void Configure()
     {
-        Patch("/api/admin/users/status");
+        Patch("admin/users/status");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(SetManagedUserStatusRequest req, CancellationToken ct)

@@ -9,7 +9,8 @@ public sealed class AcademicProgramRepository(LmsDbContext dbContext)
     public override Task<AcademicProgram?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         return DbSet
-            .Include(x => x.Faculty)
+            .Include(x => x.Department)
+                .ThenInclude(d => d.Faculty)
             .Include(x => x.Levels)
                 .ThenInclude(l => l.Semesters)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
@@ -18,7 +19,8 @@ public sealed class AcademicProgramRepository(LmsDbContext dbContext)
     public override Task<List<AcademicProgram>> GetAllAsync(CancellationToken ct = default)
     {
         return DbSet
-            .Include(x => x.Faculty)
+            .Include(x => x.Department)
+                .ThenInclude(d => d.Faculty)
             .Include(x => x.Levels)
                 .ThenInclude(l => l.Semesters)
             .ToListAsync(ct);

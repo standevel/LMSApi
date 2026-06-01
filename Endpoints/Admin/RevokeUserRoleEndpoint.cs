@@ -15,8 +15,9 @@ public sealed class RevokeUserRoleEndpoint(IAdminAuthzService adminAuthzService)
 {
     public override void Configure()
     {
-        Post("/api/admin/users/roles/revoke");
+        Post("admin/users/roles/revoke");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(RevokeUserRoleRequest req, CancellationToken ct)

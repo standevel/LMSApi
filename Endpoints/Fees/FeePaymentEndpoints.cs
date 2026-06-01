@@ -14,8 +14,9 @@ public sealed class InitiateGatewayPaymentEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/payments/initiate");
+        Post("fees/payments/initiate");
         Roles("SuperAdmin", "Admin", "Finance", "Student");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(InitiateGatewayPaymentRequest req, CancellationToken ct)
@@ -43,9 +44,10 @@ public sealed class RecordManualPaymentEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/payments/manual");
+        Post("fees/payments/manual");
         AllowFileUploads();
         Roles("SuperAdmin", "Admin", "Finance", "Student");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(RecordManualPaymentRequest req, CancellationToken ct)
@@ -78,8 +80,9 @@ public sealed class ConfirmPaymentEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Patch("/api/fees/payments/{id}/confirm");
+        Patch("fees/payments/{id}/confirm");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(ConfirmPaymentRequest req, CancellationToken ct)
@@ -107,8 +110,9 @@ public sealed class RejectPaymentEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Patch("/api/fees/payments/{id}/reject");
+        Patch("fees/payments/{id}/reject");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(RejectPaymentRequest req, CancellationToken ct)
@@ -137,8 +141,9 @@ public sealed class GetPaymentHistoryEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/payments/student/{studentId}");
+        Get("fees/payments/student/{studentId}");
         Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -168,8 +173,9 @@ public sealed class GetAllPaymentsEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/payments");
+        Get("fees/payments");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

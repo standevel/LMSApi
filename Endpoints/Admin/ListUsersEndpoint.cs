@@ -20,8 +20,9 @@ public sealed class ListUsersEndpoint(IAdminAuthzService adminAuthzService)
 {
     public override void Configure()
     {
-        Get("/api/admin/users");
+        Get("admin/users");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

@@ -9,8 +9,13 @@ public sealed class GetFacultiesEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Get("/api/admissions/faculties");
+        Get("admissions/faculties");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Faculties") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all available faculties for admission"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

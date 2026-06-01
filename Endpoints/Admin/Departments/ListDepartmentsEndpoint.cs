@@ -9,7 +9,8 @@ public sealed class ListDepartmentsEndpoint(IDepartmentService departmentService
 {
     public override void Configure()
     {
-        Get("/api/admin/departments");
+        Get("admin/departments");
+        Tags("Administration");
 
         Summary(s =>
         {

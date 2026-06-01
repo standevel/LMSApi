@@ -16,8 +16,9 @@ public sealed class UpdateSessionEndpoint : ApiEndpoint<UpdateSessionRequest, Le
 
     public override void Configure()
     {
-        Put("/api/lecture-sessions/{id}");
+        Put("lecture-sessions/{id}");
         Roles("SuperAdmin", "Admin");
+        Tags("Lecture Sessions");
     }
 
     public override async Task HandleAsync(UpdateSessionRequest req, CancellationToken ct)

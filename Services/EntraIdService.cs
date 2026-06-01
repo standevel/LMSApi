@@ -13,14 +13,14 @@ public sealed class EntraIdService : IActiveDirectoryService
     private readonly ILogger<EntraIdService> _logger;
     private readonly string _domain;
 
-    public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logger)
-    {
-        _logger = logger;
-        _domain = "wigweuniversity.edu.ng";
+public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logger)
+        {
+            _logger = logger;
+            _domain = "wigweuniversity.edu.ng";
 
-        var tenantId = configuration["AzureAd:TenantId"];
-        var clientId = configuration["AzureAd:ClientId"];
-        var clientSecret = configuration["AzureAd:ClientSecret"];
+            var tenantId = configuration["AzureAd:TenantId"];
+            var clientId = configuration["AzureAd:ClientId"];
+            var clientSecret = configuration["AzureAd:ClientSecret"];
 
         _logger.LogInformation("Initializing Entra ID Service with TenantId: {TenantId}, ClientId: {ClientId}, Domain: {Domain}",
             tenantId, clientId, _domain);
@@ -54,7 +54,8 @@ public sealed class EntraIdService : IActiveDirectoryService
         
         var firstName = application.FirstName ?? "student";
         var lastName = application.LastName ?? "wigwe";
-        var yearSuffix = "25"; // Hardcoded for 2025/2026 session as per request
+        var year = application.AcademicSession?.StartDate.Year ?? DateTime.UtcNow.Year;
+        var yearSuffix = (year % 100).ToString("D2");
         var officialEmail = $"{firstName.ToLower()}.{lastName.ToLower()}{yearSuffix}.test@{_domain}";
 
         _logger.LogInformation("[ENTRA-CREATE-PREP] Prepared user details: Email={Email}, FirstName={FirstName}, LastName={LastName}, Domain={Domain}",
@@ -96,7 +97,7 @@ public sealed class EntraIdService : IActiveDirectoryService
             GivenName = firstName,
             Surname = lastName,
             UserPrincipalName = officialEmail,
-            MailNickname = $"{firstName.ToLower()}.{lastName.ToLower()}{yearSuffix}.test",
+              MailNickname = $"{firstName.ToLower()}.{lastName.ToLower()}{yearSuffix}.test",
             AccountEnabled = true,
             PasswordProfile = new PasswordProfile
             {

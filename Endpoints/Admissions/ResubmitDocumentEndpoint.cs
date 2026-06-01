@@ -17,8 +17,13 @@ public sealed class ResubmitDocumentEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admissions/resubmit/{DocumentId}");
+        Post("admissions/resubmit/{DocumentId}");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Resubmit Document") 
+            .WithTags("Admissions")
+            .WithSummary("Resubmit a rejected document with a new file for the same document type"));
     }
 
     public override async Task HandleAsync(ResubmitDocumentRequest req, CancellationToken ct)

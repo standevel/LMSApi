@@ -15,8 +15,12 @@ public sealed class GetEnrolledStudentsEndpoint : ApiEndpointWithoutRequest<List
 
     public override void Configure()
     {
-        Get("/api/lecture-sessions/{sessionId}/enrolled-students");
+        Get("lecture-sessions/{sessionId}/enrolled-students");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Description(d => d
+            .WithName("GetEnrolledStudents")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Get enrolled students for a lecture session"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

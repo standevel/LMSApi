@@ -19,9 +19,14 @@ public sealed class UploadDocumentEndpoint(IDocumentService documentService, IFi
 {
     public override void Configure()
     {
-        Post("/api/admissions/upload");
+        Post("admissions/upload");
         AllowFileUploads();
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Upload Document") 
+            .WithTags("Admissions")
+            .WithSummary("Upload one or more admission documents (e.g., transcripts, certificates)"));
     }
 
     public override async Task HandleAsync(UploadDocumentRequest req, CancellationToken ct)

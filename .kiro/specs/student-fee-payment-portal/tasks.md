@@ -9,7 +9,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
 - [ ] 1. Add `GetMyBillEndpoint` to the backend
   - [x] 1.1 Create `GetMyBillEndpoint` in `LMS-API/Endpoints/Fees/StudentBillEndpoints.cs`
     - Inherit `ApiEndpointWithoutRequest<StudentBillResponse>`
-    - Route: `GET /api/fees/my-bill`; restrict to `Student` role only
+    - Route: `GET fees/my-bill`; restrict to `Student` role only
     - Bind optional `sessionId` query param via `Query<Guid?>("sessionId", isRequired: false)`
     - Resolve `studentId` from `HttpContext.Items["CurrentUserId"]` (set by `UserProvisioningMiddleware`)
     - If `sessionId` is null, inject `IAcademicSessionRepository` and call `GetActiveAsync(ct)`; return 400 with `"No active session found."` if none exists

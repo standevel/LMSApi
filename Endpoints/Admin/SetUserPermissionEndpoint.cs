@@ -22,8 +22,9 @@ public sealed class SetUserPermissionEndpoint(IAdminAuthzService adminAuthzServi
 {
     public override void Configure()
     {
-        Post("/api/admin/users/permissions/set");
+        Post("admin/users/permissions/set");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(SetUserPermissionRequest req, CancellationToken ct)

@@ -10,7 +10,8 @@ public sealed class ListGPAScaleConversionsEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/admission-config/gpa-scale-conversions");
+        Get("admin/admission-config/gpa-scale-conversions");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -44,7 +45,8 @@ public sealed class CreateGPAScaleConversionEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admin/admission-config/gpa-scale-conversions");
+        Post("admin/admission-config/gpa-scale-conversions");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CreateGPAScaleConversionRequest req, CancellationToken ct)
@@ -75,7 +77,8 @@ public sealed class UpdateGPAScaleConversionEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Patch("/api/admin/admission-config/gpa-scale-conversions/{Id}");
+        Patch("admin/admission-config/gpa-scale-conversions/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(UpdateGPAScaleConversionRequest req, CancellationToken ct)
@@ -106,7 +109,8 @@ public sealed class DeleteGPAScaleConversionEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Delete("/api/admin/admission-config/gpa-scale-conversions/{Id}");
+        Delete("admin/admission-config/gpa-scale-conversions/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(DeleteGPAScaleConversionRequest req, CancellationToken ct)

@@ -15,8 +15,12 @@ public class AutoResolveConflictEndpoint(ITimetableService timetableService)
 {
     public override void Configure()
     {
-        Post("/api/timetable/resolve-conflict");
+        Post("timetable/resolve-conflict");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("AutoResolveConflict")
+            .WithTags("Timetable")
+            .WithSummary("Endpoint for AutoResolveConflict"));
     }
 
     public override async Task HandleAsync(AutoResolveConflictRequest req, CancellationToken ct)

@@ -21,9 +21,13 @@ public sealed class UploadMaterialEndpoint : ApiEndpoint<UploadMaterialRequest, 
 
     public override void Configure()
     {
-        Post("/api/lecture-sessions/{id}/materials");
+        Post("lecture-sessions/{id}/materials");
         Roles("SuperAdmin", "Admin", "Lecturer");
         AllowFileUploads();
+        Description(d => d
+            .WithName("UploadMaterial")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Upload material for a lecture session"));
     }
 
     public override async Task HandleAsync(UploadMaterialRequest req, CancellationToken ct)

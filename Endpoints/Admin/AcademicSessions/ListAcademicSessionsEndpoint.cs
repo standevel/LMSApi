@@ -11,8 +11,9 @@ public sealed class ListAcademicSessionsEndpoint(IAcademicSessionService session
 {
     public override void Configure()
     {
-        Get("/api/admin/sessions");
+        Get("admin/sessions");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "List academic sessions";

@@ -9,8 +9,12 @@ public class GetLecturerTimetableEndpoint(ITimetableService timetableService)
 {
     public override void Configure()
     {
-        Get("/api/timetable/lecturer/{LecturerId}");
+        Get("timetable/lecturer/{LecturerId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetLecturerTimetable")
+            .WithTags("Timetable")
+            .WithSummary("Retrieve timetable for a specific lecturer"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

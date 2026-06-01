@@ -28,7 +28,7 @@ public sealed class HydrogenService(HttpClient httpClient, IConfiguration config
             redirectUrl = callbackUrl
         };
 
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/bepay/api/v1/merchant/initiate-payment")
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/bepayv1/merchant/initiate-payment")
         {
             Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
         };

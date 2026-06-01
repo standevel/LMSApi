@@ -13,13 +13,11 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
         if (context.User.Identity?.IsAuthenticated == true)
         {
             // Be extremely aggressive in finding ANY identifier
-            var entraObjectId = context.User.FindFirstValue("oid")
+            // 'oid' may not be present in resource access tokens (e.g., user_impersonation scope)
+            // so fall back to 'sub' which is always the Azure AD object ID
+            var oidClaim = context.User.FindFirstValue("oid")
                 ?? context.User.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier");
-            if (string.IsNullOrWhiteSpace(entraObjectId))
-            {
-                entraObjectId = null;
-            }
-
+            
             var subjectId = context.User.FindFirstValue(JwtRegisteredClaimNames.Sub)
                 ?? context.User.FindFirstValue("sub")
                 ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -27,6 +25,11 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
             {
                 subjectId = null;
             }
+            
+            // Use 'oid' if available; otherwise fall back to 'sub' (Azure AD object ID)
+            var entraObjectId = !string.IsNullOrWhiteSpace(oidClaim)
+                ? oidClaim
+                : (string.IsNullOrWhiteSpace(subjectId) ? null : subjectId);
 
             var email = context.User.FindFirstValue("preferred_username")
                 ?? context.User.FindFirstValue(ClaimTypes.Email)

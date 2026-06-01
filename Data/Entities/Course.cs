@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -11,5 +12,6 @@ public sealed class Course
     public int CreditUnits { get; set; }
     public bool IsActive { get; set; } = true;
 
+    [JsonIgnore]
     public ICollection<CourseOffering> Offerings { get; set; } = [];
 }

@@ -8,8 +8,13 @@ public sealed class GetSponsorsEndpoint(IAdmissionService admissionService) : Ap
 {
     public override void Configure()
     {
-        Get("/api/admissions/sponsors");
+        Get("admissions/sponsors");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Sponsors") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all sponsor organizations available for admission"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

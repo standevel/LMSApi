@@ -15,8 +15,9 @@ public sealed class GetSessionDetailsEndpoint : ApiEndpointWithoutRequest<Sessio
 
     public override void Configure()
     {
-        Get("/api/lecture-sessions/{id}");
+        Get("lecture-sessions/{id}");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Lecture Sessions");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

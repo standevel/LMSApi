@@ -17,8 +17,9 @@ public sealed class GetGradeApprovalsEndpoint : ApiEndpointWithoutRequest<List<G
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}/approvals");
+        Get("gradebook/courses/{offeringId:guid}/approvals");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -56,8 +57,9 @@ public sealed class SubmitForApprovalEndpoint : ApiEndpoint<SubmitForApprovalReq
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/submit");
+        Post("gradebook/courses/{offeringId:guid}/submit");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(SubmitForApprovalRequest req, CancellationToken ct)
@@ -110,8 +112,9 @@ public sealed class ApproveGradesEndpoint : ApiEndpoint<ApproveGradesRequest, Gr
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/approve");
+        Post("gradebook/courses/{offeringId:guid}/approve");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(ApproveGradesRequest req, CancellationToken ct)
@@ -164,8 +167,9 @@ public sealed class RejectGradesEndpoint : ApiEndpoint<RejectGradesRequest, Grad
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/reject");
+        Post("gradebook/courses/{offeringId:guid}/reject");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(RejectGradesRequest req, CancellationToken ct)

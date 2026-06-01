@@ -17,8 +17,9 @@ public sealed class AssignMatricNumberEndpoint(LmsDbContext dbContext, ILogger<A
 {
     public override void Configure()
     {
-        Post("/api/admin/students/{StudentId}/matric-number");
+        Post("admin/students/{StudentId}/matric-number");
         Roles("SuperAdmin", "Admin", "Registry");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(AssignMatricNumberRequest req, CancellationToken ct)

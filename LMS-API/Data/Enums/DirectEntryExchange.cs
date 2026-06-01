@@ -18,8 +18,8 @@ public enum DirectEntryQualification
 public enum ExchangeProgramType
 {
     None = 0,
-    Outgoing = 1,  // Student going to partner institution
-    Incoming = 2   // Student coming from partner institution
+    Outgoing = 1,
+    Incoming = 2
 }
 
 public enum ExchangeStatus
@@ -29,14 +29,6 @@ public enum ExchangeStatus
     Rejected = 2,
     Completed = 3,
     Expired = 4
-}
-
-public enum AcademicStanding
-{
-    Unknown = 0,
-    GoodStanding = 1,
-    Probation = 2,
-    Suspended = 3
 }
 
 /// <summary>

@@ -18,8 +18,9 @@ public sealed class AssignUserRoleEndpoint(IAdminAuthzService adminAuthzService)
 {
     public override void Configure()
     {
-        Post("/api/admin/users/roles/assign");
+        Post("admin/users/roles/assign");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(AssignUserRoleRequest req, CancellationToken ct)

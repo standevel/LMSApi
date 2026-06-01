@@ -15,8 +15,9 @@ public sealed class GetSessionsEndpoint : ApiEndpoint<SessionFilterRequest, Page
 
     public override void Configure()
     {
-        Get("/api/lecture-sessions");
+        Get("lecture-sessions");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Lecture Sessions");
     }
 
     public override async Task HandleAsync(SessionFilterRequest req, CancellationToken ct)

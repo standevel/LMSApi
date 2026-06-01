@@ -19,8 +19,9 @@ public sealed class GetMyCoursesEndpoint : ApiEndpointWithoutRequest<LecturerCou
 
     public override void Configure()
     {
-        Get("/api/courses/my-courses");
+        Get("courses/my-courses");
         AllowAnonymous();
+        Tags("Courses");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

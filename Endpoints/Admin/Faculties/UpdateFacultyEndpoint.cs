@@ -16,8 +16,9 @@ public sealed class UpdateFacultyEndpoint(IFacultyService facultyService)
 {
     public override void Configure()
     {
-        Put("/api/admin/faculties/{id:guid}");
+        Put("admin/faculties/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Update a faculty";

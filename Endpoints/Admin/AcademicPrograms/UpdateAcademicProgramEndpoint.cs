@@ -12,7 +12,7 @@ public sealed class UpdateAcademicProgramEndpoint(IAcademicProgramService progra
 {
     public override void Configure()
     {
-        Put("/api/admin/programs/{id}");
+        Put("admin/programs/{id}");
         Group<AdminGroup>();
         Summary(s =>
         {
@@ -30,7 +30,7 @@ public sealed class UpdateAcademicProgramEndpoint(IAcademicProgramService progra
             req.Code,
             req.Description,
             req.DegreeAwarded,
-            req.FacultyId,
+            req.DepartmentId,
             req.Type,
             req.DurationYears,
             req.MinJambScore,
@@ -53,7 +53,7 @@ public class UpdateAcademicProgramRequestWrapper
     public string Code { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string DegreeAwarded { get; set; } = string.Empty;
-    public Guid FacultyId { get; set; }
+    public Guid DepartmentId { get; set; }
     public ProgramType Type { get; set; }
     public int DurationYears { get; set; }
     public int MinJambScore { get; set; }

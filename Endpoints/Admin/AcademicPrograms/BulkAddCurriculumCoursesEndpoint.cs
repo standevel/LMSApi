@@ -11,7 +11,7 @@ public sealed class BulkAddCurriculumCoursesEndpoint(ICurriculumService curricul
 {
     public override void Configure()
     {
-        Post("/api/admin/curricula/{CurriculumId}/courses/bulk");
+        Post("admin/curricula/{CurriculumId}/courses/bulk");
         Group<AdminGroup>();
         Summary(s =>
         {

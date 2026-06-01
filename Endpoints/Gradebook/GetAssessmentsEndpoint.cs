@@ -17,8 +17,9 @@ public sealed class GetAssessmentsEndpoint : ApiEndpointWithoutRequest<List<Asse
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}/assessments");
+        Get("gradebook/courses/{offeringId:guid}/assessments");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -58,8 +59,9 @@ public sealed class CreateAssessmentEndpoint : ApiEndpoint<CreateAssessmentReque
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/assessments");
+        Post("gradebook/courses/{offeringId:guid}/assessments");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CreateAssessmentRequest req, CancellationToken ct)

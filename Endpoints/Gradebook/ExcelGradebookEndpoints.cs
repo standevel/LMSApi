@@ -16,8 +16,9 @@ public sealed class DownloadGradebookTemplateEndpoint : ApiEndpointWithoutReques
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}/template");
+        Get("gradebook/courses/{offeringId:guid}/template");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -61,8 +62,9 @@ public sealed class UploadGradesExcelEndpoint : ApiEndpointWithoutRequest<GradeU
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/upload");
+        Post("gradebook/courses/{offeringId:guid}/upload");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

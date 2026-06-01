@@ -10,7 +10,8 @@ public sealed class ListProgramPrerequisitesEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/admission-config/program-prerequisites");
+        Get("admin/admission-config/program-prerequisites");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -45,7 +46,8 @@ public sealed class CreateProgramPrerequisiteEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admin/admission-config/program-prerequisites");
+        Post("admin/admission-config/program-prerequisites");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CreateProgramPrerequisiteRequest req, CancellationToken ct)
@@ -74,7 +76,8 @@ public sealed class UpdateProgramPrerequisiteEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Patch("/api/admin/admission-config/program-prerequisites/{Id}");
+        Patch("admin/admission-config/program-prerequisites/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(UpdateProgramPrerequisiteRequest req, CancellationToken ct)
@@ -103,7 +106,8 @@ public sealed class DeleteProgramPrerequisiteEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Delete("/api/admin/admission-config/program-prerequisites/{Id}");
+        Delete("admin/admission-config/program-prerequisites/{Id}");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(DeleteProgramPrerequisiteRequest req, CancellationToken ct)

@@ -11,7 +11,7 @@ public sealed class GetCurriculumByIdEndpoint(ICurriculumService curriculumServi
 {
     public override void Configure()
     {
-        Get("/api/admin/curricula/{Id}");
+        Get("admin/curricula/{Id}");
         Group<AdminGroup>();
         Summary(s =>
         {

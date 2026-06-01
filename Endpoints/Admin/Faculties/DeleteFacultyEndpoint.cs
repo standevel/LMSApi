@@ -14,8 +14,9 @@ public sealed class DeleteFacultyEndpoint(IFacultyService facultyService)
 {
     public override void Configure()
     {
-        Delete("/api/admin/faculties/{id:guid}");
+        Delete("admin/faculties/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Delete a faculty";

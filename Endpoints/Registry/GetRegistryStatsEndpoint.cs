@@ -13,8 +13,12 @@ public sealed class GetRegistryStatsEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/registry/stats");
+        Get("registry/stats");
         Policies(LmsPolicies.Management);
+        Description(d => d
+            .WithName("GetRegistryStats")
+            .WithTags("Registry")
+            .WithSummary("Retrieve registry statistics including student counts and admission data"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

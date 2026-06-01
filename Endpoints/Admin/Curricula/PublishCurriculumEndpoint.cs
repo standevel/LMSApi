@@ -10,8 +10,9 @@ public sealed class PublishCurriculumEndpoint(ICurriculumService curriculumServi
 {
     public override void Configure()
     {
-        Post("/api/admin/curricula/{id}/publish");
+        Post("admin/curricula/{id}/publish");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Publish a draft curriculum";

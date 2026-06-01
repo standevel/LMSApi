@@ -9,8 +9,9 @@ public sealed class CreateFacultyEndpoint(IFacultyService facultyService)
 {
     public override void Configure()
     {
-        Post("/api/admin/faculties");
+        Post("admin/faculties");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Create a faculty";

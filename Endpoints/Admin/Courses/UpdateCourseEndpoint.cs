@@ -11,8 +11,9 @@ public sealed class UpdateCourseEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Put("/api/admin/courses/{id}");
+        Put("admin/courses/{id}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Update a course";

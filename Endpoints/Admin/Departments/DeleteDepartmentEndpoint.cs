@@ -13,8 +13,9 @@ public sealed class DeleteDepartmentEndpoint(IDepartmentService departmentServic
 {
     public override void Configure()
     {
-        Delete("/api/admin/departments/{id:guid}");
+        Delete("admin/departments/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Delete a department";

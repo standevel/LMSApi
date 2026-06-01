@@ -11,8 +11,9 @@ public sealed class GetProgramEnrollmentsEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/programs/{id}/enrollments");
+        Get("admin/programs/{id}/enrollments");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "List program enrollments";

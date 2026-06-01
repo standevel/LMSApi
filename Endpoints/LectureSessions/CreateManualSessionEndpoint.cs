@@ -13,8 +13,12 @@ public class CreateManualSessionEndpoint(
 {
     public override void Configure()
     {
-        Post("/api/lecture-sessions/manual");
+        Post("lecture-sessions/manual");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("CreateManualSession")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Create a manual lecture session"));
     }
 
     public override async Task HandleAsync(CreateManualSessionRequest req, CancellationToken ct)

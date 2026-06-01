@@ -19,8 +19,9 @@ public sealed class SetLocalCredentialsEndpoint(ILocalAuthService localAuthServi
 {
     public override void Configure()
     {
-        Post("/api/admin/users/local-credentials/set");
+        Post("admin/users/local-credentials/set");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(SetLocalCredentialsRequest req, CancellationToken ct)

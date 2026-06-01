@@ -16,8 +16,13 @@ public sealed class GetDocumentResubmissionContextEndpoint(LmsDbContext dbContex
 {
     public override void Configure()
     {
-        Get("/api/admissions/documents/{Id}/resubmission-context");
+        Get("admissions/documents/{Id}/resubmission-context");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Document Resubmission Context") 
+            .WithTags("Admissions")
+            .WithSummary("Get context information for resubmitting a rejected document"));
     }
 
     public override async Task HandleAsync(GetDocumentResubmissionContextRequest req, CancellationToken ct)

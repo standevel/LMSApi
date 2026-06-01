@@ -11,10 +11,11 @@ public sealed class GetEffectivePermissionsEndpoint(IAdminAuthzService adminAuth
 {
     public override void Configure()
     {
-        Get("/api/admin/users/{entraObjectId}/permissions");
+        Get("admin/users/{entraObjectId}/permissions");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
-
+    
     public override async Task HandleAsync(CancellationToken ct)
     {
         var entraObjectId = Route<string>("entraObjectId");

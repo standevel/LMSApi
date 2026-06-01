@@ -14,8 +14,12 @@ public sealed class DeleteExternalLinkEndpoint : ApiEndpointWithoutRequest<objec
 
     public override void Configure()
     {
-        Delete("/api/lecture-sessions/external-links/{id}");
+        Delete("lecture-sessions/external-links/{id}");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Description(d => d
+            .WithName("DeleteExternalLink")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Delete an external link from a lecture session"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

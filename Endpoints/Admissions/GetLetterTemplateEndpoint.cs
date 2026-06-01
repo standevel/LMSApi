@@ -10,8 +10,13 @@ public sealed class GetLetterTemplateEndpoint(ILetterTemplateService letterServi
 {
     public override void Configure()
     {
-        Get("/api/admissions/letter-templates/{type}");
+        Get("admissions/letter-templates/{type}");
         Policies(LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Letter Template") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve the letter template for a specific admission type (e.g., Undergraduate, Postgraduate)"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

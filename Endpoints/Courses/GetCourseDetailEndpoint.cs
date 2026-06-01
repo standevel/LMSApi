@@ -19,8 +19,9 @@ public sealed class GetCourseDetailEndpoint : ApiEndpointWithoutRequest<CourseDe
 
     public override void Configure()
     {
-        Get("/api/courses/{offeringId:guid}");
+        Get("courses/{offeringId:guid}");
         AllowAnonymous();
+        Tags("Courses");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

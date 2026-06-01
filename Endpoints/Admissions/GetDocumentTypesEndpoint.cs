@@ -10,8 +10,13 @@ public sealed class GetDocumentTypesEndpoint(IDocumentService documentService)
 {
     public override void Configure()
     {
-        Get("/api/admissions/document-types");
+        Get("admissions/document-types");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Document Types") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all active document types required for admission (e.g., WAEC, O'Level, Birth Certificate)"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

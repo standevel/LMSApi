@@ -25,8 +25,12 @@ public class GetWeekViewEndpoint(ITimetableService timetableService)
 {
     public override void Configure()
     {
-        Get("/api/timetable/week-view/{sessionId}/{weekNumber}");
+        Get("timetable/week-view/{sessionId}/{weekNumber}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetWeekView")
+            .WithTags("Timetable")
+            .WithSummary("Retrieve timetable for a specific week and session"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

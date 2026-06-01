@@ -11,8 +11,9 @@ public sealed class ListCoursesEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Get("/api/admin/courses");
+        Get("admin/courses");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "List all courses";

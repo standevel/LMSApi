@@ -1,39 +1,73 @@
 using FastEndpoints;
+using FastEndpoints.Swagger;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
-using LMS.Api.Services;
 using LMS.Api.Security;
+using LMS.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json;
 using System.IdentityModel.Tokens.Jwt;
+using System.Reflection;
 using System.Text;
 
-namespace LMS.Api.Extensions;
-
+namespace LMS.Api.Extensions; 
 public static class ServiceCollectionExtensions
 {
     public const string LocalJwtScheme = "LocalJwt";
     public const string CompositeJwtScheme = "CompositeJwt";
     public const string FrontendCorsPolicy = "FrontendCors";
+    private static readonly Assembly apiAssembly = typeof(ServiceCollectionExtensions).Assembly;
 
-    public static IServiceCollection AddApplicationCore(this IServiceCollection services)
+    public static IServiceCollection AddApplicationCore(this IServiceCollection services, IWebHostEnvironment environment = null!)
     {
-        services.AddFastEndpoints();
-        services.AddOpenApiDocument(opts =>
+        services.AddFastEndpoints(options =>
         {
-            opts.DocumentName = "v1";
-            opts.Title = "LMS API";
-            opts.Version = "v1";
+            options.Assemblies = [apiAssembly];
+            options.DisableAutoDiscovery = false;
         });
+
+        services.AddEndpointsApiExplorer();
+        services.AddOpenApi();
+        services.AddHttpContextAccessor();
+        services.AddControllers()
+            .AddNewtonsoftJson(o => o.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore)
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.MaxDepth = 256;
+            });
+
+        services.Configure<FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = 20 * 1024 * 1024; // 20 MB max for file uploads
+        });
+
+        services.Configure<KestrelServerOptions>(options =>
+        {
+            options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10 MB max request body
+        });
+
+        // services.SwaggerDocument(opts =>
+        // {
+        //     opts.DocumentSettings = document =>
+        //     {
+        //         document.DocumentName = "v1";
+        //         document.Title = "LMS API";
+        //         document.Version = "v1";
+        //     };
+        // });
         services.AddMemoryCache();
         services.AddHttpContextAccessor();
-        return services;
-    }
 
+        return services;
+    } 
     public static IServiceCollection AddApplicationDatabase(this IServiceCollection services, string connectionString)
     {
         services.AddDbContext<LmsDbContext>(options =>
@@ -95,18 +129,32 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IGradebookService, GradebookService>();
+        services.AddScoped<IAnnouncementService, AnnouncementService>();
+        services.AddScoped<IBulkOperationService, BulkOperationService>();
+        services.AddScoped<IDiscussionService, DiscussionService>();
+        services.AddScoped<IIntegrationService, IntegrationService>();
+        services.AddScoped<IMessageService, MessageService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IParentPortalService, ParentPortalService>();
+        services.AddScoped<IPrerequisiteValidationService, PrerequisiteValidationService>();
+        services.AddScoped<IProctoringService, ProctoringService>();
+        services.AddScoped<IQuestionBankService, QuestionBankService>();
+        services.AddScoped<IQuizService, QuizService>();
+        services.AddScoped<IScheduleService, ScheduleService>();
+        services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<IAdmissionService, AdmissionService>();
+        services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddHttpClient<IEmailService, BrevoEmailService>();
         services.AddScoped<IActiveDirectoryService, EntraIdService>();
         services.AddScoped<IPdfService, OfferLetterPdfService>();
         services.AddScoped<ILetterTemplateService, LetterTemplateService>();
 
-        // Fee Management
-        services.AddScoped<IFeeService, FeeService>();
-        services.AddHttpClient<PaystackService>();
-        services.AddHttpClient<HydrogenService>();
+// Fee Management
+         services.AddScoped<IFeeService, FeeService>();
+         services.AddHttpClient<PaystackService>();
+         services.AddHttpClient<HydrogenService>();
 
-        // Timetable Management
+         // Timetable Management
         services.AddScoped<ITimetableService, TimetableService>();
         services.AddScoped<ILectureSessionService, LectureSessionService>();
         services.AddScoped<ISessionManagementService, SessionManagementService>();
@@ -122,10 +170,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddScoped<ILocalAuthService, LocalAuthService>();
         services.AddScoped<IAdminAuthzService, AdminAuthzService>();
+        services.AddScoped<IRateLimitingService, RateLimitingService>();
+        services.AddScoped<IWebhookService, WebhookService>();
         services.AddScoped<IDbInitializer, DbInitializer>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
+
+        // Reporting & Analytics (Phase 3)
+        services.AddScoped<IGpaCalculationService, GpaCalculationService>();
+        services.AddScoped<ITranscriptGenerationService, TranscriptGenerationService>();
+        services.AddScoped<IDegreeAuditService, DegreeAuditService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
+        services.AddScoped<IReportSchedulerService, ReportSchedulerService>();
 
         var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 
@@ -140,24 +197,30 @@ public static class ServiceCollectionExtensions
                 options.ForwardDefaultSelector = context =>
                 {
                     var authorization = context.Request.Headers.Authorization.ToString();
+                    if (string.IsNullOrEmpty(authorization))
+                    {
+                        // Return LocalJwtScheme; its handler will gracefully handle missing tokens.
+                        return LocalJwtScheme;
+                    }
+
                     if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        return JwtBearerDefaults.AuthenticationScheme;
+                        return LocalJwtScheme;
                     }
 
                     var token = authorization["Bearer ".Length..].Trim();
                     if (string.IsNullOrWhiteSpace(token))
                     {
-                        return JwtBearerDefaults.AuthenticationScheme;
+                        return LocalJwtScheme;
                     }
 
-                    var handler = new JwtSecurityTokenHandler();
-                    if (!handler.CanReadToken(token))
+                    var jwtHandler = new JwtSecurityTokenHandler();
+                    if (!jwtHandler.CanReadToken(token))
                     {
-                        return JwtBearerDefaults.AuthenticationScheme;
+                        return LocalJwtScheme;
                     }
 
-                    var jwt = handler.ReadJwtToken(token);
+                    var jwt = jwtHandler.ReadJwtToken(token);
                     return string.Equals(jwt.Issuer, jwtSettings.Issuer, StringComparison.OrdinalIgnoreCase)
                         ? LocalJwtScheme
                         : JwtBearerDefaults.AuthenticationScheme;
@@ -233,4 +296,12 @@ public static class ServiceCollectionExtensions
         services.AddLmsAuthorization();
         return services;
     }
+
+public static IServiceCollection AddExternalServices(this IServiceCollection services, IConfiguration configuration)
+     {
+         // Email and external payment configurations are already registered via
+         // AddHttpClient in AddApplicationSecurity. This method is reserved for
+         // additional external service configurations if needed.
+         return services;
+     }
 }

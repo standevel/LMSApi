@@ -16,8 +16,13 @@ public sealed class RespondToOfferEndpoint(IAdmissionService admissionService, L
 {
     public override void Configure()
     {
-        Post("/api/admissions/offers/{Id}/decision");
+        Post("admissions/offers/{Id}/decision");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Respond To Offer") 
+            .WithTags("Admissions")
+            .WithSummary("Accept or reject an admission offer letter"));
     }
     
     public override async Task HandleAsync(RespondToOfferRequest req, CancellationToken ct)

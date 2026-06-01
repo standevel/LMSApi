@@ -15,8 +15,13 @@ public sealed class GetApplicationByIdEndpoint(IAdmissionService admissionServic
 {
     public override void Configure()
     {
-        Get("/api/admissions/applications/{Id}");
+        Get("admissions/applications/{Id}");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Application By Id") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve a single admission application by its ID"));
     }
 
     public override async Task HandleAsync(GetApplicationByIdRequest req, CancellationToken ct)

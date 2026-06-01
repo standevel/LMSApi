@@ -11,8 +11,9 @@ public sealed class CreateCourseEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Post("/api/admin/courses");
+        Post("admin/courses");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Create a new course";

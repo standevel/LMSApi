@@ -9,8 +9,13 @@ public sealed class GetAcademicLevelsEndpoint(IAdmissionService admissionService
 {
     public override void Configure()
     {
-        Get("/api/admissions/levels");
+        Get("admissions/levels");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Academic Levels") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all academic levels (e.g., 100, 200, 300) available for admission"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

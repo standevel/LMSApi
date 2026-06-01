@@ -9,8 +9,12 @@ public class ValidateSessionConflictsEndpoint(ILectureSessionService lectureSess
 {
     public override void Configure()
     {
-        Post("/api/lecture-sessions/validate-conflicts");
+        Post("lecture-sessions/validate-conflicts");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("ValidateSessionConflicts")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Validate session conflicts"));
     }
 
     public override async Task HandleAsync(ValidateConflictsRequest req, CancellationToken ct)

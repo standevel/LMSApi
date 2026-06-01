@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -14,6 +15,7 @@ public sealed class SessionMaterial
     public Guid UploadedBy { get; set; }
 
     // Navigation properties
+    [JsonIgnore]
     public LectureSession LectureSession { get; set; } = null!;
     public AppUser UploadedByUser { get; set; } = null!;
 }

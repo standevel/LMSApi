@@ -10,8 +10,9 @@ public sealed class AssignFeeEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/assignments");
+        Post("fees/assignments");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(AssignFeeRequest req, CancellationToken ct)
@@ -35,8 +36,9 @@ public sealed class GetAssignmentsEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/assignments");
+        Get("fees/assignments");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -62,8 +64,9 @@ public sealed class DeleteAssignmentEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Delete("/api/fees/assignments/{id}");
+        Delete("fees/assignments/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

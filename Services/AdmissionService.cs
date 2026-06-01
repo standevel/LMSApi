@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
@@ -36,14 +38,14 @@ public sealed class AdmissionService(
         try
         {
             // Check for existing applications in the latest session or any session
-            return await dbContext.AdmissionApplications
-                .Include(a => a.AcademicSession)
-                .Include(a => a.Faculty)
-                .Include(a => a.AcademicProgram)
-                .Include(a => a.Documents)
-                    .ThenInclude(d => d.DocumentType)
-                .OrderByDescending(a => a.CreatedAt)
-                .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber);
+             return await dbContext.AdmissionApplications
+                 .Include(a => a.AcademicSession)
+                 .Include(a => a.Faculty)
+                 .Include(a => a.AcademicProgram)
+                 .Include(a => a.Documents)
+                     .ThenInclude(d => d.DocumentType)
+                 .OrderByDescending(a => a.CreatedAt)
+                 .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber.ToUpperInvariant());
         }
         catch (Exception ex)
         {
@@ -53,10 +55,10 @@ public sealed class AdmissionService(
             
             try
             {
-                var app = await dbContext.AdmissionApplications
-                    .Include(a => a.AcademicSession)
-                    .OrderByDescending(a => a.CreatedAt)
-                    .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber);
+                 var app = await dbContext.AdmissionApplications
+                     .Include(a => a.AcademicSession)
+                     .OrderByDescending(a => a.CreatedAt)
+                     .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber.ToUpperInvariant());
                 
                 if (app != null)
                 {
@@ -113,6 +115,8 @@ public sealed class AdmissionService(
         if (existing == null)
         {
             application.CreatedAt = DateTime.UtcNow;
+            // Parse emergency contact JSON into individual fields
+            ParseEmergencyContactJson(application);
             if (documentIds?.Any() == true)
             {
                 var docs = await dbContext.DocumentRecords
@@ -126,6 +130,8 @@ public sealed class AdmissionService(
         {
             dbContext.Entry(existing).CurrentValues.SetValues(application);
             existing.UpdatedAt = DateTime.UtcNow;
+            // Parse emergency contact JSON into individual fields
+            ParseEmergencyContactJson(existing);
 
             if (documentIds != null)
             {
@@ -181,12 +187,21 @@ public sealed class AdmissionService(
         // Validate applicant-specific requirements (non-document)
         ValidateApplicantSpecificRequirements(app);
 
+        // Validate emergency contact information
+        if (string.IsNullOrEmpty(app.EmergencyContactName))
+            throw new InvalidOperationException("Emergency contact name is required.");
+        if (string.IsNullOrEmpty(app.EmergencyContactPhone))
+            throw new InvalidOperationException("Emergency contact phone is required.");
+        if (string.IsNullOrEmpty(app.EmergencyContactEmail))
+            throw new InvalidOperationException("Emergency contact email is required.");
+
         if (string.IsNullOrEmpty(app.ApplicationNumber))
         {
-            var year = app.AcademicSession?.StartDate.Year ?? DateTime.UtcNow.Year;
+            var yearValue = app.AcademicSession?.StartDate.Year ?? DateTime.UtcNow.Year;
+            var yearSuffix = (yearValue % 100).ToString("D2");
             var count = await dbContext.AdmissionApplications
                 .CountAsync(a => a.AcademicSessionId == app.AcademicSessionId && !string.IsNullOrEmpty(a.ApplicationNumber));
-            app.ApplicationNumber = $"WU-{year}-{(count + 1):D3}";
+            app.ApplicationNumber = $"WU-{yearSuffix}-{(count + 1):D3}";
         }
 
         app.Status = AdmissionStatus.Submitted;
@@ -199,9 +214,14 @@ public sealed class AdmissionService(
         try
         {
             var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
+            logger.LogInformation("[EMAIL] Attempting to send application submitted email to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
             await emailService.SendApplicationSubmittedEmailAsync(app.StudentEmail, fullName);
+            logger.LogInformation("[EMAIL] Application submitted email sent to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
         }
-        catch { /* Log and continue */ }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[EMAIL-ERROR] Failed to send application submitted email to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
+        }
 
         return app;
     }
@@ -397,11 +417,11 @@ public sealed class AdmissionService(
 
     public async Task<IEnumerable<AdmissionApplication>> GetHistoryByJambAsync(string jambRegNumber)
     {
-        return await dbContext.AdmissionApplications
-            .Include(a => a.AcademicSession)
-            .Where(a => a.JambRegNumber == jambRegNumber)
-            .OrderByDescending(a => a.CreatedAt)
-            .ToListAsync();
+         return await dbContext.AdmissionApplications
+             .Include(a => a.AcademicSession)
+             .Where(a => a.JambRegNumber == jambRegNumber.ToUpperInvariant())
+             .OrderByDescending(a => a.CreatedAt)
+             .ToListAsync();
     }
 
     public async Task<IEnumerable<Faculty>> GetFacultiesAsync()
@@ -416,7 +436,26 @@ public sealed class AdmissionService(
     {
         return await dbContext.Programs
             .AsNoTracking()
-            .Where(p => p.FacultyId == facultyId)
+            .Where(p => p.Department.FacultyId == facultyId)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<Department>> GetDepartmentsByFacultyAsync(Guid facultyId)
+    {
+        return await dbContext.Departments
+            .AsNoTracking()
+            .Include(d => d.Faculty)
+            .Where(d => d.FacultyId == facultyId)
+            .OrderBy(d => d.Name)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<AcademicProgram>> GetProgramsByDepartmentAsync(Guid departmentId)
+    {
+        return await dbContext.Programs
+            .AsNoTracking()
+            .Where(p => p.DepartmentId == departmentId)
             .OrderBy(p => p.Name)
             .ToListAsync();
     }
@@ -444,6 +483,55 @@ public sealed class AdmissionService(
             .Where(s => s.IsActive)
             .OrderBy(s => s.Name)
             .ToListAsync();
+    }
+
+    public async Task<SponsorOrganization> CreateSponsorAsync(
+        string name,
+        string? email = null,
+        string? phone = null,
+        CancellationToken ct = default)
+    {
+        // Normalize name: title-case, trim, collapse whitespace
+        var normalized = Regex.Replace(name.Trim(), @"\s+", " ");
+        var titleCase = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalized.ToLowerInvariant());
+
+        // Check for existing (case-insensitive)
+        var existing = await dbContext.SponsorOrganizations
+            .FirstOrDefaultAsync(s => EF.Functions.Like(s.Name, titleCase), ct);
+
+        if (existing is not null)
+            return existing;
+
+        // Generate code: uppercase initials/abbreviation
+        var words = titleCase.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var code = words.Length switch
+        {
+            1 => words[0].ToUpper(),
+            2 => string.Concat(words.Select(w => w[0])).ToUpper(),
+            _ => string.Concat(words.Select(w => w[0])).ToUpper()
+        };
+
+        // Ensure uniqueness
+        var finalCode = code;
+        var idx = 1;
+        while (await dbContext.SponsorOrganizations.AnyAsync(s => s.Code == finalCode, ct))
+        {
+            finalCode = $"{code}{idx}";
+            idx++;
+        }
+
+        var org = new SponsorOrganization
+        {
+            Name = titleCase,
+            Code = finalCode,
+            Email = email,
+            Phone = phone,
+            IsActive = true
+        };
+
+        dbContext.SponsorOrganizations.Add(org);
+        await dbContext.SaveChangesAsync(ct);
+        return org;
     }
 
     public async Task<IEnumerable<Subject>> GetAdmissionSubjectsAsync()
@@ -738,10 +826,10 @@ public sealed class AdmissionService(
             return new TransferValidationResult(false, "Application is not a transfer application.", null, null, null, null);
         }
 
-        // Thresholds (configurable via appsettings in production)
-        const decimal minCGPA4Scale = 2.5m;
-        const decimal minCGPA5Scale = 3.0m;
-        const int minCredits = 30;
+        // Thresholds from configuration (fallback to defaults if missing)
+        var minCGPA4Scale = configuration.GetValue<decimal>("AdmissionSettings:Transfer:MinCGPA4Scale", 2.5m);
+        var minCGPA5Scale = configuration.GetValue<decimal>("AdmissionSettings:Transfer:MinCGPA5Scale", 3.0m);
+        var minCredits = configuration.GetValue<int>("AdmissionSettings:Transfer:MinCredits", 30);
 
         var errors = new List<string>();
 
@@ -1115,6 +1203,9 @@ public sealed class AdmissionService(
                 MiddleName = app.MiddleName,
                 PersonalEmail = app.StudentEmail,
                 Phone = app.Phone,
+                EmergencyContactName = app.EmergencyContactName,
+                EmergencyContactPhone = app.EmergencyContactPhone,
+                EmergencyContactEmail = app.EmergencyContactEmail,
                 AcademicSessionId = app.AcademicSessionId,
                 FacultyId = app.FacultyId,
                 AcademicProgramId = app.AcademicProgramId,
@@ -1402,7 +1493,7 @@ public sealed class AdmissionService(
         }
 
         // Validate academic standing
-        var academicStandingVerified = app.HomeInstitutionStanding.HasValue && app.HomeInstitutionStanding.Value == AcademicStanding.GoodStanding;
+        var academicStandingVerified = app.HomeInstitutionStanding.HasValue && app.HomeInstitutionStanding.Value == LMS.Api.Data.Enums.AcademicStanding.GoodStanding;
         if (!academicStandingVerified)
         {
             errors.Add("Academic standing must be 'Good Standing' for exchange eligibility.");
@@ -1640,15 +1731,15 @@ public sealed class AdmissionService(
         if (app.HomeInstitutionStanding.HasValue)
         {
             academicStandingVerified = true;
-            if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.GoodStanding)
+            if (app.HomeInstitutionStanding.Value == LMS.Api.Data.Enums.AcademicStanding.GoodStanding)
             {
                 academicStandingGood = true;
             }
-            else if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.Probation)
+            else if (app.HomeInstitutionStanding.Value == LMS.Api.Data.Enums.AcademicStanding.Probation)
             {
                 errors.Add("Academic standing is 'Probation' — additional review required.");
             }
-            else if (app.HomeInstitutionStanding.Value == Data.Enums.AcademicStanding.Suspended)
+            else if (app.HomeInstitutionStanding.Value == LMS.Api.Data.Enums.AcademicStanding.Suspension)
             {
                 errors.Add("Academic standing is 'Suspended' — applicant is not eligible.");
             }
@@ -1869,5 +1960,92 @@ public sealed class AdmissionService(
             0m,
             false,
             $"No starting level suggestion for qualification type: {qualification}");
+    }
+
+    /// <summary>
+    /// Parses the EmergencyContactJson field and populates the individual contact fields.
+    /// </summary>
+    private void ParseEmergencyContactJson(AdmissionApplication application)
+    {
+        if (string.IsNullOrWhiteSpace(application.EmergencyContactJson))
+            return;
+
+        try
+        {
+            var emergency = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(application.EmergencyContactJson);
+            if (emergency != null)
+            {
+                if (emergency.TryGetValue("name", out var name) && !string.IsNullOrWhiteSpace(name))
+                    application.EmergencyContactName = name;
+                if (emergency.TryGetValue("phone", out var phone) && !string.IsNullOrWhiteSpace(phone))
+                    application.EmergencyContactPhone = phone;
+                if (emergency.TryGetValue("email", out var email) && !string.IsNullOrWhiteSpace(email))
+                    application.EmergencyContactEmail = email;
+            }
+        }
+        catch
+        {
+            // If parsing fails, leave the fields as-is
+        }
+    }
+
+    /// <summary>
+    /// Sends a reminder email to a single applicant.
+    /// Used by Registry dashboard to prompt applicants to complete JAMB CAPS and O'Level steps.
+    /// </summary>
+    public async Task<ReminderSendResult> SendReminderAsync(Guid applicationId, CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.AcademicProgram)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+        {
+            return new ReminderSendResult(false, applicationId, "Application not found.", null, null);
+        }
+
+        var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
+
+        try
+        {
+            await emailService.SendApplicationReminderEmailAsync(
+                app.StudentEmail,
+                fullName,
+                app.ApplicationNumber ?? "Pending",
+                app.Status);
+            logger.LogInformation("[REMINDER] Reminder email sent to {Email} for application {ApplicationId}", app.StudentEmail, applicationId);
+            return new ReminderSendResult(true, applicationId, null, app.StudentEmail, fullName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[REMINDER-ERROR] Failed to send reminder email to {Email} for application {ApplicationId}", app.StudentEmail, applicationId);
+            return new ReminderSendResult(false, applicationId, ex.Message, app.StudentEmail, fullName);
+        }
+    }
+
+    /// <summary>
+    /// Sends reminder emails to multiple applicants.
+    /// Used by Registry dashboard for bulk operations.
+    /// </summary>
+    public async Task<BulkReminderResult> SendBulkRemindersAsync(IEnumerable<Guid> applicationIds, CancellationToken ct = default)
+    {
+        var results = new List<ReminderSendResult>();
+        var recipients = applicationIds.Distinct().ToList();
+
+        foreach (var applicationId in recipients)
+        {
+            var result = await SendReminderAsync(applicationId, ct);
+            results.Add(result);
+        }
+
+        var sentCount = results.Count(r => r.Success);
+        var failedCount = results.Count(r => !r.Success);
+
+        return new BulkReminderResult(
+            recipients.Count,
+            sentCount,
+            failedCount,
+            results);
     }
 }

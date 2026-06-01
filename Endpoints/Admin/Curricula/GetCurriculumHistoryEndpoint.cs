@@ -10,7 +10,8 @@ public sealed class GetCurriculumHistoryEndpoint(ICurriculumService curriculumSe
 {
     public override void Configure()
     {
-        Get("/api/admin/curricula/{CurriculumId}/history");
+        Get("admin/curricula/{CurriculumId}/history");
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Get curriculum update history";

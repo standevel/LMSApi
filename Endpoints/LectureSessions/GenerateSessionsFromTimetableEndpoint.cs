@@ -12,8 +12,12 @@ public class GenerateSessionsFromTimetableEndpoint(
 {
     public override void Configure()
     {
-        Post("/api/lecture-sessions/generate");
+        Post("lecture-sessions/generate");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GenerateSessionsFromTimetable")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Generate lecture sessions from timetable slots"));
     }
 
     public override async Task HandleAsync(GenerateSessionsRequest req, CancellationToken ct)

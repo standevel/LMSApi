@@ -12,8 +12,12 @@ public class GenerateBulkSessionsForSemesterEndpoint(
 {
     public override void Configure()
     {
-        Post("/api/lecture-sessions/generate-bulk");
+        Post("lecture-sessions/generate-bulk");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GenerateBulkSessionsForSemester")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Generate bulk lecture sessions for a semester"));
     }
 
     public override async Task HandleAsync(GenerateBulkSessionsRequest req, CancellationToken ct)

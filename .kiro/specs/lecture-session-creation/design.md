@@ -189,7 +189,7 @@ public interface ILectureSessionService
 
 **GenerateSessionsFromTimetableEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/generate`
+- **Route**: `POST lecture-sessions/generate`
 - **Request**:
   ```csharp
   public record GenerateSessionsRequest(
@@ -206,7 +206,7 @@ public interface ILectureSessionService
 
 **GenerateBulkSessionsForSemesterEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/generate-bulk`
+- **Route**: `POST lecture-sessions/generate-bulk`
 - **Request**:
   ```csharp
   public record GenerateBulkSessionsRequest(
@@ -229,7 +229,7 @@ public interface ILectureSessionService
 
 **GetAllCourseOfferingsForSessionEndpoint**
 
-- **Route**: `GET /api/lecture-sessions/course-offerings/{academicSessionId}`
+- **Route**: `GET lecture-sessions/course-offerings/{academicSessionId}`
 - **Response**: `List<CourseOfferingWithSlotCount>`
   ```csharp
   public record CourseOfferingWithSlotCount(
@@ -240,7 +240,7 @@ public interface ILectureSessionService
 
 **CreateManualSessionEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/manual`
+- **Route**: `POST lecture-sessions/manual`
 - **Request**:
   ```csharp
   public record CreateManualSessionRequest(
@@ -256,7 +256,7 @@ public interface ILectureSessionService
 
 **ValidateSessionConflictsEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/validate-conflicts`
+- **Route**: `POST lecture-sessions/validate-conflicts`
 - **Request**:
   ```csharp
   public record ValidateConflictsRequest(

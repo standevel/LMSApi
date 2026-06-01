@@ -12,8 +12,9 @@ public sealed class ApplyLateFeesEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/late-fees/apply");
+        Post("fees/late-fees/apply");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(ApplyLateFeesRequest req, CancellationToken ct)
@@ -31,8 +32,9 @@ public sealed class PaystackWebhookEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/webhooks/paystack");
+        Post("webhooks/paystack");
         AllowAnonymous();
+        Tags("Fees");
         // Must read raw body for HMAC verification
         Options(b => b.DisableAntiforgery());
     }
@@ -66,8 +68,9 @@ public sealed class HydrogenWebhookEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/webhooks/hydrogen");
+        Post("webhooks/hydrogen");
         AllowAnonymous();
+        Tags("Fees");
         Options(b => b.DisableAntiforgery());
     }
 

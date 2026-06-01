@@ -9,8 +9,12 @@ public class GetCourseOfferingTimetableEndpoint(ITimetableService timetableServi
 {
     public override void Configure()
     {
-        Get("/api/timetable/course-offering/{CourseOfferingId}");
+        Get("timetable/course-offering/{CourseOfferingId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetCourseOfferingTimetable")
+            .WithTags("Timetable")
+            .WithSummary("Retrieve timetable for a specific course offering"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

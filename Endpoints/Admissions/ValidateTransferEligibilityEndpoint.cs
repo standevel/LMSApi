@@ -14,8 +14,13 @@ public sealed class ValidateTransferEligibilityEndpoint(IAdmissionService admiss
 {
     public override void Configure()
     {
-        Post("/api/admissions/validate-transfer");
+        Post("admissions/validate-transfer");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Validate Transfer Eligibility") 
+            .WithTags("Admissions")
+            .WithSummary("Validate eligibility for transfer student admission"));
     }
 
     public override async Task HandleAsync(ValidateTransferEligibilityRequest req, CancellationToken ct)

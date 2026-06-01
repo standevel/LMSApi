@@ -9,8 +9,12 @@ public class GetTimetableSlotsForOfferingEndpoint(ILectureSessionService lecture
 {
     public override void Configure()
     {
-        Get("/api/lecture-sessions/timetable-slots/{offeringId}");
+        Get("lecture-sessions/timetable-slots/{offeringId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetTimetableSlotsForOffering")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Retrieve timetable slots for a specific course offering"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

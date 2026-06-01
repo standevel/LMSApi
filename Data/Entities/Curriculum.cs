@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Data.Entities;
@@ -16,7 +17,10 @@ public sealed class Curriculum
     public bool IsActive { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 
+    [JsonIgnore]
     public AcademicProgram Program { get; set; } = null!;
+    [JsonIgnore]
     public AcademicSession AdmissionSession { get; set; } = null!;
+    [JsonIgnore]
     public ICollection<CurriculumCourse> Courses { get; set; } = [];
 }

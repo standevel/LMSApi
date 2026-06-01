@@ -11,7 +11,7 @@ public sealed class ListAcademicProgramsEndpoint(IAcademicProgramService program
 {
     public override void Configure()
     {
-        Get("/api/admin/programs");
+        Get("admin/programs");
         Group<AdminGroup>();
         Summary(s =>
         {

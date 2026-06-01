@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -8,6 +9,7 @@ public sealed class Student
     
     // Link to Admission Application
     public Guid AdmissionApplicationId { get; set; }
+    [JsonIgnore]
     public AdmissionApplication AdmissionApplication { get; set; } = null!;
     
     // Entra ID / Microsoft Account
@@ -20,6 +22,11 @@ public sealed class Student
     public string? MiddleName { get; set; }
     public string PersonalEmail { get; set; } = string.Empty; // Original application email
     public string Phone { get; set; } = string.Empty;
+    
+    // Emergency Contact (copied from AdmissionApplication)
+    public string? EmergencyContactName { get; set; }
+    public string? EmergencyContactPhone { get; set; }
+    public string? EmergencyContactEmail { get; set; }
     
     // Academic Info
     public Guid AcademicSessionId { get; set; }

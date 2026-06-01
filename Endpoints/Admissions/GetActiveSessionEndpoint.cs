@@ -9,8 +9,13 @@ public sealed class GetActiveSessionEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Get("/api/admissions/sessions/active");
+        Get("admissions/sessions/active");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Active Session") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve the currently active academic session for admission"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

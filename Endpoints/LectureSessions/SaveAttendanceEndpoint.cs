@@ -15,8 +15,12 @@ public sealed class SaveAttendanceEndpoint : ApiEndpoint<SaveAttendanceRequest, 
 
     public override void Configure()
     {
-        Post("/api/lecture-sessions/{id}/attendance");
+        Post("lecture-sessions/{id}/attendance");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Description(d => d
+            .WithName("SaveAttendance")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Save attendance records for a lecture session"));
     }
 
     public override async Task HandleAsync(SaveAttendanceRequest req, CancellationToken ct)

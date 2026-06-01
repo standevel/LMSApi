@@ -9,7 +9,8 @@ public sealed class ListFacultiesEndpoint(IFacultyService facultyService)
 {
     public override void Configure()
     {
-        Get("/api/admin/faculties");
+        Get("admin/faculties");
+        Tags("Administration");
 
         Summary(s =>
         {

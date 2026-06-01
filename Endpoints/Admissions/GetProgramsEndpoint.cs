@@ -14,8 +14,13 @@ public sealed class GetProgramsEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Get("/api/admissions/programs/{FacultyId}");
+        Get("admissions/programs/{FacultyId}");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Programs By Faculty") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all academic programs available under a specific faculty"));
     }
 
     public override async Task HandleAsync(GetProgramsRequest req, CancellationToken ct)

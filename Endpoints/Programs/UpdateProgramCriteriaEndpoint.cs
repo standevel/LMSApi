@@ -17,8 +17,9 @@ public sealed class UpdateProgramCriteriaEndpoint(IAdmissionService admissionSer
 {
     public override void Configure()
     {
-        Put("/api/programs/criteria/{ProgramId}");
+        Put("programs/criteria/{ProgramId}");
         AllowAnonymous(); // TODO: Restrict to Admin role
+        Tags("Courses");
     }
 
     public override async Task HandleAsync(UpdateCriteriaRequest req, CancellationToken ct)

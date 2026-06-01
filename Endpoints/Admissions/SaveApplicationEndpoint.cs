@@ -11,8 +11,13 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
 {
     public override void Configure()
     {
-        Post("/api/admissions/save");
+        Post("admissions/save");
         AllowAnonymous(); // Admission is public until student is fully onboarded
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Save Draft Application") 
+            .WithTags("Admissions")
+            .WithSummary("Save or update a draft admission application without submitting it"));
     }
 
     public override async Task HandleAsync(SaveApplicationRequest req, CancellationToken ct)
@@ -77,6 +82,8 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             UpdatedAt = DateTime.UtcNow,
             // New fields
             ApplicantType = applicantType,
+            DateOfBirth = req.DateOfBirth,
+            EmergencyContactEmail = req.EmergencyContactEmail,
             PreviousInstitutionName = req.PreviousInstitutionName,
             PreviousInstitutionCountry = req.PreviousInstitutionCountry,
             PreviousCGPA = req.PreviousCGPA,
@@ -144,7 +151,9 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
                 saved.Nationality,
                 saved.PassportNumber,
                 saved.EnglishProficiencyScore,
-                saved.EnglishProficiencyType?.ToString()
+                saved.EnglishProficiencyType?.ToString(),
+                saved.DateOfBirth,
+                saved.EmergencyContactEmail
             );
 
             await SendSuccessAsync(response, ct);

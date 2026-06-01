@@ -11,7 +11,7 @@ public sealed class ToggleAcademicProgramStatusEndpoint(IAcademicProgramService 
 {
     public override void Configure()
     {
-        Patch("/api/admin/programs/{id}/toggle-status");
+        Patch("admin/programs/{id}/toggle-status");
         Group<AdminGroup>();
         Summary(s =>
         {

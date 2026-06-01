@@ -10,7 +10,8 @@ public sealed class ListLecturersEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Get("/api/admin/lecturers");
+        Get("admin/lecturers");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

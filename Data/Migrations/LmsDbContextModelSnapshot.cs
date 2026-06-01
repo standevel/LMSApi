@@ -77,7 +77,7 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid?>("DepartmentId")
+                    b.Property<Guid>("DepartmentId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Description")
@@ -86,9 +86,6 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<int>("DurationYears")
                         .HasColumnType("int");
-
-                    b.Property<Guid>("FacultyId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -121,8 +118,6 @@ namespace LMS.Api.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("DepartmentId");
-
-                    b.HasIndex("FacultyId");
 
                     b.ToTable("Programs", (string)null);
                 });
@@ -184,10 +179,10 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal?>("CGPAScaleMax")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(4,2)");
 
                     b.Property<decimal?>("CGPAScaleMin")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(4,2)");
 
                     b.Property<string>("CGPAScaleName")
                         .HasColumnType("nvarchar(max)");
@@ -206,6 +201,9 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<int?>("CreditsEarned")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("DateOfBirth")
+                        .HasColumnType("datetime2");
 
                     b.Property<Guid?>("DeansCertificateDocumentId")
                         .HasColumnType("uniqueidentifier");
@@ -234,9 +232,24 @@ namespace LMS.Api.Data.Migrations
                     b.Property<int?>("DirectEntryYear")
                         .HasColumnType("int");
 
+                    b.Property<string>("EmergencyContactEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<string>("EmergencyContactJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EmergencyContactName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("EnglishProficiencyScore")
                         .HasMaxLength(20)
@@ -270,7 +283,6 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal?>("FinancialProofAmount")
-                        .HasMaxLength(50)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("FinancialProofCurrency")
@@ -1417,7 +1429,7 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal?>("ExchangeRate")
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18,6)");
 
                     b.Property<Guid>("FeeTemplateId")
                         .HasColumnType("uniqueidentifier");
@@ -2315,6 +2327,9 @@ namespace LMS.Api.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("Email")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -2322,6 +2337,9 @@ namespace LMS.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -2348,6 +2366,15 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("EmergencyContactEmail")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EmergencyContactName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EmergencyContactPhone")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("EnrollmentDate")
                         .HasColumnType("datetime2");
@@ -2630,17 +2657,10 @@ namespace LMS.Api.Data.Migrations
                     b.HasOne("LMS.Api.Data.Entities.Department", "Department")
                         .WithMany("Programs")
                         .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
-                        .WithMany("Programs")
-                        .HasForeignKey("FacultyId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Department");
-
-                    b.Navigation("Faculty");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.AdmissionApplication", b =>
@@ -3538,8 +3558,6 @@ namespace LMS.Api.Data.Migrations
             modelBuilder.Entity("LMS.Api.Data.Entities.Faculty", b =>
                 {
                     b.Navigation("Departments");
-
-                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.FeeCategory", b =>

@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -6,6 +7,7 @@ public sealed class CredentialEvaluation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ApplicationId { get; set; }
+    [JsonIgnore]
     public AdmissionApplication Application { get; set; } = null!;
 
     // Evaluation provider info

@@ -17,8 +17,12 @@ public class UpdateLectureTimetableSlotEndpoint(ITimetableService timetableServi
 {
     public override void Configure()
     {
-        Put("/api/timetable/slots/{SlotId}");
+        Put("timetable/slots/{SlotId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("UpdateLectureTimetableSlot")
+            .WithTags("Timetable")
+            .WithSummary("Update a lecture timetable slot"));
     }
 
     public override async Task HandleAsync(UpdateLectureTimetableSlotRequest req, CancellationToken ct)

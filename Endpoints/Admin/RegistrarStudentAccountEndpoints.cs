@@ -53,8 +53,9 @@ public sealed class ListPendingStudentAccountsEndpoint(IAdmissionService admissi
 {
     public override void Configure()
     {
-        Get("/api/admin/students/pending-accounts");
+        Get("admin/students/pending-accounts");
         Roles("SuperAdmin", "Admin", "Registrar");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -87,8 +88,9 @@ public sealed class CreateStudentAccountEndpoint(IAdmissionService admissionServ
 {
     public override void Configure()
     {
-        Post("/api/admin/applications/{ApplicationId}/create-account");
+        Post("admin/applications/{ApplicationId}/create-account");
         Roles("SuperAdmin", "Admin", "Registrar");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -127,7 +129,7 @@ public sealed class BulkCreateStudentAccountsEndpoint(IAdmissionService admissio
 {
     public override void Configure()
     {
-        Post("/api/admin/students/bulk-create-accounts");
+        Post("admin/students/bulk-create-accounts");
         Roles("SuperAdmin", "Admin", "Registrar");
     }
 

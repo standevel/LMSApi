@@ -9,8 +9,12 @@ public class GetAllCourseOfferingsForSessionEndpoint(ILectureSessionService lect
 {
     public override void Configure()
     {
-        Get("/api/lecture-sessions/course-offerings/{academicSessionId}");
+        Get("lecture-sessions/course-offerings/{academicSessionId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetAllCourseOfferingsForSession")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Retrieve all course offerings for a specific academic session"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

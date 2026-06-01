@@ -10,8 +10,13 @@ public sealed class SubmitApplicationEndpoint(IAdmissionService admissionService
 {
     public override void Configure()
     {
-        Post("/api/admissions/submit/{Id}");
+        Post("admissions/submit/{Id}");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Submit Application") 
+            .WithTags("Admissions")
+            .WithSummary("Submit a draft admission application for review"));
     }
 
     public override async Task HandleAsync(SubmitApplicationRequest req, CancellationToken ct)

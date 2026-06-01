@@ -9,8 +9,12 @@ public class GetLecturersEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/timetable/lecturers");
+        Get("timetable/lecturers");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("GetLecturers")
+            .WithTags("Timetable")
+            .WithSummary("Retrieve a list of all lecturers in the system"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

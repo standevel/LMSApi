@@ -8,8 +8,13 @@ public sealed class GetSubjectsEndpoint(IAdmissionService admissionService) : Ap
 {
     public override void Configure()
     {
-        Get("/api/admissions/subjects");
+        Get("admissions/subjects");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Subjects") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all admission subjects (e.g., O'Level subjects)"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

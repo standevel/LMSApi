@@ -16,8 +16,13 @@ public sealed class GetRequiredDocumentTypesEndpoint(IAdmissionService admission
 {
     public override void Configure()
     {
-        Get("/api/admissions/required-document-types");
+        Get("admissions/required-document-types");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Required Document Types") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve document types required for a specific applicant type and program"));
     }
 
     public override async Task HandleAsync(GetRequiredDocumentTypesRequest req, CancellationToken ct)

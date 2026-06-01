@@ -13,8 +13,13 @@ public sealed class UpdateDocumentStatusEndpoint(IDocumentService documentServic
 {
     public override void Configure()
     {
-        Patch("/api/admissions/documents/{Id}/status");
-        AllowAnonymous(); // TODO: Restrict to Registry/Admin roles
+        Patch("admissions/documents/{Id}/status");
+        Policies(LMS.Api.Security.LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Update Document Status") 
+            .WithTags("Admissions")
+            .WithSummary("Update the status of a document (e.g., approved, rejected)"));
     }
 
     public override async Task HandleAsync(UpdateDocumentStatusRequest req, CancellationToken ct)

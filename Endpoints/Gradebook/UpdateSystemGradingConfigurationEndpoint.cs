@@ -19,8 +19,9 @@ public sealed class UpdateSystemGradingConfigurationEndpoint : ApiEndpoint<Updat
 
     public override void Configure()
     {
-        Put("/api/gradebook/system-configuration");
+        Put("gradebook/system-configuration");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(UpdateSystemGradingConfigurationRequest req, CancellationToken ct)

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LMS.Api.Endpoints.Admissions;
 
 internal static class AdmissionResponseMapper
-{
+{ 
     internal static async Task<(Guid? StudentUserId, StudentFeeRecord? FeeRecord)> GetOfferFeeContextAsync(
         LmsDbContext dbContext,
         AdmissionApplication app,
@@ -54,7 +54,7 @@ internal static class AdmissionResponseMapper
             app.Phone,
             app.EmergencyContactJson,
             app.SponsorshipJson,
-            app.Status.ToString(),
+            ToSnakeCase(app.Status.ToString()),
             app.CreatedAt,
             app.SubmittedAt,
             app.Documents.Select(d => new DocumentResponse(
@@ -86,4 +86,10 @@ internal static class AdmissionResponseMapper
             app.EnglishProficiencyScore,
             app.EnglishProficiencyType?.ToString()
         );
+
+    private static string ToSnakeCase(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return string.Concat(value.Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + c : c.ToString())).ToLowerInvariant();
+    }
 }

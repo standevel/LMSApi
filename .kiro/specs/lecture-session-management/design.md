@@ -262,7 +262,7 @@ public interface ISessionManagementService
 
 **GetSessionsEndpoint**
 
-- **Route**: `GET /api/lecture-sessions`
+- **Route**: `GET lecture-sessions`
 - **Query Parameters**:
   ```csharp
   public record SessionFilterRequest(
@@ -301,7 +301,7 @@ public interface ISessionManagementService
 
 **GetSessionDetailsEndpoint**
 
-- **Route**: `GET /api/lecture-sessions/{id}`
+- **Route**: `GET lecture-sessions/{id}`
 - **Response**:
 
   ```csharp
@@ -342,7 +342,7 @@ public interface ISessionManagementService
 
 **UpdateSessionEndpoint** (Admin only)
 
-- **Route**: `PUT /api/lecture-sessions/{id}`
+- **Route**: `PUT lecture-sessions/{id}`
 - **Request**:
   ```csharp
   public record UpdateSessionRequest(
@@ -357,23 +357,23 @@ public interface ISessionManagementService
 
 **DeleteSessionEndpoint** (Admin only)
 
-- **Route**: `DELETE /api/lecture-sessions/{id}`
+- **Route**: `DELETE lecture-sessions/{id}`
 - **Response**: `204 No Content`
 
 **UploadMaterialEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/{id}/materials`
+- **Route**: `POST lecture-sessions/{id}/materials`
 - **Request**: `multipart/form-data` with file
 - **Response**: `SessionMaterial`
 
 **DeleteMaterialEndpoint**
 
-- **Route**: `DELETE /api/lecture-sessions/materials/{materialId}`
+- **Route**: `DELETE lecture-sessions/materials/{materialId}`
 - **Response**: `204 No Content`
 
 **SaveAttendanceEndpoint**
 
-- **Route**: `POST /api/lecture-sessions/{id}/attendance`
+- **Route**: `POST lecture-sessions/{id}/attendance`
 - **Request**:
 
   ```csharp
@@ -389,7 +389,7 @@ public interface ISessionManagementService
 
 **UpdateSessionNotesEndpoint**
 
-- **Route**: `PATCH /api/lecture-sessions/{id}/notes`
+- **Route**: `PATCH lecture-sessions/{id}/notes`
 - **Request**:
   ```csharp
   public record UpdateNotesRequest(string Notes);
@@ -398,7 +398,7 @@ public interface ISessionManagementService
 
 **MarkSessionCompletedEndpoint**
 
-- **Route**: `PATCH /api/lecture-sessions/{id}/completion`
+- **Route**: `PATCH lecture-sessions/{id}/completion`
 - **Request**:
   ```csharp
   public record ToggleCompletionRequest(bool IsCompleted);

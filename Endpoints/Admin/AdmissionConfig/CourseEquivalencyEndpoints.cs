@@ -10,7 +10,8 @@ public sealed class ListCourseEquivalenciesEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/admission-config/course-equivalencies");
+        Get("admin/admission-config/course-equivalencies");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -51,7 +52,7 @@ public sealed class CreateCourseEquivalencyEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admin/admission-config/course-equivalencies");
+        Post("admin/admission-config/course-equivalencies");
     }
 
     public override async Task HandleAsync(CreateCourseEquivalencyRequest req, CancellationToken ct)
@@ -86,7 +87,7 @@ public sealed class UpdateCourseEquivalencyEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Patch("/api/admin/admission-config/course-equivalencies/{Id}");
+        Patch("admin/admission-config/course-equivalencies/{Id}");
     }
 
     public override async Task HandleAsync(UpdateCourseEquivalencyRequest req, CancellationToken ct)
@@ -122,7 +123,7 @@ public sealed class DeleteCourseEquivalencyEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Delete("/api/admin/admission-config/course-equivalencies/{Id}");
+        Delete("admin/admission-config/course-equivalencies/{Id}");
     }
 
     public override async Task HandleAsync(DeleteCourseEquivalencyRequest req, CancellationToken ct)

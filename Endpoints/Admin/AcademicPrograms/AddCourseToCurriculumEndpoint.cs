@@ -11,7 +11,7 @@ public sealed class AddCourseToCurriculumEndpoint(ICurriculumService curriculumS
 {
     public override void Configure()
     {
-        Post("/api/admin/curricula/{CurriculumId}/courses");
+        Post("admin/curricula/{CurriculumId}/courses");
         Group<AdminGroup>();
         Summary(s =>
         {

@@ -16,8 +16,9 @@ public sealed class MarkSessionCompletedEndpoint : ApiEndpoint<ToggleCompletionR
 
     public override void Configure()
     {
-        Patch("/api/lecture-sessions/{id}/completion");
+        Patch("lecture-sessions/{id}/completion");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Lecture Sessions");
     }
 
     public override async Task HandleAsync(ToggleCompletionRequest req, CancellationToken ct)

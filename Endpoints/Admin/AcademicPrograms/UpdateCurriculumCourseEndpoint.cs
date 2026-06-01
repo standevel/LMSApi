@@ -11,8 +11,9 @@ public sealed class UpdateCurriculumCourseEndpoint(ICurriculumService curriculum
 {
     public override void Configure()
     {
-        Put("/api/admin/curricula/{CurriculumId}/courses/{Id}");
+        Put("admin/curricula/{CurriculumId}/courses/{Id}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Update a curriculum course mapping";

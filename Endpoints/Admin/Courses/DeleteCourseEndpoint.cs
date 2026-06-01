@@ -12,8 +12,9 @@ public sealed class DeleteCourseEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Delete("/api/admin/courses/{id}");
+        Delete("admin/courses/{id}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Delete a course";

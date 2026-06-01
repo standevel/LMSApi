@@ -18,8 +18,13 @@ public sealed class DownloadDocumentEndpoint(IDocumentService documentService, I
 {
     public override void Configure()
     {
-        Get("/api/documents/download/{Id}");
+        Get("documents/download/{Id}");
         AllowAnonymous(); // We can add permission checks in the handler
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Download Document") 
+            .WithTags("Admissions")
+            .WithSummary("Download a previously uploaded admission document file"));
     }
 
     public override async Task HandleAsync(DownloadDocumentRequest req, CancellationToken ct)

@@ -181,7 +181,7 @@ The implementation follows this sequence:
 
 - [x] 5. Create API endpoints with authorization
   - [x] 5.1 Create GetSessionsEndpoint
-    - Define GET route `/api/lecture-sessions`
+    - Define GET route `lecture-sessions`
     - Accept SessionFilterRequest as query parameters
     - Get current user ID and role from authentication
     - Call SessionManagementService.GetSessionsAsync
@@ -189,14 +189,14 @@ The implementation follows this sequence:
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1-2.6_
 
   - [x] 5.2 Create GetSessionDetailsEndpoint
-    - Define GET route `/api/lecture-sessions/{id}`
+    - Define GET route `lecture-sessions/{id}`
     - Get current user ID and role from authentication
     - Call SessionManagementService.GetSessionDetailsAsync
     - Return SessionDetailsResponse or 404/403
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
   - [x] 5.3 Create UpdateSessionEndpoint (admin only)
-    - Define PUT route `/api/lecture-sessions/{id}`
+    - Define PUT route `lecture-sessions/{id}`
     - Require admin role authorization
     - Accept UpdateSessionRequest body
     - Call SessionManagementService.UpdateSessionAsync
@@ -204,14 +204,14 @@ The implementation follows this sequence:
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 12.3, 12.6_
 
   - [x] 5.4 Create DeleteSessionEndpoint (admin only)
-    - Define DELETE route `/api/lecture-sessions/{id}`
+    - Define DELETE route `lecture-sessions/{id}`
     - Require admin role authorization
     - Call SessionManagementService.DeleteSessionAsync
     - Return 204 No Content or error
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 12.4, 12.6_
 
   - [x] 5.5 Create UploadMaterialEndpoint
-    - Define POST route `/api/lecture-sessions/{id}/materials`
+    - Define POST route `lecture-sessions/{id}/materials`
     - Accept multipart/form-data with file
     - Get current user ID from authentication
     - Call SessionManagementService.UploadMaterialAsync
@@ -219,14 +219,14 @@ The implementation follows this sequence:
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 12.5, 12.6_
 
   - [x] 5.6 Create DeleteMaterialEndpoint
-    - Define DELETE route `/api/lecture-sessions/materials/{materialId}`
+    - Define DELETE route `lecture-sessions/materials/{materialId}`
     - Get current user ID from authentication
     - Call SessionManagementService.DeleteMaterialAsync
     - Return 204 No Content or error
     - _Requirements: 6.7, 12.5, 12.6_
 
   - [x] 5.7 Create SaveAttendanceEndpoint
-    - Define POST route `/api/lecture-sessions/{id}/attendance`
+    - Define POST route `lecture-sessions/{id}/attendance`
     - Accept SaveAttendanceRequest body
     - Get current user ID from authentication
     - Call SessionManagementService.SaveAttendanceAsync
@@ -234,7 +234,7 @@ The implementation follows this sequence:
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 12.5, 12.6_
 
   - [x] 5.8 Create UpdateSessionNotesEndpoint
-    - Define PATCH route `/api/lecture-sessions/{id}/notes`
+    - Define PATCH route `lecture-sessions/{id}/notes`
     - Accept UpdateNotesRequest body
     - Get current user ID from authentication
     - Call SessionManagementService.UpdateNotesAsync
@@ -242,7 +242,7 @@ The implementation follows this sequence:
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 12.5, 12.6_
 
   - [x] 5.9 Create MarkSessionCompletedEndpoint
-    - Define PATCH route `/api/lecture-sessions/{id}/completion`
+    - Define PATCH route `lecture-sessions/{id}/completion`
     - Accept ToggleCompletionRequest body
     - Get current user ID from authentication
     - Call SessionManagementService.ToggleCompletionAsync

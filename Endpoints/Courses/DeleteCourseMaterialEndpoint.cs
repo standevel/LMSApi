@@ -19,8 +19,9 @@ public sealed class DeleteCourseMaterialEndpoint : ApiEndpointWithoutRequest<obj
 
     public override void Configure()
     {
-        Delete("/api/courses/materials/{materialId:guid}");
+        Delete("courses/materials/{materialId:guid}");
         AllowAnonymous();
+        Tags("Courses");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

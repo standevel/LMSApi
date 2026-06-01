@@ -52,6 +52,8 @@ public sealed record AdmissionApplicationResponse(
     string? PassportNumber = null,
     string? EnglishProficiencyScore = null,
     string? EnglishProficiencyType = null,
+    DateTime? DateOfBirth = null,
+    string? EmergencyContactEmail = null,
     // --- Phase 1: Country & Region ---
     string? CountryOfOrigin = null,
     string? CountryName = null,
@@ -146,6 +148,8 @@ public sealed class SaveApplicationRequest
     public string? PassportNumber { get; set; }
     public string? EnglishProficiencyScore { get; set; }
     public string? EnglishProficiencyType { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public string? EmergencyContactEmail { get; set; }
 
     // --- Phase 1: Country & Region ---
     public string? CountryOfOrigin { get; set; }

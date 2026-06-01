@@ -15,8 +15,12 @@ public sealed class DeleteSessionEndpoint : ApiEndpointWithoutRequest<object>
 
     public override void Configure()
     {
-        Delete("/api/lecture-sessions/{id}");
+        Delete("lecture-sessions/{id}");
         Roles("SuperAdmin", "Admin");
+        Description(d => d
+            .WithName("DeleteSession")
+            .WithTags("Lecture Sessions")
+            .WithSummary("Delete a lecture session"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

@@ -19,9 +19,10 @@ public sealed class AddCourseMaterialEndpoint : ApiEndpoint<AddCourseMaterialReq
 
     public override void Configure()
     {
-        Post("/api/courses/{offeringId:guid}/materials");
+        Post("courses/{offeringId:guid}/materials");
         AllowAnonymous();
         AllowFileUploads();
+        Tags("Courses");
     }
 
     public override async Task HandleAsync(AddCourseMaterialRequest req, CancellationToken ct)

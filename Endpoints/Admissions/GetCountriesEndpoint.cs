@@ -9,8 +9,13 @@ public sealed class GetCountriesEndpoint(LmsDbContext dbContext) : ApiEndpoint<E
 {
     public override void Configure()
     {
-        Get("/api/countries");
+        Get("countries");
         AllowAnonymous();
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Get Countries") 
+            .WithTags("Admissions")
+            .WithSummary("Retrieve all active countries for use in admission forms"));
     }
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)

@@ -10,8 +10,9 @@ public sealed class AddCoursePrerequisiteEndpoint(ICurriculumService curriculumS
 {
     public override void Configure()
     {
-        Post("/api/admin/courses/{id}/prerequisites");
+        Post("admin/courses/{id}/prerequisites");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Add a prerequisite to a course";

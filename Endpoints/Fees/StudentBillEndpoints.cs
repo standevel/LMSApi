@@ -13,8 +13,9 @@ public sealed class GetStudentBillEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/bill/{studentId}/{sessionId}");
+        Get("fees/bill/{studentId}/{sessionId}");
         Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -79,8 +80,9 @@ public sealed class GenerateStudentBillEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/bill/{studentId}/{sessionId}/generate");
+        Post("fees/bill/{studentId}/{sessionId}/generate");
         Roles("SuperAdmin", "Admin", "Finance", "Registry");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -98,8 +100,9 @@ public sealed class GetMyBillEndpoint(IFeeService feeService, LmsDbContext db)
 {
     public override void Configure()
     {
-        Get("/api/fees/my-bill");
+        Get("fees/my-bill");
         Roles("Student");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

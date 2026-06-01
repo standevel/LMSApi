@@ -11,7 +11,7 @@ public sealed class CreateAcademicProgramEndpoint(IAcademicProgramService progra
 {
     public override void Configure()
     {
-        Post("/api/admin/programs");
+        Post("admin/programs");
         Group<AdminGroup>();
         Summary(s =>
         {

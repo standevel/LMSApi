@@ -28,8 +28,9 @@ public sealed class GetManagedUserEndpoint(IAdminAuthzService adminAuthzService)
 {
     public override void Configure()
     {
-        Get("/api/admin/users/{entraObjectId}");
+        Get("admin/users/{entraObjectId}");
         Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Data.Entities;
 
@@ -21,12 +22,18 @@ public sealed class LectureSession
     public Guid CreatedBy { get; set; }
 
     // Navigation properties
+    [JsonIgnore]
     public CourseOffering CourseOffering { get; set; } = null!;
+    [JsonIgnore]
     public LectureTimetableSlot? TimetableSlot { get; set; }
     public Subject? Venue { get; set; }
     public AppUser CreatedByUser { get; set; } = null!;
+    [JsonIgnore]
     public ICollection<LectureSessionLecturer> SessionLecturers { get; set; } = new List<LectureSessionLecturer>();
+    [JsonIgnore]
     public ICollection<SessionMaterial> Materials { get; set; } = new List<SessionMaterial>();
+    [JsonIgnore]
     public ICollection<SessionExternalLink> ExternalLinks { get; set; } = new List<SessionExternalLink>();
+    [JsonIgnore]
     public ICollection<SessionAttendance> Attendance { get; set; } = new List<SessionAttendance>();
 }

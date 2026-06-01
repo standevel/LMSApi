@@ -231,10 +231,10 @@ public sealed class FeeService(
 
         // Load student's program/faculty for assignment matching
         var enrollment = await db.Enrollments
-            .Include(e => e.Program).ThenInclude(p => p.Faculty)
+            .Include(e => e.Program).ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
             .FirstOrDefaultAsync(e => e.UserId == studentId && e.AcademicSessionId == sessionId);
 
-        Guid? facultyId = enrollment?.Program?.FacultyId;
+        Guid? facultyId = enrollment?.Program?.Department?.FacultyId;
         Guid? programId = enrollment?.ProgramId;
 
         // Get all active templates

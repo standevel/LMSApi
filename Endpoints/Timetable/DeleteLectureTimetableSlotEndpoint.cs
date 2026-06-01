@@ -10,8 +10,12 @@ public class DeleteLectureTimetableSlotEndpoint(ITimetableService timetableServi
 {
     public override void Configure()
     {
-        Delete("/api/timetable/slots/{SlotId}");
+        Delete("timetable/slots/{SlotId}");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("DeleteLectureTimetableSlot")
+            .WithTags("Timetable")
+            .WithSummary("Delete a lecture timetable slot"));
     }
 
     public override async Task HandleAsync(CancellationToken ct)

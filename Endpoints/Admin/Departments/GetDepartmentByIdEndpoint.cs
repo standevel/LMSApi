@@ -14,8 +14,9 @@ public sealed class GetDepartmentByIdEndpoint(IDepartmentService departmentServi
 {
     public override void Configure()
     {
-        Get("/api/admin/departments/{id:guid}");
+        Get("admin/departments/{id:guid}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Get department by ID";

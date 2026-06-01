@@ -37,7 +37,7 @@ public sealed class AcademicProgramService(
             Description = request.Description,
             // Ensure a non-null value for DegreeAwarded to avoid DB NOT NULL errors
             DegreeAwarded = request.DegreeAwarded ?? string.Empty,
-            FacultyId = request.FacultyId,
+            DepartmentId = request.DepartmentId,
             Type = request.Type,
             DurationYears = request.DurationYears,
             MinJambScore = request.MinJambScore,
@@ -88,7 +88,7 @@ public sealed class AcademicProgramService(
         program.Description = request.Description;
         // Guard against null to match DB NOT NULL constraint
         program.DegreeAwarded = request.DegreeAwarded ?? string.Empty;
-        program.FacultyId = request.FacultyId;
+        program.DepartmentId = request.DepartmentId;
         program.Type = request.Type;
         program.DurationYears = request.DurationYears;
         program.MinJambScore = request.MinJambScore;

@@ -19,8 +19,12 @@ public class CreateLectureTimetableSlotEndpoint(ITimetableService timetableServi
 {
     public override void Configure()
     {
-        Post("/api/timetable/slots");
+        Post("timetable/slots");
         Roles("Admin", "Registrar", "SuperAdmin");
+        Description(d => d
+            .WithName("CreateLectureTimetableSlot")
+            .WithTags("Timetable")
+            .WithSummary("Create a new lecture timetable slot"));
     }
 
     public override async Task HandleAsync(CreateLectureTimetableSlotRequest req, CancellationToken ct)

@@ -19,8 +19,9 @@ public sealed class GetStudentGradesEndpoint : ApiEndpointWithoutRequest<Student
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}/my-grades");
+        Get("gradebook/courses/{offeringId:guid}/my-grades");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -72,8 +73,9 @@ public sealed class GetAllMyGradesEndpoint : ApiEndpointWithoutRequest<List<Stud
 
     public override void Configure()
     {
-        Get("/api/gradebook/my-grades");
+        Get("gradebook/my-grades");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

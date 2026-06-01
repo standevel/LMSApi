@@ -11,8 +11,9 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
 {
     public override void Configure()
     {
-        Get("/api/me");
+        Get("me");
         AllowAnonymous();
+        Tags("Authentication");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

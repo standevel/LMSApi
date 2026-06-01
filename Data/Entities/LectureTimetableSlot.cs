@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Data.Entities;
@@ -27,6 +28,7 @@ public sealed class LectureTimetableSlot
     public Guid? UpdatedByUserId { get; set; }
 
     // Navigation properties
+    [JsonIgnore]
     public CourseOffering CourseOffering { get; set; } = null!;
     public AppUser? Lecturer { get; set; }
     public Subject? Venue { get; set; } // Using Subject as Venue placeholder

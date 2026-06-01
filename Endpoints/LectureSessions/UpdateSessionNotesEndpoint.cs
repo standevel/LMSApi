@@ -16,8 +16,9 @@ public sealed class UpdateSessionNotesEndpoint : ApiEndpoint<UpdateNotesRequest,
 
     public override void Configure()
     {
-        Patch("/api/lecture-sessions/{id}/notes");
+        Patch("lecture-sessions/{id}/notes");
         Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Lecture Sessions");
     }
 
     public override async Task HandleAsync(UpdateNotesRequest req, CancellationToken ct)

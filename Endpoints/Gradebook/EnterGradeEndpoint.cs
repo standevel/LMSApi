@@ -19,8 +19,9 @@ public sealed class EnterGradeEndpoint : ApiEndpoint<EnterGradeRequest, GradeDto
 
     public override void Configure()
     {
-        Post("/api/gradebook/grades");
+        Post("gradebook/grades");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(EnterGradeRequest req, CancellationToken ct)
@@ -71,8 +72,9 @@ public sealed class BulkEnterGradesEndpoint : ApiEndpoint<BulkEnterGradesRequest
 
     public override void Configure()
     {
-        Post("/api/gradebook/grades/bulk");
+        Post("gradebook/grades/bulk");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(BulkEnterGradesRequest req, CancellationToken ct)

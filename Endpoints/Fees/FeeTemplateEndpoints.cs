@@ -9,8 +9,9 @@ public sealed class CreateFeeTemplateEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/templates");
+        Post("fees/templates");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CreateFeeTemplateRequest req, CancellationToken ct)
@@ -26,8 +27,9 @@ public sealed class UpdateFeeTemplateEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Put("/api/fees/templates/{id}");
+        Put("fees/templates/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(UpdateFeeTemplateRequest req, CancellationToken ct)
@@ -51,8 +53,9 @@ public sealed class ToggleFeeTemplateEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Patch("/api/fees/templates/{id}/toggle");
+        Patch("fees/templates/{id}/toggle");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -76,8 +79,9 @@ public sealed class GetFeeTemplatesEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/templates");
+        Get("fees/templates");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -94,8 +98,9 @@ public sealed class GetFeeTemplateByIdEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/templates/{id}");
+        Get("fees/templates/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

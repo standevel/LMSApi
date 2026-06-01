@@ -9,8 +9,9 @@ public sealed class CreateDepartmentEndpoint(IDepartmentService departmentServic
 {
     public override void Configure()
     {
-        Post("/api/admin/departments");
+        Post("admin/departments");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Create a department";

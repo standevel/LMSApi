@@ -11,7 +11,8 @@ public sealed class ListCreditTransferRulesEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Get("/api/admin/admission-config/credit-transfer-rules");
+        Get("admin/admission-config/credit-transfer-rules");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -48,7 +49,7 @@ public sealed class CreateCreditTransferRuleEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Post("/api/admin/admission-config/credit-transfer-rules");
+        Post("admin/admission-config/credit-transfer-rules");
     }
 
     public override async Task HandleAsync(CreateCreditTransferRuleRequest req, CancellationToken ct)
@@ -79,7 +80,7 @@ public sealed class UpdateCreditTransferRuleEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Patch("/api/admin/admission-config/credit-transfer-rules/{Id}");
+        Patch("admin/admission-config/credit-transfer-rules/{Id}");
     }
 
     public override async Task HandleAsync(UpdateCreditTransferRuleRequest req, CancellationToken ct)
@@ -110,7 +111,7 @@ public sealed class DeleteCreditTransferRuleEndpoint(LmsDbContext dbContext)
 {
     public override void Configure()
     {
-        Delete("/api/admin/admission-config/credit-transfer-rules/{Id}");
+        Delete("admin/admission-config/credit-transfer-rules/{Id}");
     }
 
     public override async Task HandleAsync(DeleteCreditTransferRuleRequest req, CancellationToken ct)

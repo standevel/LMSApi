@@ -11,8 +11,9 @@ public sealed class GetCourseByIdEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Get("/api/admin/courses/{id}");
+        Get("admin/courses/{id}");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Get a course by ID";

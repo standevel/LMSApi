@@ -17,8 +17,9 @@ public sealed class GetPublicationStatusEndpoint : ApiEndpointWithoutRequest<Gra
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}/publication");
+        Get("gradebook/courses/{offeringId:guid}/publication");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -56,8 +57,9 @@ public sealed class PublishGradesEndpoint : ApiEndpoint<PublishGradesRequest, Gr
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/publish");
+        Post("gradebook/courses/{offeringId:guid}/publish");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(PublishGradesRequest req, CancellationToken ct)
@@ -109,8 +111,9 @@ public sealed class UnpublishGradesEndpoint : ApiEndpointWithoutRequest<object>
 
     public override void Configure()
     {
-        Post("/api/gradebook/courses/{offeringId:guid}/unpublish");
+        Post("gradebook/courses/{offeringId:guid}/unpublish");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

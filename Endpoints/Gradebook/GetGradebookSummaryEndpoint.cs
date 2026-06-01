@@ -19,8 +19,9 @@ public sealed class GetGradebookSummaryEndpoint : ApiEndpointWithoutRequest<Grad
 
     public override void Configure()
     {
-        Get("/api/gradebook/courses/{offeringId:guid}");
+        Get("gradebook/courses/{offeringId:guid}");
         AllowAnonymous();
+        Tags("Gradebook");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

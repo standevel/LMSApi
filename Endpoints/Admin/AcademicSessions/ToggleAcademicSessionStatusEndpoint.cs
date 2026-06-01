@@ -13,8 +13,9 @@ public sealed class ToggleAcademicSessionStatusEndpoint(IAcademicSessionService 
 {
     public override void Configure()
     {
-        Patch("/api/admin/sessions/{id}/toggle-status");
+        Patch("admin/sessions/{id}/toggle-status");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Toggle academic session status";

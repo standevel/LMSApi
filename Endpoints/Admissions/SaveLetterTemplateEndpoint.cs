@@ -10,8 +10,13 @@ public sealed class SaveLetterTemplateEndpoint(ILetterTemplateService letterServ
 {
     public override void Configure()
     {
-        Post("/api/admissions/letter-templates");
+        Post("admissions/letter-templates");
         Policies(LmsPolicies.Management);
+        Tags("Admissions");
+        Description(d => d
+            .WithName("Save Letter Template") 
+            .WithTags("Admissions")
+            .WithSummary("Create or update a letter template for a specific admission type"));
     }
 
     public override async Task HandleAsync(SaveLetterTemplateRequest req, CancellationToken ct)

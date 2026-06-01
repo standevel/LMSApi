@@ -9,8 +9,9 @@ public sealed class CreateFeeCategoryEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Post("/api/fees/categories");
+        Post("fees/categories");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CreateFeeCategoryRequest req, CancellationToken ct)
@@ -25,8 +26,9 @@ public sealed class UpdateFeeCategoryEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Put("/api/fees/categories/{id}");
+        Put("fees/categories/{id}");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(UpdateFeeCategoryRequest req, CancellationToken ct)
@@ -49,8 +51,9 @@ public sealed class ToggleFeeCategoryEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Patch("/api/fees/categories/{id}/toggle");
+        Patch("fees/categories/{id}/toggle");
         Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -73,8 +76,9 @@ public sealed class GetFeeCategoriesEndpoint(IFeeService feeService)
 {
     public override void Configure()
     {
-        Get("/api/fees/categories");
+        Get("fees/categories");
         // Roles("SuperAdmin", "Admin", "Finance");
+        Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

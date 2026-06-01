@@ -13,7 +13,8 @@ public sealed class ToggleCourseStatusEndpoint(ICourseService courseService)
 {
     public override void Configure()
     {
-        Patch("/api/admin/courses/{id}/toggle-status");
+        Patch("admin/courses/{id}/toggle-status");
+        Tags("Administration");
     }
 
     public override async Task HandleAsync(ToggleCourseStatusRequest req, CancellationToken ct)

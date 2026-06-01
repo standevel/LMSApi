@@ -11,8 +11,9 @@ public sealed class CreateAcademicSessionEndpoint(IAcademicSessionService sessio
 {
     public override void Configure()
     {
-        Post("/api/admin/sessions");
+        Post("admin/sessions");
         Group<AdminGroup>();
+        Tags("Administration");
         Summary(s =>
         {
             s.Summary = "Create an academic session";
