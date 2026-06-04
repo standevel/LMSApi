@@ -26,7 +26,7 @@ public sealed partial class DbInitializer(LmsDbContext dbContext, ILogger<DbInit
         await SeedLecturersAsync(ct);
         await SeedDocumentTypesAsync(ct);
         await SeedSponsorsAsync(ct);
-await SeedSubjectsAsync(ct);
+        await SeedSubjectsAsync(ct);
 await SeedCountriesAsync(ct);
         await SeedGradingScalesAsync(ct);
         await SeedCreditTransferRulesAsync(ct);
