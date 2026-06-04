@@ -14,11 +14,11 @@ public sealed class GetTranscriptRequestEndpoint : ApiEndpointWithoutRequest<Tra
         _transcriptService = transcriptService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/transcript-requests/{requestId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/transcript-requests/{requestId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

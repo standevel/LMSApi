@@ -14,11 +14,11 @@ public sealed class GetDepartmentDashboardEndpoint : ApiEndpointWithoutRequest<D
         _analyticsService = analyticsService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/dashboard/department/{departmentId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/dashboard/department/{departmentId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

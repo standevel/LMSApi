@@ -270,6 +270,8 @@ await SeedCountriesAsync(ct);
             new() { Name = "Information and Communications Technology", Code = "ICT", FacultyId = scienceComputing.Id },
             new() { Name = "Mathematics", Code = "MA", FacultyId = scienceComputing.Id },
             new() { Name = "Data Science", Code = "DS", FacultyId = scienceComputing.Id },
+            new() { Name = "Artificial Intelligence and Robotics", Code = "AI", FacultyId = scienceComputing.Id },
+            new() { Name = "Data Science and Artificial Intelligence", Code = "DSAI", FacultyId = scienceComputing.Id },
         };
 
         dbContext.Departments.AddRange(departments);
@@ -317,6 +319,8 @@ await SeedCountriesAsync(ct);
         var fsDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FS", ct);
         var faDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "FA", ct);
         var tpDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "TP", ct);
+        var aiDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "AI", ct);
+        var dsaiDept = await dbContext.Departments.FirstOrDefaultAsync(d => d.Code == "DSAI", ct);
 
         var programs = new List<AcademicProgram>
         {
@@ -337,7 +341,7 @@ await SeedCountriesAsync(ct);
             new() { Name = "B.Sc. Business Administration", Code = "BBAM", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
             new() { Name = "B.Sc. Innovation and Social Entrepreneurship", Code = "BINE", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
             new() { Name = "B.Sc. Economics", Code = "BECO", DepartmentId = baDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
-
+            
             // Arts College
             new() { Name = "BA Animation and Visual Communications", Code = "BAVC", DepartmentId = cdmDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },
             new() { Name = "BSc Communication and Digital Media", Code = "BCDM", DepartmentId = cdmDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },

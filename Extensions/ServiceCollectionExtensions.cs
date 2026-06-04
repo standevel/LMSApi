@@ -172,6 +172,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminAuthzService, AdminAuthzService>();
         services.AddScoped<IRateLimitingService, RateLimitingService>();
         services.AddScoped<IWebhookService, WebhookService>();
+        services.AddScoped<IStudentBulkImportService, StudentBulkImportService>();
         services.AddScoped<IDbInitializer, DbInitializer>();
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
@@ -183,6 +184,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDegreeAuditService, DegreeAuditService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IReportSchedulerService, ReportSchedulerService>();
+
+        // Course Catalog Import
+        services.AddScoped<ICourseCatalogImportService, CourseCatalogImportService>();
 
         var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 

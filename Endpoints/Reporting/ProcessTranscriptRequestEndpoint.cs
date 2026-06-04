@@ -17,11 +17,11 @@ public sealed class ProcessTranscriptRequestEndpoint : ApiEndpointWithoutRequest
         _currentUserContext = currentUserContext;
     }
 
-    public override void Configure()
-    {
-        Post("api/reports/transcript-requests/{requestId:guid}/process");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Post("reports/transcript-requests/{requestId:guid}/process");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

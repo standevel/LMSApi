@@ -28,10 +28,14 @@ public sealed class JwtTokenService(
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new("oid", user.EntraObjectId),
             new("name", user.DisplayName ?? user.Username ?? user.Email ?? user.Id.ToString()),
-            new("preferred_username", user.Username ?? user.Email ?? user.EntraObjectId)
+            new("preferred_username", user.Username ?? user.Email ?? user.Id.ToString())
         };
+
+        if (!string.IsNullOrEmpty(user.EntraObjectId))
+        {
+            claims.Add(new Claim("oid", user.EntraObjectId));
+        }
 
         foreach (var role in roles)
         {

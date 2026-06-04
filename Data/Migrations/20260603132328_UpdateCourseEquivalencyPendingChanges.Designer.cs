@@ -4,6 +4,7 @@ using LMS.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LMS.Api.Data.Migrations
 {
     [DbContext(typeof(LmsDbContext))]
-    partial class LmsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260603132328_UpdateCourseEquivalencyPendingChanges")]
+    partial class UpdateCourseEquivalencyPendingChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1119,9 +1122,6 @@ namespace LMS.Api.Data.Migrations
                     b.Property<Guid>("CourseId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("CurriculumId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1137,8 +1137,6 @@ namespace LMS.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AcademicSessionId");
-
-                    b.HasIndex("CurriculumId");
 
                     b.HasIndex("LecturerId");
 
@@ -3581,13 +3579,6 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime?>("GraduationDate")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("JambRegistrationNumber")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int?>("JambScore")
-                        .HasColumnType("int");
-
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -4239,10 +4230,6 @@ namespace LMS.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("LMS.Api.Data.Entities.Curriculum", "Curriculum")
-                        .WithMany()
-                        .HasForeignKey("CurriculumId");
-
                     b.HasOne("LMS.Api.Data.Entities.AppUser", "Lecturer")
                         .WithMany()
                         .HasForeignKey("LecturerId")
@@ -4263,8 +4250,6 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("AcademicSession");
 
                     b.Navigation("Course");
-
-                    b.Navigation("Curriculum");
 
                     b.Navigation("Lecturer");
 

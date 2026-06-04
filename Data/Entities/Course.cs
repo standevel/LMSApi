@@ -10,6 +10,8 @@ public sealed class Course
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int CreditUnits { get; set; }
+    public int? LectureHours { get; set; }
+    public int? PracticalHours { get; set; }
     public bool IsActive { get; set; } = true;
 
     [JsonIgnore]

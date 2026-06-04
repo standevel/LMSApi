@@ -39,6 +39,10 @@ public sealed class Student
     public AcademicLevel? Level { get; set; }
     public string? StudentNumber { get; set; } // Matric number - assigned by Registrar after admission
     
+    // JAMB / UTME Info (from admission import)
+    public string? JambRegistrationNumber { get; set; }
+    public int? JambScore { get; set; }
+    
     // Status
     public StudentStatus Status { get; set; } = StudentStatus.Active;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -17,7 +17,7 @@ namespace LMS.Api.Data.Entities
         [Required]
         public string Description { get; set; } = string.Empty;
         
-        [Column(TypeName = "int?")]
+        [Column(TypeName = "int")]
         public int? TimeLimitMinutes { get; set; }
 
         public Guid CourseOfferingId { get; set; }

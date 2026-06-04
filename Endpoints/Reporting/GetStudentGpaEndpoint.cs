@@ -17,11 +17,11 @@ public sealed class GetStudentGpaEndpoint : ApiEndpointWithoutRequest<GpaDto>
         _currentUserContext = currentUserContext;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/gpa/{studentId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/gpa/{studentId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

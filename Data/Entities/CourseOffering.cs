@@ -13,6 +13,7 @@ public sealed class CourseOffering
     public Guid AcademicSessionId { get; set; }
     public Guid? LecturerId { get; set; }
     public Semester Semester { get; set; }
+    public Guid? CurriculumId { get; set; }
 
     [JsonIgnore]
     public Course Course { get; set; } = null!;
@@ -22,5 +23,7 @@ public sealed class CourseOffering
     public AcademicLevel Level { get; set; } = null!;
     [JsonIgnore]
     public AcademicSession AcademicSession { get; set; } = null!;
+    [JsonIgnore]
+    public Curriculum? Curriculum { get; set; }
     public AppUser? Lecturer { get; set; }
 }

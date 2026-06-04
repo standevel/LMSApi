@@ -102,3 +102,64 @@ public sealed class UploadGradesExcelEndpoint : ApiEndpointWithoutRequest<GradeU
         await SendSuccessAsync(result.Value, ct, "Grades uploaded successfully");
     }
 }
+
+public sealed class MigrateClassterResultsEndpoint : ApiEndpointWithoutRequest<GradeUploadResultDto>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly ICurrentUserContext _currentUserContext;
+
+    public MigrateClassterResultsEndpoint(IGradebookService gradebookService, ICurrentUserContext currentUserContext)
+    {
+        _gradebookService = gradebookService;
+        _currentUserContext = currentUserContext;
+    }
+
+    public override void Configure()
+    {
+        Post("gradebook/migrate-classter");
+        Roles("SuperAdmin", "Admin", "Registrar");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await _currentUserContext.GetUserIdAsync(ct);
+
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Could not resolve your identity.", ct);
+            return;
+        }
+
+        if (!HttpContext.Request.Form.TryGetValue("academicSessionId", out var sessionValues) || 
+            !Guid.TryParse(sessionValues.FirstOrDefault(), out var academicSessionId))
+        {
+            await SendFailureAsync(400, "Missing academicSessionId", "MISSING_SESSION", "Academic session is required", ct);
+            return;
+        }
+
+        if (!HttpContext.Request.Form.TryGetValue("courseId", out var courseValues) || 
+            !Guid.TryParse(courseValues.FirstOrDefault(), out var courseId))
+        {
+            await SendFailureAsync(400, "Missing courseId", "MISSING_COURSE", "Course is required", ct);
+            return;
+        }
+
+        var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        if (file == null)
+        {
+            await SendFailureAsync(400, "No file uploaded", "FILE_REQUIRED", "Please upload an Excel file", ct);
+            return;
+        }
+
+        var result = await _gradebookService.MigrateClassterGradesAsync(academicSessionId, courseId, file, userId.Value, ct);
+
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(result.Value, ct, "Classter migration completed successfully");
+    }
+}

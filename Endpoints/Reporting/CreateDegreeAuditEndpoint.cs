@@ -17,11 +17,11 @@ public sealed class CreateDegreeAuditEndpoint : ApiEndpoint<CreateDegreeAuditReq
         _currentUserContext = currentUserContext;
     }
 
-    public override void Configure()
-    {
-        Post("api/reports/degree-audit");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Post("reports/degree-audit");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CreateDegreeAuditRequest request, CancellationToken ct)
     {

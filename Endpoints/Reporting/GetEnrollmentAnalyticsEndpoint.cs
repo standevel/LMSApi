@@ -14,11 +14,11 @@ public sealed class GetEnrollmentAnalyticsEndpoint : ApiEndpointWithoutRequest<E
         _analyticsService = analyticsService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/enrollment-analytics");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/enrollment-analytics");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

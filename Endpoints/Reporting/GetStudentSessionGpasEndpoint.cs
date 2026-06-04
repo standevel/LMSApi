@@ -14,11 +14,11 @@ public sealed class GetStudentSessionGpasEndpoint : ApiEndpointWithoutRequest<Li
         _gpaService = gpaService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/gpa/{studentId:guid}/sessions");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/gpa/{studentId:guid}/sessions");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

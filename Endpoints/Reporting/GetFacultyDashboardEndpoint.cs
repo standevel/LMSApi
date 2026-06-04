@@ -14,11 +14,11 @@ public sealed class GetFacultyDashboardEndpoint : ApiEndpointWithoutRequest<Facu
         _analyticsService = analyticsService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/dashboard/faculty/{facultyId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/dashboard/faculty/{facultyId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

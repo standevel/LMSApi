@@ -17,11 +17,11 @@ public sealed class CreateTranscriptRequestEndpoint : ApiEndpoint<CreateTranscri
         _currentUserContext = currentUserContext;
     }
 
-    public override void Configure()
-    {
-        Post("api/reports/transcript-requests");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Post("reports/transcript-requests");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CreateTranscriptRequestDto request, CancellationToken ct)
     {

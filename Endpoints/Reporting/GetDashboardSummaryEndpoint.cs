@@ -14,11 +14,11 @@ public sealed class GetDashboardSummaryEndpoint : ApiEndpointWithoutRequest<Dash
         _analyticsService = analyticsService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/dashboard/summary");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/dashboard/summary");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

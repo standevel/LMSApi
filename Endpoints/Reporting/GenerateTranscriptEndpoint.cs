@@ -17,11 +17,11 @@ public sealed class GenerateTranscriptEndpoint : ApiEndpointWithoutRequest<Trans
         _currentUserContext = currentUserContext;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/transcript/{studentId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/transcript/{studentId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

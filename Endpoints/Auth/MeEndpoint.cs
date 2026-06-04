@@ -48,60 +48,86 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
 
         Console.WriteLine($"--- ME ENDPOINT: EXTRACTED --- Name: {name}, Email: {email}, ObjectId: {objectId}, Subject: {subjectId}");
 
-        var roles = User.FindAll("roles")
-            .Concat(User.FindAll(ClaimTypes.Role))
-            .Select(c => c.Value)
-            .Distinct()
-            .ToList();
-
-        AppUser? user = null;
-        if (!string.IsNullOrEmpty(objectId))
+        var roles = new List<string>();
+        try
         {
-            user = await userRepository.GetByEntraObjectIdAsync(objectId, ct);
+            var rolesFromToken = User.FindAll("roles")
+                .Concat(User.FindAll(ClaimTypes.Role))
+                .Select(c => c.Value)
+                .Distinct()
+                .ToList();
+            roles = rolesFromToken ?? new List<string>();
+        }
+        catch
+        {
+            roles = new List<string>();
         }
 
-        if (user is null && !string.IsNullOrEmpty(subjectId) && Guid.TryParse(subjectId, out var subjectGuid))
+        AppUser? user = null;
+        try
         {
-            user = await userRepository.GetByIdAsync(subjectGuid, ct);
+            if (!string.IsNullOrEmpty(objectId))
+            {
+                user = await userRepository.GetByEntraObjectIdAsync(objectId, ct);
+            }
+
+            if (user is null && !string.IsNullOrEmpty(subjectId) && Guid.TryParse(subjectId, out var subjectGuid))
+            {
+                user = await userRepository.GetByIdAsync(subjectGuid, ct);
+            }
+        }
+        catch (Exception dbEx)
+        {
+            Console.WriteLine($"[MeEndpoint] DB lookup failed: {dbEx.Message}");
+            // Continue without user data — still return what we have from the token
         }
 
         if (user is not null)
         {
-            if (user.EntraObjectId is null && !string.IsNullOrEmpty(objectId) && objectId != subjectId)
+            try
             {
-                user.EntraObjectId = objectId;
-            }
+                if (user.EntraObjectId is null && !string.IsNullOrEmpty(objectId) && objectId != subjectId)
+                {
+                    user.EntraObjectId = objectId;
+                }
 
-            bool changed = false;
-            if (string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(email))
-            {
-                Console.WriteLine($"Updating email for existing user {user.Id} to {email}");
-                user.Email = email;
-                user.Username ??= email;
-                changed = true;
-            }
-            if (string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(name))
-            {
-                Console.WriteLine($"Updating display name for existing user {user.Id} to {name}");
-                user.DisplayName = name;
-                changed = true;
-            }
+                bool changed = false;
+                if (string.IsNullOrEmpty(user.Email) && !string.IsNullOrEmpty(email))
+                {
+                    Console.WriteLine($"Updating email for existing user {user.Id} to {email}");
+                    user.Email = email;
+                    user.Username ??= email;
+                    changed = true;
+                }
+                if (string.IsNullOrEmpty(user.DisplayName) && !string.IsNullOrEmpty(name))
+                {
+                    Console.WriteLine($"Updating display name for existing user {user.Id} to {name}");
+                    user.DisplayName = name;
+                    changed = true;
+                }
 
-            if (changed)
-            {
-                user.UpdatedUtc = DateTime.UtcNow;
-                await userRepository.SaveChangesAsync(ct);
-                Console.WriteLine($"Existing user {user.Id} updated.");
+                if (changed)
+                {
+                    user.UpdatedUtc = DateTime.UtcNow;
+                    await userRepository.SaveChangesAsync(ct);
+                    Console.WriteLine($"Existing user {user.Id} updated.");
+                }
+
+                var localRoles = (user.UserRoles as ICollection<UserRole> ?? Array.Empty<UserRole>())
+                    .Select(ur => ur?.Role?.Name ?? string.Empty)
+                    .Where(r => !string.IsNullOrEmpty(r))
+                    .ToList();
+
+                if (localRoles.Count > 0)
+                {
+                    Console.WriteLine($"Merging local roles: {string.Join(", ", localRoles)}");
+                    roles = roles.Union(localRoles).Distinct().ToList();
+                }
             }
-
-            var localRoles = user.UserRoles
-                .Select(ur => ur.Role.Name)
-                .ToList();
-
-            if (localRoles.Count > 0)
+            catch (Exception updateEx)
             {
-                Console.WriteLine($"Merging local roles: {string.Join(", ", localRoles)}");
-                roles = roles.Union(localRoles).Distinct().ToList();
+                Console.WriteLine($"[MeEndpoint] User update failed: {updateEx.Message}");
+                // Continue — we still return token claims
             }
         }
 

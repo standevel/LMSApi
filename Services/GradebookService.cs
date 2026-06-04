@@ -1173,7 +1173,7 @@ public sealed class GradebookService : IGradebookService
 
         if (sysConfig.Value.DefaultGradingStyle == GradingStyle.Unweighted && assessmentGrades.Any())
         {
-            totalScore = assessmentGrades.Average(x => x.MarksObtained / x.MaxMarks * 100);
+            totalScore = (decimal)assessmentGrades.Average(x => x.MarksObtained / x.MaxMarks * 100);
         }
 
         return new StudentGradeViewDto(
@@ -1311,7 +1311,7 @@ public sealed class GradebookService : IGradebookService
         {
             var grade = assessment.Grades.FirstOrDefault(g => g.StudentId == studentId);
             totalMarks += grade?.MarksObtained ?? 0;
-            totalMaxMarks += assessment.MaxMarks;
+totalMaxMarks += assessment.MaxMarks;
         }
 
         if (totalMaxMarks == 0) return 0;
@@ -1321,7 +1321,7 @@ public sealed class GradebookService : IGradebookService
     private decimal CalculateUnweightedAverage(decimal ca1, decimal ca2, decimal ca3, decimal exam)
     {
         var scores = new[] { ca1, ca2, ca3, exam }.Where(s => s >= 0).ToList();
-        return scores.Any() ? scores.Average() : 0;
+        return (decimal)(scores.Any() ? scores.Average() : 0);
     }
 
     private string CalculateLetterGrade(decimal percentage)
@@ -1346,6 +1346,393 @@ public sealed class GradebookService : IGradebookService
             .FirstOrDefaultAsync(ct);
 
         return nextApproval == null ? null : MapToApprovalDto(nextApproval);
+    }
+
+    #endregion
+
+    #region Classter Migration
+
+    public async Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(
+        Guid academicSessionId,
+        Guid courseId,
+        IFormFile excelFile,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (excelFile == null || excelFile.Length == 0)
+            return Error.Validation("File.Required", "Please provide an Excel file");
+
+        var course = await _dbContext.Courses.FindAsync(courseId);
+        if (course == null)
+            return Error.NotFound("Course.NotFound", "Course not found");
+
+        var academicSession = await _dbContext.AcademicSessions.FindAsync(academicSessionId);
+        if (academicSession == null)
+            return Error.NotFound("Session.NotFound", "Academic session not found");
+
+        var errors = new List<string>();
+        var successCount = 0;
+        var totalRecords = 0;
+        var provisionedUsers = 0;
+        var provisionedEnrollments = 0;
+
+        try
+        {
+            using var stream = new MemoryStream();
+            await excelFile.CopyToAsync(stream, ct);
+            stream.Position = 0;
+
+            using var workbook = new XLWorkbook(stream);
+            var worksheet = workbook.Worksheets.FirstOrDefault();
+
+            if (worksheet == null)
+            {
+                errors.Add("No worksheet found in Excel file");
+                return new GradeUploadResultDto(totalRecords, successCount, errors.Count, errors);
+            }
+
+            var headerRow = FindHeaderRow(worksheet);
+            if (headerRow == null)
+            {
+                errors.Add("Could not find header row with required columns (identity number, first name, last name, ca1, exam)");
+                return new GradeUploadResultDto(totalRecords, successCount, errors.Count, errors);
+            }
+
+            var columnMap = BuildColumnMap(headerRow);
+            var dataRows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
+
+            foreach (var row in dataRows)
+            {
+                totalRecords++;
+
+                var identityNumber = GetCellValue(row, columnMap, "identity number").Trim();
+                var firstName = GetCellValue(row, columnMap, "first name").Trim();
+                var lastName = GetCellValue(row, columnMap, "last name").Trim();
+
+                if (string.IsNullOrWhiteSpace(identityNumber))
+                {
+                    errors.Add($"Row {row.RowNumber()}: Missing identity number");
+                    continue;
+                }
+
+                var student = await FindStudentAsync(identityNumber, firstName, lastName, ct);
+                if (student == null)
+                {
+                    errors.Add($"Row {row.RowNumber()}: Student not found (identity: {identityNumber})");
+                    continue;
+                }
+
+                var appUser = await ProvisionAppUserAsync(student, ct);
+                if (appUser?.CreatedUtc != null)
+                {
+                    provisionedUsers++;
+                }
+
+                var courseOffering = await GetOrCreateCourseOfferingAsync(courseId, student, academicSessionId, ct);
+                if (courseOffering == null)
+                {
+                    errors.Add($"Row {row.RowNumber()}: Could not create course offering for student");
+                    continue;
+                }
+
+                var enrollment = await ProvisionEnrollmentAsync(student, courseOffering, ct);
+                if (enrollment != null && enrollment.EnrolledAtUtc == DateTime.UtcNow)
+                {
+                    provisionedEnrollments++;
+                }
+
+                var categories = await EnsureAssessmentCategoriesAsync(courseOffering.Id, ct);
+                var assessments = await EnsureAssessmentsAsync(courseOffering.Id, categories, ct);
+
+                var gradeColumns = new Dictionary<string, AssessmentCategoryType>
+                {
+                    { "ca1", AssessmentCategoryType.CA1 },
+                    { "ca2", AssessmentCategoryType.CA2 },
+                    { "ca3", AssessmentCategoryType.CA3 },
+                    { "exam", AssessmentCategoryType.Exam },
+                    { "examination", AssessmentCategoryType.Exam }
+                };
+
+                foreach (var kvp in gradeColumns)
+                {
+                    var marksValue = GetCellValue(row, columnMap, kvp.Key);
+                    if (decimal.TryParse(marksValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var marks))
+                    {
+                        var categoryType = kvp.Value;
+                        var assessment = assessments.FirstOrDefault(a => a.AssessmentCategoryId == categories.First(c => c.CategoryType == categoryType).Id);
+
+                        if (assessment != null)
+                        {
+                            var existingGrade = await _dbContext.Grades
+                                .FirstOrDefaultAsync(g => g.AssessmentId == assessment.Id && g.StudentId == appUser!.Id, ct);
+
+                            if (existingGrade == null)
+                            {
+                                var grade = new Grade
+                                {
+                                    AssessmentId = assessment.Id,
+                                    StudentId = appUser!.Id,
+                                    MarksObtained = marks,
+                                    CreatedById = userId,
+                                    UpdatedById = userId
+                                };
+                                _dbContext.Grades.Add(grade);
+                                successCount++;
+                            }
+                            else if (!existingGrade.IsLocked)
+                            {
+                                existingGrade.MarksObtained = marks;
+                                existingGrade.UpdatedById = userId;
+                                existingGrade.UpdatedAt = DateTime.UtcNow;
+                                successCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
+
+            var auditMessage = $"Classter migration: {successCount} grades uploaded";
+            if (provisionedUsers > 0)
+                auditMessage += $", {provisionedUsers} users provisioned";
+            if (provisionedEnrollments > 0)
+                auditMessage += $", {provisionedEnrollments} enrollments created";
+
+            await _auditService.LogAsync("MigrateClassterGrades", "Gradebook",
+                $"{courseId}_{academicSessionId}", auditMessage, ct);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Error processing file: {ex.Message}");
+        }
+
+        return new GradeUploadResultDto(
+            totalRecords,
+            successCount,
+            totalRecords > 0 ? totalRecords - successCount : 0,
+            errors);
+    }
+
+    private IXLRow? FindHeaderRow(IXLWorksheet worksheet)
+    {
+        for (int rowNum = 1; rowNum <= Math.Min(5, worksheet.LastRowUsed().RowNumber()); rowNum++)
+        {
+            var row = worksheet.Row(rowNum);
+            var cells = row.CellsUsed().Select(c => c.GetString().ToLowerInvariant().Trim()).ToList();
+
+            if (cells.Any(c => c.Contains("identity number") || c.Contains("identity")) &&
+                cells.Any(c => c.Contains("first name")) &&
+                cells.Any(c => c.Contains("last name")))
+            {
+                return row;
+            }
+        }
+        return null;
+    }
+
+    private Dictionary<string, int> BuildColumnMap(IXLRow headerRow)
+    {
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var cell in headerRow.CellsUsed())
+        {
+            var value = cell.GetString().ToLowerInvariant().Trim();
+            map[value] = cell.WorksheetColumn().ColumnNumber();
+        }
+
+        return map;
+    }
+
+    private string GetCellValue(IXLRow row, Dictionary<string, int> columnMap, string columnName)
+    {
+        var normalizedName = columnName.ToLowerInvariant().Trim();
+        if (columnMap.TryGetValue(normalizedName, out var colNum))
+        {
+            var cellValue = row.Cell(colNum).GetString();
+            return cellValue?.Trim() ?? string.Empty;
+        }
+        return string.Empty;
+    }
+
+    private async Task<Student?> FindStudentAsync(string identityNumber, string firstName, string lastName, CancellationToken ct)
+    {
+        var student = await _dbContext.Students
+            .FirstOrDefaultAsync(s => s.StudentNumber == identityNumber, ct);
+
+        if (student != null)
+            return student;
+
+        if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(lastName))
+        {
+            student = await _dbContext.Students
+                .FirstOrDefaultAsync(s => s.FirstName.ToLower() == firstName.ToLower() && s.LastName.ToLower() == lastName.ToLower(), ct);
+        }
+
+        return student;
+    }
+
+    private async Task<AppUser?> ProvisionAppUserAsync(Student student, CancellationToken ct)
+    {
+        var existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId, ct);
+        if (existingUser != null)
+            return existingUser;
+
+        existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == student.OfficialEmail, ct);
+        if (existingUser != null)
+        {
+            existingUser.EntraObjectId = student.EntraObjectId;
+            existingUser.DisplayName = $"{student.FirstName} {student.LastName}";
+            existingUser.UpdatedUtc = DateTime.UtcNow;
+            return existingUser;
+        }
+
+        var appUser = new AppUser
+        {
+            Id = student.Id,
+            EntraObjectId = student.EntraObjectId,
+            Email = student.OfficialEmail,
+            DisplayName = $"{student.FirstName} {student.LastName}",
+            IsActive = true,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        };
+
+        _dbContext.Users.Add(appUser);
+        return appUser;
+    }
+
+private async Task<CourseOffering?> GetOrCreateCourseOfferingAsync(Guid courseId, Student student, Guid academicSessionId, CancellationToken ct)
+    {
+        var curriculumCourse = await _dbContext.CurriculumCourses
+            .Include(cc => cc.Curriculum)
+            .FirstOrDefaultAsync(cc => cc.CourseId == courseId && cc.LevelId == student.LevelId, ct);
+
+        var offering = await _dbContext.CourseOfferings
+            .FirstOrDefaultAsync(co => co.CourseId == courseId && co.ProgramId == student.AcademicProgramId && co.LevelId == student.LevelId && co.AcademicSessionId == academicSessionId, ct);
+
+        if (offering == null)
+        {
+            var curriculumId = curriculumCourse?.CurriculumId ?? Guid.Empty;
+            offering = new CourseOffering
+            {
+                Id = Guid.NewGuid(),
+                CourseId = courseId,
+                ProgramId = student.AcademicProgramId ?? Guid.Empty,
+                LevelId = student.LevelId ?? Guid.Empty,
+                AcademicSessionId = academicSessionId,
+                Semester = curriculumCourse?.Semester ?? Data.Enums.Semester.First,
+                CurriculumId = curriculumId
+            };
+            _dbContext.CourseOfferings.Add(offering);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        return offering;
+    }
+
+    private async Task<ProgramEnrollment?> ProvisionEnrollmentAsync(Student student, CourseOffering offering, CancellationToken ct)
+    {
+        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId || u.Email == student.OfficialEmail, ct);
+        if (appUser == null)
+            return null;
+
+        var enrollment = await _dbContext.Enrollments
+            .FirstOrDefaultAsync(e => e.UserId == appUser.Id && e.ProgramId == offering.ProgramId && e.AcademicSessionId == offering.AcademicSessionId, ct);
+
+        if (enrollment == null)
+        {
+            enrollment = new ProgramEnrollment
+            {
+                Id = Guid.NewGuid(),
+                ProgramId = offering.ProgramId,
+                LevelId = offering.LevelId,
+                UserId = appUser.Id,
+                AcademicSessionId = offering.AcademicSessionId,
+                CurriculumId = offering.CurriculumId ?? Guid.Empty,
+                EnrolledAtUtc = DateTime.UtcNow
+            };
+            _dbContext.Enrollments.Add(enrollment);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        return enrollment;
+    }
+
+    private async Task<List<AssessmentCategory>> EnsureAssessmentCategoriesAsync(Guid courseOfferingId, CancellationToken ct)
+    {
+        var categories = await _dbContext.AssessmentCategories
+            .Where(c => c.CourseOfferingId == courseOfferingId)
+            .ToListAsync(ct);
+
+        var defaultCategories = new[]
+        {
+            AssessmentCategoryType.CA1,
+            AssessmentCategoryType.CA2,
+            AssessmentCategoryType.CA3,
+            AssessmentCategoryType.Exam
+        };
+
+        foreach (var categoryType in defaultCategories)
+        {
+            if (!categories.Any(c => c.CategoryType == categoryType))
+            {
+                var weight = categoryType switch
+                {
+                    AssessmentCategoryType.CA1 => 15m,
+                    AssessmentCategoryType.CA2 => 15m,
+                    AssessmentCategoryType.CA3 => 15m,
+                    AssessmentCategoryType.Exam => 55m,
+                    _ => 20m
+                };
+
+                var category = new AssessmentCategory
+                {
+                    CourseOfferingId = courseOfferingId,
+                    CategoryType = categoryType,
+                    CategoryName = categoryType.ToString(),
+                    Weight = weight,
+                    MaxMarks = 100m,
+                    IsExamCategory = categoryType == AssessmentCategoryType.Exam,
+                    DisplayOrder = (int)categoryType
+                };
+                _dbContext.AssessmentCategories.Add(category);
+                categories.Add(category);
+            }
+        }
+
+        if (categories.Count > 0)
+            await _dbContext.SaveChangesAsync(ct);
+
+        return categories;
+    }
+
+    private async Task<List<Assessment>> EnsureAssessmentsAsync(Guid courseOfferingId, List<AssessmentCategory> categories, CancellationToken ct)
+    {
+        var assessments = await _dbContext.Assessments
+            .Where(a => a.CourseOfferingId == courseOfferingId)
+            .ToListAsync(ct);
+
+        foreach (var category in categories)
+        {
+            if (!assessments.Any(a => a.AssessmentCategoryId == category.Id))
+            {
+                var assessment = new Assessment
+                {
+                    CourseOfferingId = courseOfferingId,
+                    AssessmentCategoryId = category.Id,
+                    Title = $"{category.CategoryName} Assessment",
+                    MaxMarks = category.MaxMarks
+                };
+                _dbContext.Assessments.Add(assessment);
+                assessments.Add(assessment);
+            }
+        }
+
+        if (categories.Any(c => !assessments.Any(a => a.AssessmentCategoryId == c.Id)))
+            await _dbContext.SaveChangesAsync(ct);
+
+        return assessments;
     }
 
     #endregion

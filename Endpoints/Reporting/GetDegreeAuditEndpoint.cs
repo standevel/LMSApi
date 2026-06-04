@@ -15,11 +15,11 @@ public sealed class GetDegreeAuditEndpoint : ApiEndpointWithoutRequest<DegreeAud
         _degreeAuditService = degreeAuditService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/degree-audit/{auditId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/degree-audit/{auditId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

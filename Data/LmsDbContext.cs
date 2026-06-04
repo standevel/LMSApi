@@ -263,6 +263,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.CreditUnits).IsRequired();
+            entity.Property(x => x.LectureHours).HasColumnType("int");
+            entity.Property(x => x.PracticalHours).HasColumnType("int");
 
             entity.HasIndex(x => x.Code).IsUnique();
         });
@@ -782,6 +784,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.PersonalEmail).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(20).IsRequired();
             entity.Property(x => x.StudentNumber).HasMaxLength(50); // Nullable - assigned by Registrar after admission
+            entity.Property(x => x.JambRegistrationNumber).HasMaxLength(50);
+            entity.Property(x => x.JambScore).HasColumnType("int");
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
             
             entity.HasOne(x => x.AdmissionApplication)
@@ -1118,7 +1122,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasOne(x => x.Processor)
                 .WithMany()
                 .HasForeignKey(x => x.ProcessedBy)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.CreatedAt);
@@ -1411,6 +1415,49 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.WebhookSubscriptionId);
             entity.HasIndex(x => x.SentAtUtc);
             entity.HasIndex(x => x.EventType);
+        });
+
+        modelBuilder.Entity<Message>(entity =>
+        {
+            entity.ToTable("Messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Content).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.SentAt).IsRequired();
+            entity.Property(x => x.IsRead).IsRequired();
+            entity.Property(x => x.IsActive).IsRequired();
+
+            // RecipientId uses Cascade (messages are soft-deleted when recipient is deleted)
+            entity.HasOne(x => x.Recipient)
+                .WithMany()
+                .HasForeignKey(x => x.RecipientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // SenderId uses Restrict to avoid multiple cascade paths (SQL Server limitation)
+            entity.HasOne(x => x.Sender)
+                .WithMany()
+                .HasForeignKey(x => x.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.SenderId);
+            entity.HasIndex(x => x.RecipientId);
+            entity.HasIndex(x => x.SentAt);
+        });
+
+        modelBuilder.Entity<MessageAttachment>(entity =>
+        {
+            entity.ToTable("MessageAttachments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.FileUrl).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.ContentType).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.FileSizeBytes).IsRequired();
+
+            entity.HasOne(x => x.Message)
+                .WithMany(x => x.Attachments)
+                .HasForeignKey(x => x.MessageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.MessageId);
         });
 
         modelBuilder.Entity<BulkOperation>(entity =>

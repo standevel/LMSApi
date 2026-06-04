@@ -15,11 +15,11 @@ public sealed class GetStudentTranscriptRequestsEndpoint : ApiEndpointWithoutReq
         _transcriptService = transcriptService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/transcript-requests/student/{studentId:guid}");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/transcript-requests/student/{studentId:guid}");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {

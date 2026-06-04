@@ -46,7 +46,10 @@ public interface IGradebookService
     // Course Listing (for course selector)
     Task<ErrorOr<List<CourseOfferingSummaryDto>>> GetAllCoursesForGradebookAsync(Guid userId, string? searchTerm = null, CancellationToken ct = default);
     
-    // Student View
-    Task<ErrorOr<StudentGradeViewDto>> GetStudentGradesAsync(Guid courseOfferingId, Guid studentId, CancellationToken ct = default);
-    Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, CancellationToken ct = default);
-}
+// Student View
+     Task<ErrorOr<StudentGradeViewDto>> GetStudentGradesAsync(Guid courseOfferingId, Guid studentId, CancellationToken ct = default);
+     Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, CancellationToken ct = default);
+     
+     // Classter Migration
+     Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(Guid academicSessionId, Guid courseId, IFormFile excelFile, Guid userId, CancellationToken ct = default);
+ }

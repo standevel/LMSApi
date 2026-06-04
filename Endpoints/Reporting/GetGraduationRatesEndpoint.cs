@@ -14,11 +14,11 @@ public sealed class GetGraduationRatesEndpoint : ApiEndpointWithoutRequest<Gradu
         _analyticsService = analyticsService;
     }
 
-    public override void Configure()
-    {
-        Get("api/reports/graduation-rates");
-        Tags("Reporting");
-    }
+public override void Configure()
+{
+    Get("reports/graduation-rates");
+    Tags("Reporting");
+}
 
     public override async Task HandleAsync(CancellationToken ct)
     {
