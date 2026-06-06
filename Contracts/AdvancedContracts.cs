@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 
 namespace LMS.Api.Contracts;
 
@@ -72,7 +73,8 @@ public record BulkOperationDto(
     int FailedRecords,
     string? ErrorMessage,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? ResultData = null);
 
 public record CreateBulkOperationRequest(
     string OperationType,
@@ -89,6 +91,7 @@ public record ApiRateLimitDto(
     DateTime WindowStartUtc,
     DateTime? ResetTimeUtc);
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum BulkOperationStatus
 {
     Pending,

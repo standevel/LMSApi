@@ -30,6 +30,8 @@ public sealed class UpdateCourseEndpoint(ICourseService courseService)
             req.Title,
             req.Description,
             req.CreditUnits,
+            req.LevelId,
+            req.Semester,
             req.Offerings);
 
         var result = await courseService.UpdateAsync(req.Id, request, ct);
@@ -47,5 +49,7 @@ public class UpdateCourseRequestWrapper
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int CreditUnits { get; set; }
+    public Guid? LevelId { get; set; }
+    public LMS.Api.Data.Enums.Semester? Semester { get; set; }
     public List<CreateCourseOfferingRequest> Offerings { get; set; } = [];
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,12 +8,14 @@ using System.Threading.Tasks;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
+using LMS.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
 
 public class StudentBulkImportService : BaseService, IStudentBulkImportService
 {
+    private const int MaxStudentPhoneLength = 255;
     private readonly LmsDbContext _context;
 
     public StudentBulkImportService(LmsDbContext context, IAuditService auditService) : base(auditService)
@@ -30,63 +31,365 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
     {
         var lines = new List<string>();
         using var reader = new StreamReader(csvStream);
-        while (!reader.EndOfStream)
+        string? line;
+        while ((line = await reader.ReadLineAsync(ct)) != null)
         {
-            lines.Add(await reader.ReadLineAsync(ct));
+            lines.Add(line);
         }
 
         if (lines.Count < 2)
         {
             return new StudentImportResponse(
                 bulkOperationId, 0, 0, 0, "Failed",
-                Enumerable.Empty<StudentImportErrorDto>());
+                [new StudentImportErrorDto(1, null, "CSV file must contain a header row and at least one data row")]);
         }
 
-        // Parse header row and build column index map
         var headerRow = ParseCsvLine(lines[0]);
         var columnMap = BuildColumnMap(headerRow);
 
         var errors = new List<StudentImportErrorDto>();
-        var studentsToInsert = new List<Student>();
-        int totalRows = lines.Count - 1; // exclude header
+        int totalRows = 0;
+        int processedRows = 0;
 
-        // Resolve active session as fallback
-        var activeSession = await _context.AcademicSessions
-            .FirstOrDefaultAsync(s => s.IsActive, ct);
+        var sessionId = await ResolveSessionIdAsync(defaultSessionId, ct);
+        if (!sessionId.HasValue)
+        {
+            return new StudentImportResponse(
+                bulkOperationId, lines.Count - 1, 0, lines.Count - 1, "Failed",
+                [new StudentImportErrorDto(1, null, "No academic session available. Provide DefaultSessionId or configure an active session.")]);
+        }
+
+        var existingEmails = await _context.Students
+            .Select(s => s.OfficialEmail.ToLower())
+            .ToListAsync(ct);
+        var existingEmailsSet = new HashSet<string>(existingEmails, StringComparer.OrdinalIgnoreCase);
+
+        var existingMatricNumbers = await _context.Students
+            .Where(s => s.StudentNumber != null)
+            .Select(s => s.StudentNumber!)
+            .ToListAsync(ct);
+        var existingMatricSet = new HashSet<string>(existingMatricNumbers, StringComparer.OrdinalIgnoreCase);
+
+        var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenMatricNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var studentRoleId = await _context.Roles
+            .Where(r => r.Name == LmsRoles.Student)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(ct);
 
         for (int i = 1; i < lines.Count; i++)
         {
             var values = ParseCsvLine(lines[i]);
             var rowNumber = i + 1;
 
-            if (values.Any(v => !string.IsNullOrWhiteSpace(v)))
+            if (!values.Any(v => !string.IsNullOrWhiteSpace(v)))
+                continue;
+
+            totalRows++;
+
+            var (student, error) = await MapRowToStudent(
+                values, columnMap, sessionId.Value, rowNumber,
+                existingEmailsSet, existingMatricSet, seenEmails, seenMatricNumbers, ct);
+
+            if (error != null)
             {
-                var (student, error) = await MapRowToStudent(values, columnMap, defaultSessionId, activeSession, rowNumber, ct);
-                if (error != null)
-                {
-                    errors.Add(error);
-                }
-                else if (student != null)
-                {
-                    studentsToInsert.Add(student);
-                }
+                errors.Add(error);
+                continue;
+            }
+
+            if (student == null)
+                continue;
+
+            try
+            {
+                _context.Students.Add(student);
+                await _context.SaveChangesAsync(ct);
+                await EnsureAppUserForStudentAsync(student, studentRoleId, ct);
+
+                processedRows++;
+                existingEmailsSet.Add(student.OfficialEmail);
+                if (!string.IsNullOrEmpty(student.StudentNumber))
+                    existingMatricSet.Add(student.StudentNumber);
+            }
+            catch (DbUpdateException ex)
+            {
+                _context.Entry(student).State = EntityState.Detached;
+                errors.Add(new StudentImportErrorDto(rowNumber, student.OfficialEmail,
+                    $"Database error: {ex.InnerException?.Message ?? ex.Message}"));
             }
         }
 
-        // Batch insert valid students
-        if (studentsToInsert.Count > 0)
-        {
-            await _context.Students.AddRangeAsync(studentsToInsert, ct);
-            await _context.SaveChangesAsync(ct);
-        }
+        var status = processedRows == 0 && errors.Count > 0
+            ? "Failed"
+            : errors.Count == 0
+                ? "Completed"
+                : "CompletedWithErrors";
 
         return new StudentImportResponse(
             bulkOperationId,
             totalRows,
-            studentsToInsert.Count,
+            processedRows,
             errors.Count,
-            errors.Count == 0 ? "Completed" : "CompletedWithErrors",
-            errors);
+            status,
+            errors.ToList());
+    }
+
+    public async Task<StudentImportResponse> ImportStudentsFromRowsAsync(
+        List<Contracts.StudentImportRowDto> rows,
+        Guid bulkOperationId,
+        Guid? defaultSessionId,
+        CancellationToken ct = default)
+    {
+        if (rows == null || rows.Count == 0)
+        {
+            return new StudentImportResponse(
+                bulkOperationId, 0, 0, 0, "Failed",
+                [new StudentImportErrorDto(0, null, "No student data provided")]);
+        }
+
+        var errors = new List<StudentImportErrorDto>();
+        int totalRows = rows.Count;
+        int processedRows = 0;
+
+        var sessionId = await ResolveSessionIdAsync(defaultSessionId, ct);
+        if (!sessionId.HasValue)
+        {
+            return new StudentImportResponse(
+                bulkOperationId, totalRows, 0, totalRows, "Failed",
+                [new StudentImportErrorDto(1, null, "No academic session available. Provide DefaultSessionId or configure an active session.")]);
+        }
+
+        // Pre-load all reference data into memory to avoid N+1 queries and race conditions
+        var existingEmailsSet = new HashSet<string>(
+            await _context.Students.Select(s => s.OfficialEmail).ToListAsync(ct),
+            StringComparer.OrdinalIgnoreCase);
+
+        var existingMatricSet = new HashSet<string>(
+            await _context.Students.Where(s => s.StudentNumber != null).Select(s => s.StudentNumber!).ToListAsync(ct),
+            StringComparer.OrdinalIgnoreCase);
+
+        // In-memory caches so rows within the same import share created entities
+        var programCache = (await _context.Programs.ToListAsync(ct))
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var levelCache = (await _context.Levels.ToListAsync(ct))
+            .GroupBy(l => l.ProgramId)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .GroupBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(levelGroup => levelGroup.Key, levelGroup => levelGroup.First(), StringComparer.OrdinalIgnoreCase));
+
+        var defaultDepartmentId = await _context.Departments.Select(d => d.Id).FirstOrDefaultAsync(ct);
+
+        var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenMatricNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var studentRoleId = await _context.Roles
+            .Where(r => r.Name == LmsRoles.Student)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(ct);
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            var rowNumber = i + 1;
+
+            // --- Validate email ---
+            if (string.IsNullOrWhiteSpace(row.Email))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, null, "Email is required"));
+                continue;
+            }
+            var email = row.Email.Trim();
+            if (!IsValidEmail(email))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email, "Invalid email format"));
+                continue;
+            }
+            if (existingEmailsSet.Contains(email) || !seenEmails.Add(email))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email, "A student with this email already exists"));
+                continue;
+            }
+
+            // --- Validate matric number ---
+            var matricNumber = string.IsNullOrWhiteSpace(row.MatricNumber) ? null : row.MatricNumber!.Trim();
+            if (!string.IsNullOrEmpty(matricNumber) &&
+                (existingMatricSet.Contains(matricNumber) || !seenMatricNumbers.Add(matricNumber)))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email, $"Matric number '{matricNumber}' already exists"));
+                continue;
+            }
+
+            // --- Resolve name ---
+            var fullName = row.Name?.Trim() ?? string.Empty;
+            var firstName = !string.IsNullOrWhiteSpace(row.FirstName) ? row.FirstName!.Trim() : string.Empty;
+            var lastName = !string.IsNullOrWhiteSpace(row.LastName) ? row.LastName!.Trim() : string.Empty;
+            if (string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(fullName))
+            {
+                var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                firstName = parts.FirstOrDefault() ?? string.Empty;
+                lastName = parts.Length > 1 ? parts.LastOrDefault() ?? string.Empty : firstName;
+            }
+            if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email, "First name and last name are required"));
+                continue;
+            }
+
+            // --- Resolve program (find or create) ---
+            AcademicProgram? program = null;
+            if (!string.IsNullOrWhiteSpace(row.AcademicProgram))
+            {
+                var programName = row.AcademicProgram!.Trim();
+                if (!programCache.TryGetValue(programName, out program))
+                {
+                    if (defaultDepartmentId == Guid.Empty)
+                    {
+                        errors.Add(new StudentImportErrorDto(rowNumber, email,
+                            $"Program '{programName}' not found and no departments exist to auto-create it"));
+                        continue;
+                    }
+                    program = new AcademicProgram
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = programName,
+                        Code = GenerateProgramCode(programName),
+                        DegreeAwarded = string.Empty,
+                        DepartmentId = defaultDepartmentId,
+                        Type = Data.Enums.ProgramType.Undergraduate,
+                        DurationYears = 4,
+                        MinJambScore = 0,
+                        MaxAdmissions = 0,
+                        IsActive = true
+                    };
+                    _context.Programs.Add(program);
+                    await _context.SaveChangesAsync(ct);
+                    programCache[program.Name] = program;
+                    levelCache[program.Id] = new Dictionary<string, AcademicLevel>(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+
+            // --- Resolve level (find or create) ---
+            AcademicLevel? level = null;
+            if (!string.IsNullOrWhiteSpace(row.Level))
+            {
+                if (program == null)
+                {
+                    errors.Add(new StudentImportErrorDto(rowNumber, email, "Academic program is required when level is specified"));
+                    continue;
+                }
+                var levelName = NormalizeLevelName(row.Level!.Trim());
+                if (!levelCache.TryGetValue(program.Id, out var progLevels))
+                {
+                    progLevels = new Dictionary<string, AcademicLevel>(StringComparer.OrdinalIgnoreCase);
+                    levelCache[program.Id] = progLevels;
+                }
+                if (!progLevels.TryGetValue(levelName, out level))
+                {
+                    // Parse order from level name digits (e.g. "100 Level" => order 1)
+                    var digits = new string(levelName.Where(char.IsDigit).ToArray());
+                    var order = int.TryParse(digits, out var o)
+                        ? o >= 100 ? o / 100 : o
+                        : 0;
+                    level = new AcademicLevel
+                    {
+                        Id = Guid.NewGuid(),
+                        ProgramId = program.Id,
+                        Name = levelName,
+                        Order = order
+                    };
+                    _context.Levels.Add(level);
+                    await _context.SaveChangesAsync(ct);
+                    progLevels[levelName] = level;
+                }
+            }
+
+            // --- Parse optional date fields ---
+            DateTime? enrollmentDate = null;
+            if (!string.IsNullOrWhiteSpace(row.StartTime) && DateTime.TryParse(row.StartTime, out var parsedStart))
+                enrollmentDate = parsedStart;
+
+            DateTime? graduationDate = null;
+            if (!string.IsNullOrWhiteSpace(row.CompletionTime) && DateTime.TryParse(row.CompletionTime, out var parsedCompletion))
+                graduationDate = parsedCompletion;
+
+            var phone = NormalizeOptionalText(row.PhoneNumber) ?? string.Empty;
+            if (phone.Length > MaxStudentPhoneLength)
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email,
+                    $"Phone must be {MaxStudentPhoneLength} characters or fewer. Current value has {phone.Length} characters."));
+                continue;
+            }
+
+            // --- Build and save student ---
+            var student = new Student
+            {
+                OfficialEmail = email,
+                PersonalEmail = !string.IsNullOrWhiteSpace(row.PersonalEmail) ? row.PersonalEmail!.Trim() : email,
+                FirstName = firstName,
+                LastName = lastName,
+                MiddleName = null,
+                StudentNumber = matricNumber,
+                Phone = phone,
+                EmergencyContactPhone = string.IsNullOrWhiteSpace(row.GuardianPhone) ? null : row.GuardianPhone!.Trim(),
+                EmergencyContactEmail = string.IsNullOrWhiteSpace(row.GuardianEmail) ? null : row.GuardianEmail!.Trim(),
+                AcademicProgramId = program?.Id,
+                LevelId = level?.Id,
+                AcademicSessionId = sessionId.Value,
+                Status = graduationDate.HasValue ? StudentStatus.Graduated : StudentStatus.Active,
+                EnrollmentDate = enrollmentDate ?? DateTime.UtcNow,
+                GraduationDate = graduationDate,
+                JambRegistrationNumber = string.IsNullOrWhiteSpace(row.JambNumber) ? null : row.JambNumber!.Trim(),
+                JambScore = row.JambScore,
+                EntraObjectId = null,
+                AdmissionApplicationId = null,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            try
+            {
+                _context.Students.Add(student);
+                await _context.SaveChangesAsync(ct);
+                await EnsureAppUserForStudentAsync(student, studentRoleId, ct);
+                processedRows++;
+                existingEmailsSet.Add(student.OfficialEmail);
+                if (!string.IsNullOrEmpty(student.StudentNumber))
+                    existingMatricSet.Add(student.StudentNumber);
+            }
+            catch (DbUpdateException ex)
+            {
+                _context.Entry(student).State = EntityState.Detached;
+                errors.Add(new StudentImportErrorDto(rowNumber, student.OfficialEmail,
+                    $"Database error: {ex.InnerException?.Message ?? ex.Message}"));
+            }
+        }
+
+        var status = processedRows == 0 && errors.Count > 0
+            ? "Failed"
+            : errors.Count == 0
+                ? "Completed"
+                : "CompletedWithErrors";
+
+        return new StudentImportResponse(
+            bulkOperationId, totalRows, processedRows, errors.Count, status, errors);
+    }
+
+    private async Task<Guid?> ResolveSessionIdAsync(Guid? defaultSessionId, CancellationToken ct)
+    {
+        if (defaultSessionId.HasValue)
+        {
+            var exists = await _context.AcademicSessions.AnyAsync(s => s.Id == defaultSessionId.Value, ct);
+            if (exists)
+                return defaultSessionId.Value;
+        }
+
+        var activeSession = await _context.AcademicSessions
+            .FirstOrDefaultAsync(s => s.IsActive, ct);
+
+        return activeSession?.Id;
     }
 
     private static Dictionary<string, int> BuildColumnMap(string[] headers)
@@ -109,7 +412,8 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
     {
         foreach (var name in columnNames)
         {
-            if (columnMap.TryGetValue(name, out var index) && index < values.Length)
+            var normalized = NormalizeHeader(name);
+            if (columnMap.TryGetValue(normalized, out var index) && index < values.Length)
             {
                 var val = values[index]?.Trim();
                 if (!string.IsNullOrEmpty(val))
@@ -122,111 +426,119 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
     private async Task<(Student? Student, StudentImportErrorDto? Error)> MapRowToStudent(
         string[] values,
         Dictionary<string, int> columnMap,
-        Guid? defaultSessionId,
-        AcademicSession? defaultActiveSession,
+        Guid sessionId,
         int rowNumber,
+        HashSet<string> existingEmails,
+        HashSet<string> existingMatricNumbers,
+        HashSet<string> seenEmails,
+        HashSet<string> seenMatricNumbers,
         CancellationToken ct)
     {
-        var email = GetValue(values, columnMap, new[] { "Email", "EmailAddress" });
-        var firstName = GetValue(values, columnMap, new[] { "FirstName" });
-        var lastName = GetValue(values, columnMap, new[] { "Last Name", "LastName", "Surname", "Last Name Surname", "Last Name(Surname)" });
-        var matricNumber = GetValue(values, columnMap, new[] { "Matric Number", "MatricNumber", "Matric" });
-        var phoneNumber = GetValue(values, columnMap, new[] { "Phone Number", "PhoneNumber", "Phone" });
-        var personalEmail = GetValue(values, columnMap, new[] { "Personal Email Address", "PersonalEmailAddress", "PersonalEmail" });
-        var guardianPhone = GetValue(values, columnMap, new[] { "Guardian Phone", "GuardianPhone" });
-        var guardianEmail = GetValue(values, columnMap, new[] { "Guardian Email", "GuardianEmail" });
-        var levelName = GetValue(values, columnMap, new[] { "Level" });
-        var programName = GetValue(values, columnMap, new[] { "Academic Program", "AcademicProgram" });
-        var sponsorName = GetValue(values, columnMap, new[] { "Sponsor" });
-        var jambNumber = GetValue(values, columnMap, new[] { "JAMB Numer", "JAMBNumber", "JambRegNumber" });
-        var jambScoreStr = GetValue(values, columnMap, new[] { "JAMB Score", "JAMBScore" });
-        var startTimeStr = GetValue(values, columnMap, new[] { "Start time", "StartTime" });
-        var completionTimeStr = GetValue(values, columnMap, new[] { "Completion time", "CompletionTime" });
+        var email = GetValue(values, columnMap, new[] { "Email", "EmailAddress", "Contacte-mail", "ContactE-mail" });
+        var firstName = GetValue(values, columnMap, new[] { "FirstName", "First Name" });
+        var lastName = GetValue(values, columnMap, new[] { "LastName", "Last Name", "Surname", "LastName(Surname)", "Last Name(Surname)" });
+        var matricNumber = GetValue(values, columnMap, new[] { "MatricNumber", "Matric Number", "Matric", "RegistrationNumber", "Registration Number" });
+        var phoneNumber = GetValue(values, columnMap, new[] { "PhoneNumber", "Phone Number", "Phone", "MobilePhone", "Mobile Phone" });
+        var personalEmail = GetValue(values, columnMap, new[] { "PersonalEmailAddress", "Personal Email Address", "PersonalEmail" });
+        var guardianPhone = GetValue(values, columnMap, new[] { "GuardianPhone", "Guardian Phone" });
+        var guardianEmail = GetValue(values, columnMap, new[] { "GuardianEmail", "Guardian Email" });
+        var levelName = GetValue(values, columnMap, new[] { "Level", "Year-Semester" });
+        var programName = GetValue(values, columnMap, new[] { "AcademicProgram", "Academic Program", "Program" });
+        var jambNumber = GetValue(values, columnMap, new[] { "JAMBNumber", "JAMB Number", "JAMB Numer", "JambRegNumber" });
+        var jambScoreStr = GetValue(values, columnMap, new[] { "JAMBScore", "JAMB Score" });
+        var startTimeStr = GetValue(values, columnMap, new[] { "Starttime", "StartTime", "Start time" });
+        var completionTimeStr = GetValue(values, columnMap, new[] { "Completiontime", "CompletionTime", "Completion time" });
         var fullName = GetValue(values, columnMap, new[] { "Name" });
 
         if (string.IsNullOrEmpty(email))
-        {
             return (null, new StudentImportErrorDto(rowNumber, null, "Email is required"));
-        }
 
         if (!IsValidEmail(email))
-        {
             return (null, new StudentImportErrorDto(rowNumber, email, "Invalid email format"));
+
+        if (existingEmails.Contains(email) || !seenEmails.Add(email))
+            return (null, new StudentImportErrorDto(rowNumber, email, "A student with this email already exists"));
+
+        if (!string.IsNullOrEmpty(matricNumber))
+        {
+            if (existingMatricNumbers.Contains(matricNumber) || !seenMatricNumbers.Add(matricNumber))
+                return (null, new StudentImportErrorDto(rowNumber, email, $"Matric number '{matricNumber}' already exists"));
         }
 
-        // Resolve academic program
         AcademicProgram? program = null;
         if (!string.IsNullOrEmpty(programName))
         {
             program = await _context.Programs
                 .FirstOrDefaultAsync(p => p.Name == programName || p.Code == programName, ct);
+
+            if (program == null)
+                return (null, new StudentImportErrorDto(rowNumber, email, $"Academic program '{programName}' not found"));
         }
 
-        if (program == null && !string.IsNullOrEmpty(programName))
-        {
-            return (null, new StudentImportErrorDto(rowNumber, email, $"Academic program '{programName}' not found"));
-        }
-
-        // Resolve level
         AcademicLevel? level = null;
-        if (!string.IsNullOrEmpty(levelName) && program != null)
+        if (!string.IsNullOrEmpty(levelName))
         {
+            if (program == null)
+                return (null, new StudentImportErrorDto(rowNumber, email, "Academic program is required when level is specified"));
+
             level = await _context.Levels
                 .FirstOrDefaultAsync(l => l.ProgramId == program.Id && l.Name == levelName, ct);
+
+            if (level == null)
+                return (null, new StudentImportErrorDto(rowNumber, email, $"Level '{levelName}' not found for program '{program.Name}'"));
         }
 
-        if (level == null && !string.IsNullOrEmpty(levelName))
-        {
-            return (null, new StudentImportErrorDto(rowNumber, email, $"Level '{levelName}' not found for program '{program?.Name}'"));
-        }
-
-        // Resolve sponsor
-        SponsorOrganization? sponsor = null;
-        if (!string.IsNullOrEmpty(sponsorName))
-        {
-            sponsor = await _context.SponsorOrganizations
-                .FirstOrDefaultAsync(s => s.Name == sponsorName, ct);
-        }
-
-        // Parse dates
         DateTime? enrollmentDate = null;
         if (!string.IsNullOrEmpty(startTimeStr) && DateTime.TryParse(startTimeStr, out var parsedStart))
-        {
             enrollmentDate = parsedStart;
-        }
 
         DateTime? graduationDate = null;
         if (!string.IsNullOrEmpty(completionTimeStr) && DateTime.TryParse(completionTimeStr, out var parsedCompletion))
-        {
             graduationDate = parsedCompletion;
-        }
 
-        // Parse JAMB score
         int? jambScore = null;
         if (!string.IsNullOrEmpty(jambScoreStr) && int.TryParse(jambScoreStr, out var parsedScore))
-        {
             jambScore = parsedScore;
+
+        var resolvedFirstName = !string.IsNullOrEmpty(firstName)
+            ? firstName
+            : (fullName?.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty);
+        var resolvedLastName = !string.IsNullOrEmpty(lastName)
+            ? lastName
+            : (fullName?.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? string.Empty);
+
+        if (string.IsNullOrWhiteSpace(resolvedFirstName) || string.IsNullOrWhiteSpace(resolvedLastName))
+            return (null, new StudentImportErrorDto(rowNumber, email, "First name and last name are required"));
+
+        phoneNumber = NormalizeOptionalText(phoneNumber);
+        if ((phoneNumber?.Length ?? 0) > MaxStudentPhoneLength)
+        {
+            return (null, new StudentImportErrorDto(rowNumber, email,
+                $"Phone must be {MaxStudentPhoneLength} characters or fewer. Current value has {phoneNumber!.Length} characters."));
         }
 
-        // Build student
         var student = new Student
         {
             OfficialEmail = email,
             PersonalEmail = !string.IsNullOrEmpty(personalEmail) ? personalEmail : email,
-            FirstName = !string.IsNullOrEmpty(firstName) ? firstName : (fullName?.Split(' ').FirstOrDefault() ?? string.Empty),
-            LastName = !string.IsNullOrEmpty(lastName) ? lastName : (fullName?.Split(' ').LastOrDefault() ?? string.Empty),
-            StudentNumber = !string.IsNullOrEmpty(matricNumber) ? matricNumber : null,
-            Phone = !string.IsNullOrEmpty(phoneNumber) ? phoneNumber : string.Empty,
+            FirstName = resolvedFirstName,
+            LastName = resolvedLastName,
+            StudentNumber = matricNumber,
+            Phone = phoneNumber ?? string.Empty,
             EmergencyContactPhone = guardianPhone,
             EmergencyContactEmail = guardianEmail,
             AcademicProgramId = program?.Id,
             LevelId = level?.Id,
-            AcademicSessionId = defaultSessionId ?? (defaultActiveSession?.Id ?? Guid.Empty),
+            AcademicSessionId = sessionId,
             Status = graduationDate.HasValue ? StudentStatus.Graduated : StudentStatus.Active,
-            EnrollmentDate = enrollmentDate,
+            EnrollmentDate = enrollmentDate ?? DateTime.UtcNow,
             GraduationDate = graduationDate,
             JambRegistrationNumber = jambNumber,
             JambScore = jambScore,
+            EntraObjectId = null,
+            AdmissionApplicationId = null,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         return (student, null);
@@ -246,7 +558,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
                 if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
                 {
                     current.Append('"');
-                    i++; // skip next quote
+                    i++;
                 }
                 else
                 {
@@ -268,6 +580,71 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         return fields.ToArray();
     }
 
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
+    }
+
+    private async Task EnsureAppUserForStudentAsync(Student student, Guid? studentRoleId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var user = await _context.Users.FirstOrDefaultAsync(u =>
+            u.Id == student.Id ||
+            u.Email == student.OfficialEmail ||
+            u.Username == student.OfficialEmail ||
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId),
+            ct);
+
+        if (user == null)
+        {
+            user = new AppUser
+            {
+                Id = student.Id,
+                EntraObjectId = string.IsNullOrWhiteSpace(student.EntraObjectId) ? $"student:{student.Id}" : student.EntraObjectId,
+                Username = student.OfficialEmail,
+                Email = student.OfficialEmail,
+                DisplayName = $"{student.FirstName} {student.LastName}".Trim(),
+                IsActive = true,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+
+            _context.Users.Add(user);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(user.EntraObjectId))
+                user.EntraObjectId = string.IsNullOrWhiteSpace(student.EntraObjectId) ? $"student:{student.Id}" : student.EntraObjectId;
+
+            user.Username ??= student.OfficialEmail;
+            user.Email ??= student.OfficialEmail;
+            user.DisplayName = $"{student.FirstName} {student.LastName}".Trim();
+            user.IsActive = true;
+            user.UpdatedUtc = now;
+        }
+
+        if (studentRoleId.HasValue)
+        {
+            var hasStudentRole = await _context.UserRoles
+                .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == studentRoleId.Value, ct);
+
+            if (!hasStudentRole)
+            {
+                _context.UserRoles.Add(new UserRole
+                {
+                    UserId = user.Id,
+                    RoleId = studentRoleId.Value,
+                    AssignedUtc = now
+                });
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
     private static bool IsValidEmail(string email)
     {
         try
@@ -280,12 +657,56 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             return false;
         }
     }
+
+    /// <summary>
+    /// Converts raw level values from spreadsheets to the canonical DB format.
+    /// "100" → "100 Level", "200 Level" → "200 Level", "Year 1" → "Year 1", etc.
+    /// </summary>
+    private static string NormalizeLevelName(string raw)
+    {
+        var trimmed = raw.Trim();
+
+        // Already in "NNN Level" format
+        if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{1,3}\s+[Ll]evel$"))
+            return System.Text.RegularExpressions.Regex.Replace(trimmed, @"\s+[Ll]evel$", " Level");
+
+        // Plain number e.g. "100", "200"
+        if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{1,3}$"))
+            return $"{trimmed} Level";
+
+        // Single digit year e.g. "1", "2" → "100 Level", "200 Level"
+        if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[1-7]$"))
+            return $"{trimmed}00 Level";
+
+        // "Year N" → keep as-is
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Generates a short unique code from a program name for new auto-created programs.
+    /// </summary>
+    private static string GenerateProgramCode(string programName)
+    {
+        // Take initials of significant words and append a hash suffix for uniqueness
+        var words = programName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2 && !new[] { "and", "the", "of", "in" }.Contains(w.ToLower()))
+            .ToArray();
+        var initials = string.Concat(words.Take(4).Select(w => char.ToUpper(w[0])));
+        var suffix = Math.Abs(programName.GetHashCode()) % 1000;
+        return $"{initials}{suffix}";
+    }
 }
 
 public interface IStudentBulkImportService
 {
     Task<StudentImportResponse> ImportStudentsAsync(
         Stream csvStream,
+        Guid bulkOperationId,
+        Guid? defaultSessionId,
+        CancellationToken ct = default);
+
+    Task<StudentImportResponse> ImportStudentsFromRowsAsync(
+        List<Contracts.StudentImportRowDto> rows,
         Guid bulkOperationId,
         Guid? defaultSessionId,
         CancellationToken ct = default);

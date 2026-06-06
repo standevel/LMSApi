@@ -57,17 +57,7 @@ public class BulkOperationService : BaseService, IBulkOperationService
         await LogActionAsync("CreateBulkOperation", "BulkOperation", operation.Id.ToString(),
             $"Bulk operation created: {request.OperationType}", ct);
 
-        return new BulkOperationDto(
-            operation.Id,
-            operation.OperationType,
-            operation.FileName,
-            (LMS.Api.Contracts.BulkOperationStatus)operation.Status,
-            operation.TotalRecords,
-            operation.ProcessedRecords,
-            operation.FailedRecords,
-            operation.ErrorMessage,
-            operation.CreatedAt,
-            operation.UpdatedAt);
+        return MapToDto(operation);
     }
 
     public async Task<ErrorOr<Deleted>> ProcessBulkOperationAsync(Guid operationId, CancellationToken ct = default)
@@ -138,7 +128,61 @@ public class BulkOperationService : BaseService, IBulkOperationService
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync(ct);
 
-        return operations.Select(o => new BulkOperationDto(
+        return operations.Select(o => MapToDto(o)).ToList();
+    }
+
+    public async Task<ErrorOr<BulkOperationDto>> GetByIdAsync(Guid operationId, CancellationToken ct = default)
+    {
+        var operation = await _context.BulkOperations
+            .FirstOrDefaultAsync(o => o.Id == operationId, ct);
+
+        if (operation == null)
+            return Error.NotFound("BulkOperation.NotFound", "Bulk operation not found.");
+
+        return MapToDto(operation, includeResultData: true);
+    }
+
+    public async Task UpdateImportResultAsync(Guid operationId, StudentImportResponse result, CancellationToken ct = default)
+    {
+        var operation = await _context.BulkOperations.FirstOrDefaultAsync(o => o.Id == operationId, ct);
+        if (operation == null) return;
+
+        operation.Status = result.Status == "Failed"
+            ? LMS.Api.Data.Entities.BulkOperationStatus.Failed
+            : LMS.Api.Data.Entities.BulkOperationStatus.Completed;
+        operation.TotalRecords = result.TotalRows;
+        operation.ProcessedRecords = result.ProcessedRows;
+        operation.FailedRecords = result.FailedRows;
+        operation.ResultData = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = result.Status,
+            errors = result.Errors.Select(e => new { e.RowNumber, e.Email, e.Reason }).ToList()
+        });
+        operation.ErrorMessage = result.FailedRows > 0
+            ? $"{result.FailedRows} row(s) failed during import"
+            : null;
+        operation.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task SetStatusAsync(
+        Guid operationId,
+        LMS.Api.Data.Entities.BulkOperationStatus status,
+        string? errorMessage = null,
+        CancellationToken ct = default)
+    {
+        var operation = await _context.BulkOperations.FirstOrDefaultAsync(o => o.Id == operationId, ct);
+        if (operation == null) return;
+
+        operation.Status = status;
+        operation.ErrorMessage = errorMessage;
+        operation.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+    }
+
+    private static BulkOperationDto MapToDto(BulkOperation o, bool includeResultData = false) =>
+        new(
             o.Id,
             o.OperationType,
             o.FileName,
@@ -148,6 +192,6 @@ public class BulkOperationService : BaseService, IBulkOperationService
             o.FailedRecords,
             o.ErrorMessage,
             o.CreatedAt,
-            o.UpdatedAt)).ToList();
-    }
+            o.UpdatedAt,
+            includeResultData ? o.ResultData : null);
 }

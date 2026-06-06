@@ -65,13 +65,35 @@ public sealed class GetBulkOperationsEndpoint(IBulkOperationService bulkOperatio
     public override void Configure()
     {
         Get("bulk-operations");
-        Roles("SuperAdmin", "Admin");
+        Roles("SuperAdmin", "Admin", "Registrar");
         Tags("BulkOperations");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
     {
         var result = await bulkOperationService.GetOperationsAsync(null, ct);
+        await SendAsync(result, ct);
+    }
+}
+
+public sealed class GetBulkOperationByIdEndpoint(IBulkOperationService bulkOperationService)
+    : ApiEndpoint<GetBulkOperationByIdEndpoint.Request, BulkOperationDto>
+{
+    public sealed class Request
+    {
+        [Microsoft.AspNetCore.Mvc.FromRoute] public Guid OperationId { get; set; }
+    }
+
+    public override void Configure()
+    {
+        Get("bulk-operations/{OperationId}");
+        Roles("SuperAdmin", "Admin", "Registrar");
+        Tags("BulkOperations");
+    }
+
+    public override async Task HandleAsync(Request req, CancellationToken ct)
+    {
+        var result = await bulkOperationService.GetByIdAsync(req.OperationId, ct);
         await SendAsync(result, ct);
     }
 }

@@ -263,10 +263,20 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.CreditUnits).IsRequired();
+            entity.Property(x => x.Semester).HasConversion<int>();
             entity.Property(x => x.LectureHours).HasColumnType("int");
             entity.Property(x => x.PracticalHours).HasColumnType("int");
 
-            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => new { x.ProgramId, x.Code }).IsUnique();
+            entity.HasOne(x => x.Program)
+                .WithMany(x => x.Courses)
+                .HasForeignKey(x => x.ProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Level)
+                .WithMany()
+                .HasForeignKey(x => x.LevelId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<CourseOffering>(entity =>
@@ -294,6 +304,10 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .WithMany()
                 .HasForeignKey(x => x.AcademicSessionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Curriculum)
+                .WithMany()
+                .HasForeignKey(x => x.CurriculumId);
 
             entity.HasOne(x => x.Lecturer)
                 .WithMany()
@@ -776,13 +790,14 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
         {
             entity.ToTable("Students");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.EntraObjectId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.EntraObjectId).HasMaxLength(100);
             entity.Property(x => x.OfficialEmail).HasMaxLength(256).IsRequired();
             entity.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.LastName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.MiddleName).HasMaxLength(100);
             entity.Property(x => x.PersonalEmail).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.EmergencyContactPhone).HasMaxLength(255);
             entity.Property(x => x.StudentNumber).HasMaxLength(50); // Nullable - assigned by Registrar after admission
             entity.Property(x => x.JambRegistrationNumber).HasMaxLength(50);
             entity.Property(x => x.JambScore).HasColumnType("int");
@@ -791,6 +806,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasOne(x => x.AdmissionApplication)
                 .WithOne(x => x.Student)
                 .HasForeignKey<Student>(x => x.AdmissionApplicationId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
             
             entity.HasOne(x => x.AcademicSession)
@@ -813,10 +829,10 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .HasForeignKey(x => x.LevelId)
                 .OnDelete(DeleteBehavior.Restrict);
             
-            entity.HasIndex(x => x.EntraObjectId).IsUnique();
+            entity.HasIndex(x => x.EntraObjectId).IsUnique().HasFilter("[EntraObjectId] IS NOT NULL");
             entity.HasIndex(x => x.OfficialEmail).IsUnique();
-            entity.HasIndex(x => x.StudentNumber).IsUnique().HasFilter("[StudentNumber] IS NOT NULL"); // Unique only when assigned
-            entity.HasIndex(x => x.AdmissionApplicationId).IsUnique();
+            entity.HasIndex(x => x.StudentNumber).IsUnique().HasFilter("[StudentNumber] IS NOT NULL");
+            entity.HasIndex(x => x.AdmissionApplicationId).IsUnique().HasFilter("[AdmissionApplicationId] IS NOT NULL");
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
         });

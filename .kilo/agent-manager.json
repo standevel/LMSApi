@@ -1,9 +1,25 @@
 {
-  "worktrees": {},
-  "sessions": {},
+  "worktrees": {
+    "wt-1780599782261-1": {
+      "branch": "rocky-steel",
+      "path": "/Users/mac/Apps/LMS APP/LMSApi/.kilo/worktrees/rocky-steel",
+      "parentBranch": "main",
+      "createdAt": "2026-06-04T19:03:02.261Z",
+      "remote": "origin"
+    }
+  },
+  "sessions": {
+    "ses_16bfb833affehGuut0WsN6sDvS": {
+      "worktreeId": "wt-1780599782261-1",
+      "createdAt": "2026-06-04T19:03:02.706Z"
+    }
+  },
   "tabOrder": {
     "local": [
       "pending:1"
     ]
-  }
+  },
+  "worktreeOrder": [
+    "wt-1780599782261-1"
+  ]
 }

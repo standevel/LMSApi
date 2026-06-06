@@ -1,47 +1,35 @@
-using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Enums;
 using LMS.Api.Data.Repositories;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace LMS.Api.Services;
 
-/// <summary>
-/// Service for importing course catalog data from .docx files.
-/// Parses the document structure and extracts program, level, semester, and course information.
-/// Supports importing courses across multiple programs from a single file.
-/// </summary>
-public sealed class CourseCatalogImportService(
-    ICourseRepository courseRepository,
-    ICurriculumRepository curriculumRepository,
-    IAcademicProgramRepository academicProgramRepository,
-    IAuditService auditService) : BaseService(auditService), ICourseCatalogImportService
+public record ParsedCourseRow(
+    Guid Id,
+    string ProgramName,
+    int Level,
+    Semester Semester,
+    string Code,
+    string Title,
+    int CreditUnits,
+    CourseCategory Category,
+    int? LectureHours,
+    int? PracticalHours,
+    string? Error);
+
+public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory)
+    : ICourseCatalogImportService
 {
-    // In-memory storage for upload previews (in production, use Redis or DB)
-    private static readonly Dictionary<Guid, CatalogImportContext> _uploads = new();
-
-    private record CatalogImportContext(
-        string FileName,
-        IEnumerable<string> ProgramNames,
-        IEnumerable<Guid> ProgramIds,
-        Guid? AcademicSessionId,
-        List<CatalogCourseRow> Courses
-    );
-
-    private record CatalogCourseRow(
-        int RowNumber,
-        string ProgramName,
-        int Level,
-        Semester Semester,
-        string CourseCode,
-        string CourseTitle,
-        int CreditUnits,
-        CourseCategory Status,
-        int? LectureHours,
-        int? PracticalHours,
-        string? Error
-    );
+    // Singleton-safe: ConcurrentDictionary survives across HTTP requests
+    private readonly ConcurrentDictionary<Guid, CourseCatalogImportPreview> _previews = new();
 
     public async Task<CourseCatalogImportPreview> UploadAndParseAsync(
         Stream fileStream,
@@ -52,192 +40,77 @@ public sealed class CourseCatalogImportService(
         CancellationToken ct = default)
     {
         var uploadId = Guid.NewGuid();
-        var rows = new List<CatalogCourseRow>();
-        var programNames = new List<string>();
-        var programIdsList = programIds.ToList();
 
-        // If a single programId is provided, use it as fallback
-        if (programId.HasValue && !programIdsList.Contains(programId.Value))
+        // Clone stream for parsing (original stream may not be re-readable)
+        using var cloneStream = new MemoryStream();
+        await fileStream.CopyToAsync(cloneStream, ct);
+        cloneStream.Position = 0;
+
+        // Resolve scoped repositories inside a short-lived scope
+        using var scope = scopeFactory.CreateScope();
+        var programRepo = scope.ServiceProvider.GetRequiredService<IAcademicProgramRepository>();
+        var sessionRepo = scope.ServiceProvider.GetRequiredService<IAcademicSessionRepository>();
+
+        var rows = await ParseDocumentAsync(cloneStream, programRepo, ct);
+
+        // If specific programs were requested, filter rows to only those programs
+        var programIdList = programIds.ToList();
+        if (programIdList.Count > 0)
         {
-            programIdsList = new List<Guid> { programId.Value }
-                .Concat(programIdsList.Where(id => id != programId.Value))
-                .ToList();
-        }
-
-        // Fetch program names for the provided IDs
-        foreach (var pid in programIdsList)
-        {
-            var program = await academicProgramRepository.GetByIdAsync(pid, ct);
-            if (program != null)
-                programNames.Add(program.Name);
-        }
-
-        using var docx = WordprocessingDocument.Open(fileStream, false);
-        var body = docx.MainDocumentPart?.Document.Body;
-        if (body == null)
-            throw new InvalidOperationException("Invalid document: no body found.");
-
-        var paragraphs = body.Elements<Paragraph>().ToList();
-        var currentProgram = string.Empty;
-        var currentLevel = 0;
-        var currentSemester = Semester.First;
-        var rowNumber = 0;
-        var inCourseTable = false;
-        var isHeaderRow = false;
-        var foundFirstCourse = false;
-
-        for (var i = 0; i < paragraphs.Count; i++)
-        {
-            var text = GetText(paragraphs[i]).Trim();
-            if (string.IsNullOrEmpty(text)) continue;
-
-            // Detect program headings (e.g., "B.SC. COMPUTER SCIENCE", "B.SC. CYBERSECURITY")
-            var programMatch = DetectProgram(text);
-            if (programMatch != null)
+            var programNames = new List<string>();
+            foreach (var pid in programIdList)
             {
-                currentProgram = programMatch;
-                continue;
+                var p = await programRepo.GetByIdAsync(pid, ct);
+                if (p != null) programNames.Add(p.Name);
             }
-
-            // Detect level headings
-            var levelResult = DetectLevel(text);
-            if (levelResult != null)
+            if (programNames.Count > 0)
             {
-                currentLevel = levelResult.Value.Level;
-                currentSemester = Semester.First;
-                continue;
-            }
-
-            // Detect semester headings within a level
-            var semesterResult = DetectSemester(text, currentLevel);
-            if (semesterResult != null)
-            {
-                currentSemester = semesterResult.Value.Semester;
-                continue;
-            }
-
-            // Detect course table headers
-            if (IsCourseHeader(text))
-            {
-                inCourseTable = true;
-                isHeaderRow = true;
-                continue;
-            }
-
-            // Try to parse as a course row
-            if (inCourseTable && !isHeaderRow)
-            {
-                var courseRow = ParseCourseRow(text);
-                if (courseRow != null)
-                {
-                    rowNumber++;
-                    var (courseCode, courseTitle, creditUnits, status, lectureHours, practicalHours) = courseRow.Value;
-                    var programNameForRow = !string.IsNullOrEmpty(currentProgram) 
-                        ? currentProgram 
-                        : (programNames.Count > 0 ? string.Join(", ", programNames) : "Unknown");
-
-                    rows.Add(new CatalogCourseRow(
-                        rowNumber,
-                        programNameForRow,
-                        currentLevel,
-                        currentSemester,
-                        courseCode,
-                        courseTitle,
-                        creditUnits,
-                        status,
-                        lectureHours,
-                        practicalHours,
-                        null
-                    ));
-                    foundFirstCourse = true;
-                }
-                else
-                {
-                    if (text.Equals("TOTAL", StringComparison.OrdinalIgnoreCase))
-                    {
-                        inCourseTable = false;
-                        isHeaderRow = false;
-                    }
-                }
-            }
-
-            // Reset table detection when we hit a new section
-            if (IsSectionBreak(text) && foundFirstCourse)
-            {
-                inCourseTable = false;
-                isHeaderRow = false;
+                rows = rows.Where(r => programNames.Any(n =>
+                    n.Equals(r.ProgramName, StringComparison.OrdinalIgnoreCase))).ToList();
             }
         }
 
-        var context = new CatalogImportContext(
-            fileName,
-            programNames,
-            programIdsList,
-            academicSessionId,
-            rows
-        );
-
-        _uploads[uploadId] = context;
-
-        var previewRows = context.Courses.Select(r => new CourseCatalogPreviewRow(
+        var previewRows = rows.Select(r => new CourseCatalogPreviewRow(
             Guid.NewGuid(),
             r.ProgramName,
             r.Level,
             r.Semester,
-            r.CourseCode,
-            r.CourseTitle,
+            r.Code,
+            r.Title,
             r.CreditUnits,
-            r.Status,
+            r.Category,
             r.LectureHours,
             r.PracticalHours,
-            r.Error
-        )).ToList();
+            r.Error)).ToList();
 
-        var programNameDisplay = programNames.Count > 0 
-            ? (programNames.Count == 1 ? programNames[0] : $"Multiple Programs ({programNames.Count})")
-            : null;
+        // Resolve display names for preview header
+        string? programName = null;
+        if (programIdList.Count == 1)
+            programName = (await programRepo.GetByIdAsync(programIdList[0], ct))?.Name;
+        else if (programIdList.Count > 1)
+            programName = $"{programIdList.Count} Programs";
 
-        return new CourseCatalogImportPreview(
+        string? sessionName = null;
+        if (academicSessionId.HasValue)
+            sessionName = (await sessionRepo.GetByIdAsync(academicSessionId.Value, ct))?.Name;
+
+        var preview = new CourseCatalogImportPreview(
             uploadId,
             fileName,
-            programNameDisplay,
-            null,
+            programName,
+            sessionName,
             previewRows,
-            previewRows.Count
-        );
+            previewRows.Count);
+
+        _previews[uploadId] = preview;
+        return preview;
     }
 
     public CourseCatalogImportPreview GetPreview(Guid uploadId)
     {
-        if (!_uploads.TryGetValue(uploadId, out var context))
+        if (!_previews.TryGetValue(uploadId, out var preview))
             throw new KeyNotFoundException($"Upload {uploadId} not found.");
-
-        var rows = context.Courses.Select(r => new CourseCatalogPreviewRow(
-            Guid.NewGuid(),
-            r.ProgramName,
-            r.Level,
-            r.Semester,
-            r.CourseCode,
-            r.CourseTitle,
-            r.CreditUnits,
-            r.Status,
-            r.LectureHours,
-            r.PracticalHours,
-            r.Error
-        )).ToList();
-
-        var programNameDisplay = context.ProgramNames.Any()
-            ? (context.ProgramNames.Count() == 1 ? context.ProgramNames.First() : $"Multiple Programs ({context.ProgramNames.Count()})")
-            : null;
-
-        return new CourseCatalogImportPreview(
-            uploadId,
-            context.FileName,
-            programNameDisplay,
-            null,
-            rows,
-            rows.Count
-        );
+        return preview;
     }
 
     public async Task<CourseCatalogImportResult> ApplyImportAsync(
@@ -249,241 +122,514 @@ public sealed class CourseCatalogImportService(
         Guid? academicSessionId,
         CancellationToken ct = default)
     {
-        if (!_uploads.TryGetValue(uploadId, out var context))
+        if (!_previews.TryGetValue(uploadId, out var preview))
             throw new KeyNotFoundException($"Upload {uploadId} not found.");
 
-        var coursesCreated = 0;
-        var coursesUpdated = 0;
-        var curriculumCoursesAdded = 0;
-        string? createdCurriculumId = null;
+        // Resolve scoped services for this operation
+        using var scope = scopeFactory.CreateScope();
+        var programRepository = scope.ServiceProvider.GetRequiredService<IAcademicProgramRepository>();
+        var sessionRepository = scope.ServiceProvider.GetRequiredService<IAcademicSessionRepository>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<LmsDbContext>();
 
-        // Resolve effective program ID and list
-        var programIdsList = programIds.ToList();
-        var effectiveProgramId = programId ?? (programIdsList.Count > 0 ? programIdsList[0] : null);
+        // Separate counters for courses vs curriculum-course links
+        int coursesCreated = 0;
+        int coursesUpdated = 0;
+        int coursesSkipped = 0;
+        int curriculumCoursesAdded = 0;
+        int curriculumCoursesUpdated = 0;
+        var errors = new List<ImportErrorRow>();
+        Guid? createdCurriculumId = null;
 
-        // Get all existing courses to find by code
-        var allCourses = await courseRepository.GetAllAsync(ct);
+        // Determine the academic session
+        AcademicSession? session = academicSessionId.HasValue
+            ? await sessionRepository.GetByIdAsync(academicSessionId.Value, ct)
+            : await sessionRepository.GetActiveAsync(ct);
 
-        // Step 1: Upsert courses
-        foreach (var courseRow in context.Courses)
+        if (session == null)
+            throw new Exception("No active academic session found.");
+
+        // Determine the programs to import (lean query — no navigation properties needed)
+        var programIdList = programIds.ToList();
+        var programsToImport = new List<AcademicProgram>();
+        if (programIdList.Count > 0)
         {
-            var existingCourse = allCourses.FirstOrDefault(c => c.Code == courseRow.CourseCode);
-            if (existingCourse != null)
+            programsToImport = await dbContext.Programs
+                .Where(p => programIdList.Contains(p.Id))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            programsToImport = await dbContext.Programs.ToListAsync(ct);
+        }
+
+        // Cache all existing courses by (ProgramId, Code) for program-specific lookups
+        var allCourses = (await dbContext.Courses.ToListAsync(ct))
+            .GroupBy(c => (c.ProgramId, c.Code.ToUpperInvariant()))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Cache all existing AcademicLevels by (ProgramId, Name)
+        var levelsByKey = (await dbContext.Levels.ToListAsync(ct))
+            .ToDictionary(l => (l.ProgramId, l.Name));
+
+        // Cache all existing CurriculumCourses for fast duplicate detection
+        // Key: (CurriculumId, CourseId, Semester)
+        var existingCcKeys = (await dbContext.CurriculumCourses.ToListAsync(ct))
+            .Select(cc => (cc.CurriculumId, cc.CourseId, cc.Semester))
+            .ToHashSet();
+
+        // Process each program
+        foreach (var program in programsToImport)
+        {
+            var programRows = preview.Rows
+                .Where(r => r.ProgramName.Equals(program.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (programRows.Count == 0) continue;
+
+            // Find or create the target curriculum
+            Curriculum targetCurriculum;
+            if (curriculumId.HasValue)
             {
-                existingCourse.Title = courseRow.CourseTitle;
-                existingCourse.CreditUnits = courseRow.CreditUnits;
-                existingCourse.LectureHours = courseRow.LectureHours;
-                existingCourse.PracticalHours = courseRow.PracticalHours;
-                existingCourse.IsActive = true;
-                await courseRepository.UpdateAsync(existingCourse, ct);
-                coursesUpdated++;
+                var found = await dbContext.Curricula.FindAsync(new object[] { curriculumId.Value }, ct);
+                if (found == null) continue;
+                targetCurriculum = found;
             }
             else
             {
-                var newCourse = new Course
+                var existing = await dbContext.Curricula
+                    .FirstOrDefaultAsync(c => c.ProgramId == program.Id
+                        && c.AdmissionSessionId == session.Id
+                        && c.IsActive, ct);
+
+                if (existing != null)
                 {
-                    Id = Guid.NewGuid(),
-                    Code = courseRow.CourseCode,
-                    Title = courseRow.CourseTitle,
-                    CreditUnits = courseRow.CreditUnits,
-                    LectureHours = courseRow.LectureHours,
-                    PracticalHours = courseRow.PracticalHours,
-                    IsActive = true
-                };
-                await courseRepository.AddAsync(newCourse, ct);
-                coursesCreated++;
+                    targetCurriculum = existing;
+                }
+                else
+                {
+                    targetCurriculum = new Curriculum
+                    {
+                        Id = Guid.NewGuid(),
+                        ProgramId = program.Id,
+                        AdmissionSessionId = session.Id,
+                        Name = curriculumName ?? $"{program.Name} Curriculum",
+                        Status = CurriculumStatus.Published,
+                        IsActive = true
+                    };
+                    dbContext.Curricula.Add(targetCurriculum);
+                    // Flush now so FK is valid for CurriculumCourse rows below
+                    await dbContext.SaveChangesAsync(ct);
+                    createdCurriculumId = targetCurriculum.Id;
+                }
+            }
+
+            // --- Pre-flush: ensure all new courses are in DB before linking ---
+            // Pass 1: upsert courses and levels
+            var rowLevels = new Dictionary<int, AcademicLevel>();
+            foreach (var row in programRows)
+            {
+                // Find or create AcademicLevel
+                if (!rowLevels.ContainsKey(row.Level))
+                {
+                    var levelName = FormatLevelName(row.Level);
+                    var levelKey = (program.Id, levelName);
+                    if (!levelsByKey.TryGetValue(levelKey, out var academicLevel))
+                    {
+                        academicLevel = new AcademicLevel
+                        {
+                            Id = Guid.NewGuid(),
+                            ProgramId = program.Id,
+                            Name = levelName,
+                            Order = ToLevelOrder(row.Level)
+                        };
+                        dbContext.Levels.Add(academicLevel);
+                        levelsByKey[levelKey] = academicLevel;
+                    }
+                    rowLevels[row.Level] = academicLevel;
+                }
+
+                var rowLevel = rowLevels[row.Level];
+
+                // Upsert Course - program-specific (same code can exist in different programs)
+                var courseKey = (program.Id, row.CourseCode.ToUpperInvariant());
+                if (!allCourses.TryGetValue(courseKey, out var course))
+                {
+                    course = new Course
+                    {
+                        Id = Guid.NewGuid(),
+                        ProgramId = program.Id,
+                        Code = row.CourseCode,
+                        Title = row.CourseTitle,
+                        CreditUnits = row.CreditUnits,
+                        LevelId = rowLevel.Id,
+                        Semester = row.Semester,
+                        LectureHours = row.LectureHours,
+                        PracticalHours = row.PracticalHours,
+                        IsActive = true
+                    };
+                    dbContext.Courses.Add(course);
+                    allCourses[courseKey] = course;
+                    coursesCreated++;
+                }
+                else
+                {
+                    course.Title = row.CourseTitle;
+                    course.CreditUnits = row.CreditUnits;
+                    course.LevelId = rowLevel.Id;
+                    course.Semester = row.Semester;
+                    course.LectureHours = row.LectureHours;
+                    course.PracticalHours = row.PracticalHours;
+                    coursesUpdated++;
+                }
+            }
+
+            // Flush courses and levels to DB so their PKs are resolvable by EF FK tracking
+            await dbContext.SaveChangesAsync(ct);
+
+            // Pass 2: link courses to curriculum
+            foreach (var row in programRows)
+            {
+                var courseKey = (program.Id, row.CourseCode.ToUpperInvariant());
+                var course = allCourses[courseKey];
+                var academicLevel = rowLevels[row.Level];
+
+                var ccKey = (targetCurriculum.Id, course.Id, row.Semester);
+                if (existingCcKeys.Contains(ccKey))
+                {
+                    // Update existing link
+                    var existingCc = await dbContext.CurriculumCourses
+                        .FirstOrDefaultAsync(cc =>
+                            cc.CurriculumId == targetCurriculum.Id &&
+                            cc.CourseId == course.Id &&
+                            cc.Semester == row.Semester, ct);
+
+                    if (existingCc != null)
+                    {
+                        existingCc.Category = row.Status;
+                        existingCc.CreditUnits = row.CreditUnits;
+                        existingCc.LevelId = academicLevel.Id;
+                        curriculumCoursesUpdated++;
+                    }
+                }
+                else
+                {
+                    dbContext.CurriculumCourses.Add(new CurriculumCourse
+                    {
+                        Id = Guid.NewGuid(),
+                        CurriculumId = targetCurriculum.Id,
+                        LevelId = academicLevel.Id,
+                        CourseId = course.Id,
+                        Semester = row.Semester,
+                        Category = row.Status,
+                        CreditUnits = row.CreditUnits
+                    });
+                    existingCcKeys.Add(ccKey);
+                    curriculumCoursesAdded++;
+                }
             }
         }
 
-        await courseRepository.SaveChangesAsync(ct);
+        // Persist all curriculum-course links
+        await dbContext.SaveChangesAsync(ct);
 
-        // Step 2: Handle curriculum (only if a single program is targeted)
-        if (effectiveProgramId.HasValue && (curriculumId == null || curriculumId == Guid.Empty))
-        {
-            var newCurriculum = new Curriculum
-            {
-                Id = Guid.NewGuid(),
-                ProgramId = effectiveProgramId.Value,
-                AdmissionSessionId = academicSessionId ?? Guid.Empty,
-                Name = curriculumName ?? $"{context.ProgramNames.FirstOrDefault() ?? "Course"} Curriculum",
-                MinCreditUnitsForGraduation = 120,
-                Status = CurriculumStatus.Draft,
-                IsActive = true
-            };
-            await curriculumRepository.AddAsync(newCurriculum, ct);
-            createdCurriculumId = newCurriculum.Id.ToString();
-        }
-
-        // Step 3: Add curriculum courses
-        if (curriculumId != null && curriculumId != Guid.Empty)
-        {
-            foreach (var courseRow in context.Courses)
-            {
-                // Find or create level entity
-                // For simplicity, use the numeric level as a rough mapping
-                var levelId = new Guid(); // Would need proper level lookup in production
-                curriculumCoursesAdded++;
-            }
-            await curriculumRepository.SaveChangesAsync(ct);
-        }
-
-        // Clean up
-        _uploads.Remove(uploadId);
+        // Remove preview after successful import
+        _previews.TryRemove(uploadId, out _);
 
         return new CourseCatalogImportResult(
             uploadId,
             true,
             coursesCreated,
             coursesUpdated,
-            0,
+            coursesSkipped,
             curriculumCoursesAdded,
-            0,
-            createdCurriculumId,
-            new List<ImportErrorRow>()
-        );
+            curriculumCoursesUpdated,
+            createdCurriculumId?.ToString(),
+            errors);
     }
 
     public void DeletePreview(Guid uploadId)
     {
-        _uploads.Remove(uploadId);
+        _previews.TryRemove(uploadId, out _);
     }
 
-    #region Parsing Helpers
-
-    private string? DetectProgram(string text)
+    private async Task<List<ParsedCourseRow>> ParseDocumentAsync(
+        Stream stream,
+        IAcademicProgramRepository programRepo,
+        CancellationToken ct)
     {
-        var upper = text.ToUpperInvariant().Trim();
-        var programPatterns = new[]
-        {
-            "B.SC. COMPUTER SCIENCE",
-            "B.SC. CYBERSECURITY",
-            "B.SC. SOFTWARE ENGINEERING",
-            "B.SC. FORENSIC SCIENCE",
-            "B.SC. ROBOTICS",
-            "B.SC. ROBOTICS (ARTIFICIAL INTELLIGENCE)",
-            "B.SC. DATA SCIENCE",
-            "B.SC. MATHEMATICS",
-            "B.SC. INFORMATION AND COMMUNICATION TECHNOLOGY",
-            "B.SC. ICT"
-        };
+        var rows = new List<ParsedCourseRow>();
 
-        foreach (var pattern in programPatterns)
+        // Pre-fetch all programs once for header matching
+        var dbPrograms = await programRepo.GetAllAsync(ct);
+
+        using var doc = WordprocessingDocument.Open(stream, false);
+        var body = doc.MainDocumentPart?.Document.Body;
+        if (body == null) return rows;
+
+        string currentProgram = "";
+        int currentLevel = 0;
+        Semester currentSemester = Semester.First;
+
+        foreach (var element in body.Elements())
         {
-            if (upper.Contains(pattern))
-                return pattern.Replace("B.SC. ", "");
+            if (element is Paragraph p)
+            {
+                var text = p.InnerText.Trim();
+                if (string.IsNullOrWhiteSpace(text)) continue;
+
+                var matchedProgram = ResolveProgram(text, dbPrograms);
+                if (matchedProgram != null)
+                {
+                    currentProgram = matchedProgram.Name;
+                    continue;
+                }
+
+                var level = DetectLevel(text);
+                if (level.HasValue)
+                {
+                    currentLevel = level.Value;
+                    continue;
+                }
+
+                if (text.Contains("FIRST SEMESTER", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentSemester = Semester.First;
+                    continue;
+                }
+
+                if (text.Contains("SECOND SEMESTER", StringComparison.OrdinalIgnoreCase))
+                {
+                    currentSemester = Semester.Second;
+                    continue;
+                }
+            }
+
+            if (element is Table table)
+            {
+                ParseTable(table, dbPrograms, ref currentProgram, ref currentLevel, ref currentSemester, rows);
+            }
         }
-        return null;
+
+        return rows;
     }
 
-    private (int Level, string Name)? DetectLevel(string text)
+    private void ParseTable(
+        Table table,
+        List<AcademicProgram> programs,
+        ref string currentProgram,
+        ref int currentLevel,
+        ref Semester currentSemester,
+        List<ParsedCourseRow> rows)
     {
-        var upper = text.ToUpperInvariant().Trim();
+        // Detect column layout from the header row first
+        int snCol = -1, codeCol = -1, titleCol = -1, unitsCol = -1, typeCol = -1, lhCol = -1, phCol = -1;
 
-        var numericMatch = System.Text.RegularExpressions.Regex.Match(upper, @"(?:FRESHMAN\s+YEAR)?\s*\(?(\d{3})\s*LEVEL?\)?");
-        if (numericMatch.Success && int.TryParse(numericMatch.Groups[1].Value, out var level))
+        foreach (var tableRow in table.Elements<TableRow>())
         {
-            return (level, $"{level} Level");
-        }
+            var cells = tableRow.Elements<TableCell>()
+                                .Select(x => x.InnerText.Trim())
+                                .ToList();
 
-        if (upper.Contains("SOPHOMORE") || upper.Contains("200"))
-        {
-            var m2 = System.Text.RegularExpressions.Regex.Match(upper, @"(\d{3})");
-            if (m2.Success && int.TryParse(m2.Groups[1].Value, out var lv2))
-                return (lv2, "200 Level");
-            return (200, "Sophomore Year");
-        }
+            var rowText = string.Join(" ", cells.Where(c => !string.IsNullOrWhiteSpace(c))).Trim();
+            if (string.IsNullOrWhiteSpace(rowText)) continue;
 
-        if (upper.Contains("JUNIOR") || upper.Contains("300"))
-        {
-            var m3 = System.Text.RegularExpressions.Regex.Match(upper, @"(\d{3})");
-            if (m3.Success && int.TryParse(m3.Groups[1].Value, out var lv3))
-                return (lv3, "300 Level");
-            return (300, "Junior Year");
-        }
+            var matchedProgram = ResolveProgram(rowText, programs);
+            if (matchedProgram != null)
+            {
+                currentProgram = matchedProgram.Name;
+                continue;
+            }
 
-        if (upper.Contains("SENIOR") || upper.Contains("400"))
-        {
-            var m4 = System.Text.RegularExpressions.Regex.Match(upper, @"(\d{3})");
-            if (m4.Success && int.TryParse(m4.Groups[1].Value, out var lv4))
-                return (lv4, "400 Level");
-            return (400, "Senior Year");
-        }
+            var level = DetectLevel(rowText);
+            if (level.HasValue)
+            {
+                currentLevel = level.Value;
+            }
 
-        return null;
+            if (rowText.Contains("FIRST SEMESTER", StringComparison.OrdinalIgnoreCase))
+            {
+                currentSemester = Semester.First;
+                continue;
+            }
+
+            if (rowText.Contains("SECOND SEMESTER", StringComparison.OrdinalIgnoreCase))
+            {
+                currentSemester = Semester.Second;
+                continue;
+            }
+
+            if (cells.Count < 3) continue;
+
+            // Check if this is a header row
+            bool isHeader = cells.Any(c =>
+                c.Contains("Course Code", StringComparison.OrdinalIgnoreCase) ||
+                c.Contains("CourseCode", StringComparison.OrdinalIgnoreCase) ||
+                c.Equals("Code", StringComparison.OrdinalIgnoreCase));
+
+            if (isHeader)
+            {
+                for (int ci = 0; ci < cells.Count; ci++)
+                {
+                    var h = cells[ci].ToUpperInvariant();
+                    if (h.Contains("S/N") || h.Contains("SN") || h == "NO" || h == "S.N")
+                        snCol = ci;
+                    else if (h.Contains("COURSE CODE") || h.Contains("CODE"))
+                        codeCol = ci;
+                    else if (h.Contains("COURSE TITLE") || h.Contains("TITLE"))
+                        titleCol = ci;
+                    else if (h.Contains("UNIT") || h.Contains("CREDIT"))
+                        unitsCol = ci;
+                    else if (h.Contains("STATUS") || h == "C/E" || h == "TYPE" || h == "E/C")
+                        typeCol = ci;
+                    else if (h.Contains("L.H") || h.Contains("LH") || h.Contains("LECTURE"))
+                        lhCol = ci;
+                    else if (h.Contains("P.H") || h.Contains("PH") || h.Contains("PRACTICAL"))
+                        phCol = ci;
+                }
+                continue; // move to data rows
+            }
+
+            // Skip total/blank rows
+            if (cells[0].Contains("TOTAL", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(cells[0]))
+                continue;
+
+            if (string.IsNullOrEmpty(currentProgram) || currentLevel <= 0)
+                continue;
+
+            // If we successfully detected columns, use them; otherwise fall back to positional
+            string? code, title;
+            int units;
+
+            if (codeCol >= 0 && titleCol >= 0 && unitsCol >= 0)
+            {
+                // Header-detected layout
+                code  = codeCol  < cells.Count ? cells[codeCol]  : null;
+                title = titleCol < cells.Count ? cells[titleCol] : null;
+                var unitsStr = unitsCol < cells.Count ? cells[unitsCol] : null;
+                var parsedUnits = ParseInt(unitsStr);
+                if (!parsedUnits.HasValue) continue;
+                units = parsedUnits.Value;
+            }
+            else
+            {
+                // Positional fallback — try to figure out if there's an S/N column
+                // by checking whether cells[0] is a small integer (serial number)
+                if (cells.Count >= 5 && int.TryParse(cells[0], out _) && !int.TryParse(cells[1], out _))
+                {
+                    // Layout: S/N | Code | Title | Units | C/E [| LH | PH]
+                    code  = cells[1];
+                    title = cells[2];
+                    var parsedUnits = ParseInt(cells[3]);
+                    if (!parsedUnits.HasValue) continue;
+                    units = parsedUnits.Value;
+                    if (typeCol < 0) typeCol  = 4;
+                    if (lhCol  < 0) lhCol    = 5;
+                    if (phCol  < 0) phCol    = 6;
+                }
+                else
+                {
+                    // Layout: Code | Title | Units | C/E [| LH | PH]
+                    code  = cells[0];
+                    title = cells[1];
+                    var parsedUnits = ParseInt(cells[2]);
+                    if (!parsedUnits.HasValue) continue;
+                    units = parsedUnits.Value;
+                    if (typeCol < 0) typeCol = 3;
+                    if (lhCol  < 0) lhCol   = 4;
+                    if (phCol  < 0) phCol   = 5;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(title)) continue;
+            code = code.Trim();
+            title = title.Trim();
+            if (!IsLikelyCourseCode(code)) continue;
+
+            var typeValue = typeCol >= 0 && typeCol < cells.Count ? cells[typeCol] : string.Empty;
+            var category  = typeValue.StartsWith("E", StringComparison.OrdinalIgnoreCase)
+                ? CourseCategory.Elective
+                : CourseCategory.Compulsory;
+
+            rows.Add(new ParsedCourseRow(
+                Guid.NewGuid(),
+                currentProgram,
+                currentLevel,
+                currentSemester,
+                code,
+                title,
+                units,
+                category,
+                lhCol >= 0 && lhCol < cells.Count ? ParseInt(cells[lhCol]) : null,
+                phCol >= 0 && phCol < cells.Count ? ParseInt(cells[phCol]) : null,
+                null));
+        }
     }
 
-    private (Semester Semester, string Name)? DetectSemester(string text, int currentLevel)
+    private AcademicProgram? ResolveProgram(string text, List<AcademicProgram> programs)
     {
-        var upper = text.ToUpperInvariant().Trim();
+        var normalizedInput = Normalize(text);
+        if (string.IsNullOrEmpty(normalizedInput)) return null;
 
-        if (currentLevel > 0 && currentLevel < 1000)
+        return programs.FirstOrDefault(p =>
+            normalizedInput.Contains(Normalize(p.Name)) ||
+            Normalize(p.Name).Contains(normalizedInput));
+    }
+
+    private static int? DetectLevel(string text)
+    {
+        var normalized = text.ToUpperInvariant();
+        var numericMatch = Regex.Match(normalized, @"\bLEVEL\s*(\d{3})\b|\b(\d{3})\s*(?:LEVEL|L)\b|^\s*(\d{3})\s*$");
+        if (numericMatch.Success)
         {
-            if (upper.Contains("FIRST SEMESTER") || upper.Contains("FIRST SEM") || upper == "FIRST")
-                return (Semester.First, "First Semester");
-            if (upper.Contains("SECOND SEMESTER") || upper.Contains("SECOND SEM") || upper.Contains("SECOND") || upper == "SEMESTER TWO")
-                return (Semester.Second, "Second Semester");
+            var value = numericMatch.Groups
+                .Cast<System.Text.RegularExpressions.Group>()
+                .Skip(1)
+                .First(g => g.Success)
+                .Value;
+            return int.Parse(value);
         }
 
-        return null;
-    }
-
-    private bool IsCourseHeader(string text)
-    {
-        var upper = text.ToUpperInvariant().Trim();
-        return upper.Contains("COURSE CODE") && upper.Contains("COURSE TITLE");
-    }
-
-    private (string CourseCode, string CourseTitle, int CreditUnits, CourseCategory Status, int? LectureHours, int? PracticalHours)? ParseCourseRow(string text)
-    {
-        var codePattern = System.Text.RegularExpressions.Regex.Match(text, @"([A-Z]{1,5}\s*\d{3,4})");
-        if (!codePattern.Success)
+        var yearMatch = Regex.Match(normalized, @"\b(?:YEAR|PART)\s+(ONE|TWO|THREE|FOUR|FIVE|1|2|3|4|5)\b");
+        if (!yearMatch.Success)
             return null;
 
-        var courseCode = codePattern.Value.Trim();
-        var codeIndex = codePattern.Index;
-
-        var numericPattern = System.Text.RegularExpressions.Regex.Match(text, @"(\d+)\s+([CE])\s+(\d+)\s+([-\d]+)\s*$");
-        if (numericPattern.Success)
+        return yearMatch.Groups[1].Value switch
         {
-            var creditUnits = int.Parse(numericPattern.Groups[1].Value);
-            var statusStr = numericPattern.Groups[2].Value;
-            var status = statusStr == "E" ? CourseCategory.Elective : CourseCategory.Compulsory;
-            
-            int? lectureHours = null;
-            int? practicalHours = null;
-            
-            if (int.TryParse(numericPattern.Groups[3].Value, out var lh))
-                lectureHours = lh;
-            
-            var phStr = numericPattern.Groups[4].Value;
-            if (phStr != "-" && int.TryParse(phStr, out var ph))
-                practicalHours = ph;
-
-            var titleEnd = numericPattern.Groups[1].Index;
-            var title = text.Substring(codeIndex + courseCode.Length, titleEnd - courseCode.Length).Trim();
-            
-            if (string.IsNullOrEmpty(title))
-                return null;
-
-            return (courseCode, title, creditUnits, status, lectureHours, practicalHours);
-        }
-
-        return null;
+            "ONE" or "1" => 100,
+            "TWO" or "2" => 200,
+            "THREE" or "3" => 300,
+            "FOUR" or "4" => 400,
+            "FIVE" or "5" => 500,
+            _ => null
+        };
     }
 
-    private bool IsSectionBreak(string text)
+    private static string FormatLevelName(int level)
     {
-        var upper = text.ToUpperInvariant().Trim();
-        return upper.Contains("TOTAL") || 
-               upper.Contains("B.SC.") || 
-               (upper.Contains("LEVEL") && DetectLevel(upper) != null);
+        var levelNumber = level < 10 ? level * 100 : level;
+        return $"{levelNumber} Level";
     }
 
-    private string GetText(Paragraph paragraph)
+    private static int ToLevelOrder(int level)
     {
-        return string.Concat(paragraph.ChildElements.OfType<Run>()
-            .Select(r => r.InnerText));
+        var levelNumber = level < 10 ? level * 100 : level;
+        return levelNumber >= 100 ? levelNumber / 100 : levelNumber;
     }
 
-    #endregion
+    private static int? ParseInt(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var match = Regex.Match(value, @"\d+");
+        return match.Success && int.TryParse(match.Value, out var x) ? x : null;
+    }
+
+    private static bool IsLikelyCourseCode(string value)
+        => Regex.IsMatch(value.Trim(), @"^[A-Z]{2,}\s*\d{3}[A-Z]?$", RegexOptions.IgnoreCase);
+
+    private static string Normalize(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return new string(value.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+    }
 }

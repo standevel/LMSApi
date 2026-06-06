@@ -9,7 +9,7 @@ public sealed class Curriculum
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProgramId { get; set; }
-    public Guid AdmissionSessionId { get; set; } // The session students were admitted under
+    public Guid? AdmissionSessionId { get; set; } // The session students were admitted under
     public string Name { get; set; } = string.Empty; // e.g., 2023/2024 Revised Curriculum
     public int MinCreditUnitsForGraduation { get; set; }
     public CurriculumStatus Status { get; set; } = CurriculumStatus.Draft;

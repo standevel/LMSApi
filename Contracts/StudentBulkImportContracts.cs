@@ -2,10 +2,24 @@ using System;
 
 namespace LMS.Api.Contracts;
 
-public sealed class StudentImportRequest
+public sealed class StudentImportRowDto
 {
-    public IFormFile? CsvFile { get; set; }
-    public Guid? DefaultSessionId { get; set; }
+    public string? StartTime { get; set; }
+    public string? CompletionTime { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public string? MatricNumber { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? PersonalEmail { get; set; }
+    public string? GuardianPhone { get; set; }
+    public string? GuardianEmail { get; set; }
+    public string? Level { get; set; }
+    public string? AcademicProgram { get; set; }
+    public string? Sponsor { get; set; }
+    public string? JambNumber { get; set; }
+    public int? JambScore { get; set; }
 }
 
 public sealed record StudentImportResponse(

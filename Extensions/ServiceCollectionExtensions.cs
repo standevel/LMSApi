@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using System.IdentityModel.Tokens.Jwt;
@@ -68,10 +69,16 @@ public static class ServiceCollectionExtensions
 
         return services;
     } 
-    public static IServiceCollection AddApplicationDatabase(this IServiceCollection services, string connectionString)
+    public static IServiceCollection AddApplicationDatabase(this IServiceCollection services, string connectionString, bool ignorePendingModelChangesWarning = false)
     {
         services.AddDbContext<LmsDbContext>(options =>
         {
+            if (ignorePendingModelChangesWarning)
+            {
+                options.ConfigureWarnings(warnings =>
+                    warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
+            }
+
             options.UseSqlServer(
                 connectionString,
                 sqlOptions =>
@@ -185,8 +192,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IReportSchedulerService, ReportSchedulerService>();
 
-        // Course Catalog Import
-        services.AddScoped<ICourseCatalogImportService, CourseCatalogImportService>();
+        // Course Catalog Import — must be Singleton so in-memory preview dictionary survives across requests
+        services.AddSingleton<ICourseCatalogImportService, CourseCatalogImportService>();
 
         var jwtSettings = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 

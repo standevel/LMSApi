@@ -7,13 +7,13 @@ public sealed class Student
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     
-    // Link to Admission Application
-    public Guid AdmissionApplicationId { get; set; }
+    // Link to Admission Application (null for bulk-imported students)
+    public Guid? AdmissionApplicationId { get; set; }
     [JsonIgnore]
-    public AdmissionApplication AdmissionApplication { get; set; } = null!;
+    public AdmissionApplication? AdmissionApplication { get; set; }
     
-    // Entra ID / Microsoft Account
-    public string EntraObjectId { get; set; } = string.Empty;
+    // Entra ID / Microsoft Account (null until provisioned via registrar flow)
+    public string? EntraObjectId { get; set; }
     public string OfficialEmail { get; set; } = string.Empty;
     
     // Personal Info (copied from application)

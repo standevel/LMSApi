@@ -1574,14 +1574,18 @@ totalMaxMarks += assessment.MaxMarks;
 
     private async Task<AppUser?> ProvisionAppUserAsync(Student student, CancellationToken ct)
     {
-        var existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId, ct);
-        if (existingUser != null)
-            return existingUser;
+        if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
+        {
+            var existingByEntra = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId, ct);
+            if (existingByEntra != null)
+                return existingByEntra;
+        }
 
-        existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == student.OfficialEmail, ct);
+        var existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == student.OfficialEmail, ct);
         if (existingUser != null)
         {
-            existingUser.EntraObjectId = student.EntraObjectId;
+            if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
+                existingUser.EntraObjectId = student.EntraObjectId;
             existingUser.DisplayName = $"{student.FirstName} {student.LastName}";
             existingUser.UpdatedUtc = DateTime.UtcNow;
             return existingUser;
@@ -1590,7 +1594,7 @@ totalMaxMarks += assessment.MaxMarks;
         var appUser = new AppUser
         {
             Id = student.Id,
-            EntraObjectId = student.EntraObjectId,
+            EntraObjectId = student.EntraObjectId ?? $"student:{student.Id}",
             Email = student.OfficialEmail,
             DisplayName = $"{student.FirstName} {student.LastName}",
             IsActive = true,
@@ -1633,7 +1637,9 @@ private async Task<CourseOffering?> GetOrCreateCourseOfferingAsync(Guid courseId
 
     private async Task<ProgramEnrollment?> ProvisionEnrollmentAsync(Student student, CourseOffering offering, CancellationToken ct)
     {
-        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId || u.Email == student.OfficialEmail, ct);
+        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u =>
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
+            || u.Email == student.OfficialEmail, ct);
         if (appUser == null)
             return null;
 

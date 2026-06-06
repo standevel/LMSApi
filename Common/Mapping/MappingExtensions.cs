@@ -58,10 +58,14 @@ public static class MappingExtensions
 
     public static CourseDto ToDto(this Course course) => new(
         course.Id,
+        course.ProgramId,
         course.Code,
         course.Title,
         course.Description,
         course.CreditUnits,
+        course.LevelId,
+        course.Level?.Name,
+        course.Semester,
         course.IsActive,
         course.Offerings.Select(o => o.ToDto()).ToList());
 

@@ -1,3 +1,4 @@
+using System.IO;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using FastEndpoints;
@@ -7,6 +8,7 @@ using LMS.Api.Data.Enums;
 using LMS.Api.Data.Repositories;
 using LMS.Api.Security;
 using LMS.Api.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Courses;
 
@@ -60,6 +62,7 @@ public override void Configure()
 
         // Get the uploaded file
         var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        Console.WriteLine($"File: {file?.FileName}, Length: {file?.Length}");
         if (file == null || file.Length == 0)
         {
             await SendFailureAsync(400, "BadRequest", "NO_FILE", "No file uploaded. Please select a .docx file.", ct);
@@ -105,22 +108,43 @@ public override void Configure()
         if (!string.IsNullOrEmpty(sessionIdStr.ToString()) && Guid.TryParse(sessionIdStr.ToString(), out var sessionId))
             academicSessionId = sessionId;
 
-        // Read file stream
-        using var stream = file.OpenReadStream();
+        // Read file bytes directly into a MemoryStream (in-memory only, no temp file)
+        using var seekableStream = new MemoryStream();
+        await file.CopyToAsync(seekableStream, ct);
+        seekableStream.Position = 0;
         var fileName = file.FileName;
 
-        // Parse the document
-        var preview = await _importService.UploadAndParseAsync(stream, fileName, programId, programIds, academicSessionId, ct);
-
-        // Also fetch available curricula for the first program (if any)
-        if (programIds.Count > 0)
+        try
         {
-            var firstProgramId = programIds[0];
-            var curricula = await _curriculumRepository.GetByProgramIdAsync(firstProgramId, ct);
-            // Note: curriculum fetching is per-program; for multi-program imports, curricula are shown per-program in the UI
-        }
+            // Parse the document
+            var preview = await _importService.UploadAndParseAsync(seekableStream, fileName, programId, programIds, academicSessionId, ct);
 
-        await SendSuccessAsync(preview, ct);
+            // Also fetch available curricula for the first program (if any)
+            if (programIds.Count > 0)
+            {
+                var firstProgramId = programIds[0];
+                var curricula = await _curriculumRepository.GetByProgramIdAsync(firstProgramId, ct);
+                // Note: curriculum fetching is per-program; for multi-program imports, curricula are shown per-program in the UI
+            }
+
+            await SendSuccessAsync(preview, ct);
+        }
+        catch (System.BadImageFormatException)
+        {
+            await SendFailureAsync(400, "BadRequest", "INVALID_FORMAT", "The uploaded file is not a valid .docx format. Please ensure the file is a genuine Microsoft Word document.", ct);
+        }
+        catch (OpenXmlPackageException)
+        {
+            await SendFailureAsync(400, "BadRequest", "CORRUPT_FILE", "The uploaded file is corrupt or damaged. Please upload a valid .docx file.", ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await SendFailureAsync(400, "BadRequest", "PARSE_ERROR", ex.Message, ct);
+        }
+        catch (Exception ex)
+        {
+            await SendFailureAsync(500, "InternalServerError", "INTERNAL_ERROR", $"An error occurred: {ex.Message}", ct);
+        }
     }
 }
 
@@ -154,6 +178,10 @@ public override void Configure()
         {
             await SendFailureAsync(404, "NotFound", "UPLOAD_NOT_FOUND", $"Upload {uploadId} not found.", ct);
         }
+        catch (Exception ex)
+        {
+            await SendFailureAsync(500, "InternalServerError", "PREVIEW_ERROR", $"Preview failed: {ex.GetType().Name}: {ex.Message}", ct);
+        }
     }
 }
 
@@ -176,8 +204,6 @@ public override void Configure()
 
     public override async Task HandleAsync(ApplyCourseCatalogImportRequest req, CancellationToken ct)
     {
-        var uploadId = Route<Guid>("uploadId");
-
         // Check authentication
         if (HttpContext.User?.Identity?.IsAuthenticated != true)
         {
@@ -200,7 +226,20 @@ public override void Configure()
         }
         catch (KeyNotFoundException)
         {
+            var uploadId = Route<Guid>("uploadId");
             await SendFailureAsync(404, "NotFound", "UPLOAD_NOT_FOUND", $"Upload {uploadId} not found.", ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            await SendFailureAsync(500, "InternalServerError", "DATABASE_ERROR", $"Database error: {ex.InnerException?.Message ?? ex.Message}", ct);
+        }
+        catch (Exception ex)
+        {
+            // Log full exception chain for debugging
+            var fullMessage = ex.InnerException != null
+                ? $"{ex.Message} → {ex.InnerException.Message}"
+                : ex.Message;
+            await SendFailureAsync(500, "InternalServerError", "INTERNAL_ERROR", $"{ex.GetType().Name}: {fullMessage}", ct);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Contracts;
 
@@ -19,10 +20,14 @@ public record CourseOfferingDto(
 
 public record CourseDto(
     Guid Id,
+    Guid ProgramId,
     string Code,
     string Title,
     string? Description,
     int CreditUnits,
+    Guid? LevelId,
+    string? LevelName,
+    Semester? Semester,
     bool IsActive,
     List<CourseOfferingDto> Offerings);
 
@@ -34,10 +39,13 @@ public record CreateCourseOfferingRequest(
     int Semester);
 
 public record CreateCourseRequest(
+    Guid ProgramId,
     string Code,
     string Title,
     string? Description,
     int CreditUnits,
+    Guid? LevelId,
+    Semester? Semester,
     List<CreateCourseOfferingRequest> Offerings);
 
 public record UpdateCourseRequest(
@@ -45,6 +53,8 @@ public record UpdateCourseRequest(
     string Title,
     string? Description,
     int CreditUnits,
+    Guid? LevelId,
+    Semester? Semester,
     List<CreateCourseOfferingRequest> Offerings);
 
 public record ToggleCourseStatusRequest(Guid Id);

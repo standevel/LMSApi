@@ -5,12 +5,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddEnvironmentVariables();
 
-// Configure Serilog for file and console logging
-var logPath = Path.Combine(AppContext.BaseDirectory, "Logs", "admission-{Date}.log");
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .WriteTo.Console()
-    .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30)
+    .ReadFrom.Configuration(builder.Configuration, "Serilog")
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -20,12 +16,14 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services
     .AddApplicationCore()
-    .AddApplicationDatabase(connectionString)
+    .AddApplicationDatabase(connectionString, builder.Environment.IsDevelopment())
     .AddApplicationSecurity(builder.Configuration);
 
 var app = builder.Build();
 
 await app.EnsureDatabaseInitializedAsync();
+
+app.UseSerilogRequestLogging();
 
 app.UseApplicationMiddleware()
    .MapApplicationEndpoints();

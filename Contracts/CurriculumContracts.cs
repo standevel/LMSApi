@@ -8,7 +8,7 @@ public record CurriculumDto(
     Guid Id,
     Guid ProgramId,
     string ProgramName,
-    Guid AdmissionSessionId,
+    Guid? AdmissionSessionId,
     string AdmissionSessionName,
     string Name,
     int MinCreditUnitsForGraduation,

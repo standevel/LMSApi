@@ -34,10 +34,13 @@ public sealed class CourseService(
     {
         var course = new Course
         {
+            ProgramId = request.ProgramId,
             Code = request.Code,
             Title = request.Title,
             Description = request.Description,
             CreditUnits = request.CreditUnits,
+            LevelId = request.LevelId,
+            Semester = request.Semester,
             IsActive = true,
             Offerings = request.Offerings.Select(o => new CourseOffering
             {
@@ -67,6 +70,8 @@ public sealed class CourseService(
         course.Title = request.Title;
         course.Description = request.Description;
         course.CreditUnits = request.CreditUnits;
+        course.LevelId = request.LevelId;
+        course.Semester = request.Semester;
 
         course.Offerings.Clear();
         foreach (var o in request.Offerings)

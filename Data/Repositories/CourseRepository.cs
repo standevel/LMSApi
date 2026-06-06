@@ -7,6 +7,8 @@ public sealed class CourseRepository(LmsDbContext dbContext) : ICourseRepository
 {
     public Task<Course?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         dbContext.Courses
+            .Include(x => x.Program)
+            .Include(x => x.Level)
             .Include(x => x.Offerings)
                 .ThenInclude(x => x.Program)
             .Include(x => x.Offerings)
@@ -19,6 +21,8 @@ public sealed class CourseRepository(LmsDbContext dbContext) : ICourseRepository
 
     public Task<List<Course>> GetAllAsync(CancellationToken ct = default) =>
         dbContext.Courses
+            .Include(x => x.Program)
+            .Include(x => x.Level)
             .Include(x => x.Offerings)
                 .ThenInclude(x => x.Program)
             .Include(x => x.Offerings)

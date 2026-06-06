@@ -1,19 +1,16 @@
 using System.Text;
-using LMS.Api.Contracts;
 using LMS.Api.Security;
-using LMS.Api.Services;
-using Microsoft.AspNetCore.Mvc;
 
 namespace LMS.Api.Endpoints.BulkOperations;
 
 public sealed class StudentImportTemplateEndpoint(
-    IBulkOperationService bulkOperationService,
     ICurrentUserContext currentUserContext)
     : ApiEndpointWithoutRequest<string>
 {
     public override void Configure()
     {
         Get("bulk-operations/students/template");
+        Roles("SuperAdmin", "Admin", "Registrar");
         Tags("BulkOperations");
     }
 

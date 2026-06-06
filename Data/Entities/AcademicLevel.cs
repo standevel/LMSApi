@@ -15,8 +15,5 @@ public sealed class AcademicLevel
     public AcademicProgram Program { get; set; } = null!;
     [JsonIgnore]
     public ICollection<ProgramEnrollment> Enrollments { get; set; } = [];
-    [JsonIgnore]
-    public ICollection<Course> Courses { get; set; } = [];
-    [JsonIgnore]
     public ICollection<LevelSemesterConfig> Semesters { get; set; } = [];
 }
