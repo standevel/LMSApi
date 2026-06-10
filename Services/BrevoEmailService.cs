@@ -248,4 +248,57 @@ public sealed class BrevoEmailService(
             }
         }
     }
+
+    public Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, bool isNewAccount)
+    {
+        var subject = "Wigwe University - Parent/Guardian Portal Access";
+
+        string body;
+        if (isNewAccount)
+        {
+            body = $@"
+                <p>An account has been created for you on the <strong>Wigwe University Parent/Guardian Portal</strong>.</p>
+                <div style='background:#f9f9f9; padding:15px; border-radius:8px; margin:20px 0;'>
+                    <p><strong>Login Email:</strong> {loginEmail}</p>
+                    <p style='margin:0;'><strong>Password:</strong> Use the <em>Forgot Password</em> link on the portal to set your password.</p>
+                </div>
+                <p>
+                    <a href='https://portal.wigweuniversity.edu.ng/parent'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Access Parent Portal
+                    </a>
+                </p>
+                <p style='font-size:12px; color:#666;'>
+                    If the button above does not work, copy and paste this link:<br>
+                    https://portal.wigweuniversity.edu.ng/parent
+                </p>";
+        }
+        else
+        {
+            body = $@"
+                <p>Your existing Wigwe University account has been linked to <strong>{studentName}'s</strong> student profile.</p>
+                <p>You can now monitor your ward's academic progress on the Parent/Guardian Portal using your existing credentials.</p>
+                <p>
+                    <a href='https://portal.wigweuniversity.edu.ng/parent'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Access Parent Portal
+                    </a>
+                </p>";
+        }
+
+        var content = $@"
+            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>
+                <h2 style='color:#006B62;'>Parent/Guardian Portal</h2>
+                <p>Dear {guardianName},</p>
+                <p>You have been registered as the parent/guardian of <strong>{studentName}</strong> at Wigwe University.</p>
+                {body}
+                <hr style='border:0; border-top:1px solid #eee; margin:20px 0;'>
+                <p style='font-size:12px; color:#666;'>
+                    Wigwe University Registry<br>
+                    Email: registry@wigweuniversity.edu.ng
+                </p>
+            </div>";
+
+        return SendEmailAsync(toEmail, subject, content);
+    }
 }

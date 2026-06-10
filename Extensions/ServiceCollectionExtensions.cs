@@ -192,6 +192,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IReportSchedulerService, ReportSchedulerService>();
 
+        // Student Management
+        services.AddScoped<IStudentService, StudentService>();
+
         // Course Catalog Import — must be Singleton so in-memory preview dictionary survives across requests
         services.AddSingleton<ICourseCatalogImportService, CourseCatalogImportService>();
 

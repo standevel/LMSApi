@@ -13,8 +13,11 @@ public sealed class StudentImportRowDto
     public string? LastName { get; set; }
     public string? PhoneNumber { get; set; }
     public string? PersonalEmail { get; set; }
+    public string? GuardianFirstName { get; set; }
+    public string? GuardianLastName { get; set; }
     public string? GuardianPhone { get; set; }
     public string? GuardianEmail { get; set; }
+    public string? GuardianRelationship { get; set; }
     public string? Level { get; set; }
     public string? AcademicProgram { get; set; }
     public string? Sponsor { get; set; }

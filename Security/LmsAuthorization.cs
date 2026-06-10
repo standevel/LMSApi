@@ -13,6 +13,8 @@ public static class LmsRoles
     public const string HOD = "HOD";
     public const string Guest = "Guest";
     public const string Alumni = "Alumni";
+    public const string Parent = "Parent";
+    public const string AdmissionOfficer = "AdmissionOfficer";
 
 }
 

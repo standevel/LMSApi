@@ -49,7 +49,9 @@ await SeedCountriesAsync(ct);
             LmsRoles.Finance,
             LmsRoles.Alumni,
             LmsRoles.Guest,
-            LmsRoles.HOD
+            LmsRoles.HOD,
+            LmsRoles.Parent,
+            LmsRoles.AdmissionOfficer
         };
 
         var existing = await dbContext.Roles.Select(x => x.Name).ToListAsync(ct);
@@ -107,7 +109,9 @@ await SeedCountriesAsync(ct);
             [LmsRoles.Dean] = [LmsPermissions.CoursesManage, LmsPermissions.CoursesTeach, LmsPermissions.ReportsView, LmsPermissions.EnrollmentsManage],
             [LmsRoles.Lecturer] = [LmsPermissions.CoursesTeach, LmsPermissions.GradesSubmit, LmsPermissions.ProfileView],
             [LmsRoles.Student] = [LmsPermissions.ProfileView],
-            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage]
+            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage],
+            [LmsRoles.Parent] = [LmsPermissions.ProfileView],
+            [LmsRoles.AdmissionOfficer] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.ReportsView]
         };
 
         var existingPairs = await dbContext.RolePermissions

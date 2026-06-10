@@ -13,7 +13,6 @@ using LMS.Api.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
-
 public class WebhookService : BaseService, IWebhookService
 {
     private readonly LmsDbContext _context;
@@ -24,7 +23,6 @@ public class WebhookService : BaseService, IWebhookService
         _context = context;
         _httpClientFactory = httpClientFactory;
     }
-
     public async Task<ErrorOr<WebhookSubscriptionDto>> CreateSubscriptionAsync(CreateWebhookSubscriptionRequest request, Guid createdById, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Url))

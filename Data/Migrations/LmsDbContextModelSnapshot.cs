@@ -34,7 +34,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("DocumentsId");
 
-                    b.ToTable("AdmissionApplicationDocuments", (string)null);
+                    b.ToTable("AdmissionApplicationDocuments");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.AcademicLevel", b =>
@@ -547,7 +547,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("AuthorId");
 
-                    b.ToTable("Announcements", (string)null);
+                    b.ToTable("Announcements");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.AnnouncementAttachment", b =>
@@ -578,7 +578,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("AnnouncementId");
 
-                    b.ToTable("AnnouncementAttachments", (string)null);
+                    b.ToTable("AnnouncementAttachments");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.ApiRateLimit", b =>
@@ -964,9 +964,6 @@ namespace LMS.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ProgramId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -991,6 +988,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<int?>("PracticalHours")
                         .HasColumnType("int");
 
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int?>("Semester")
                         .HasColumnType("int");
 
@@ -1005,12 +1005,6 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("ProgramId", "Code")
                         .IsUnique();
-
-                    b.HasOne("LMS.Api.Data.Entities.AcademicProgram", "Program")
-                        .WithMany("Courses")
-                        .HasForeignKey("ProgramId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
 
                     b.ToTable("Courses", (string)null);
                 });
@@ -1701,7 +1695,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("DiscussionThreadId");
 
-                    b.ToTable("DiscussionPosts", (string)null);
+                    b.ToTable("DiscussionPosts");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.DiscussionPostAttachment", b =>
@@ -1732,7 +1726,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("DiscussionPostId");
 
-                    b.ToTable("DiscussionPostAttachments", (string)null);
+                    b.ToTable("DiscussionPostAttachments");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.DiscussionThread", b =>
@@ -1772,7 +1766,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("CourseOfferingId");
 
-                    b.ToTable("DiscussionThreads", (string)null);
+                    b.ToTable("DiscussionThreads");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.DocumentRecord", b =>
@@ -2855,7 +2849,7 @@ namespace LMS.Api.Data.Migrations
 
                     b.HasIndex("SenderId");
 
-                    b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.ParentGuardian", b =>
@@ -3554,7 +3548,7 @@ namespace LMS.Api.Data.Migrations
                     b.Property<Guid>("AcademicSessionId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("AdmissionApplicationId")
+                    b.Property<Guid?>("AdmissionApplicationId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAt")
@@ -3574,7 +3568,6 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("EntraObjectId")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
@@ -3640,10 +3633,12 @@ namespace LMS.Api.Data.Migrations
                     b.HasIndex("AcademicSessionId");
 
                     b.HasIndex("AdmissionApplicationId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[AdmissionApplicationId] IS NOT NULL");
 
                     b.HasIndex("EntraObjectId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[EntraObjectId] IS NOT NULL");
 
                     b.HasIndex("FacultyId");
 
@@ -4206,9 +4201,9 @@ namespace LMS.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Program");
-
                     b.Navigation("Level");
+
+                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.CourseEquivalency", b =>
@@ -5249,8 +5244,7 @@ namespace LMS.Api.Data.Migrations
                     b.HasOne("LMS.Api.Data.Entities.AdmissionApplication", "AdmissionApplication")
                         .WithOne("Student")
                         .HasForeignKey("LMS.Api.Data.Entities.Student", "AdmissionApplicationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
                         .WithMany()
@@ -5452,10 +5446,7 @@ namespace LMS.Api.Data.Migrations
 
             modelBuilder.Entity("LMS.Api.Data.Entities.Course", b =>
                 {
-                    b.Navigation("Level");
-
                     b.Navigation("Offerings");
-                    b.Navigation("Program");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.Curriculum", b =>

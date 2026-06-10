@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pack/
+
+# Build output
+dist/
+obj/
+bin/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+Logs/
+*.log
+
+# Environment
+.env
+.env.*
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Git
+.git/
+.gitignore
+
+# Misc
+*.zip
+*.cache
+*.temp

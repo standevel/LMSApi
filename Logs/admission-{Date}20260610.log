@@ -1,0 +1,21 @@
+2026-06-10 15:59:04.245 +01:00 [INF] Sessions already seeded. Skipping.
+2026-06-10 15:59:04.271 +01:00 [INF] Faculties already seeded. Skipping.
+2026-06-10 15:59:04.280 +01:00 [INF] Departments already seeded. Skipping.
+2026-06-10 15:59:04.295 +01:00 [INF] Programs already seeded. Skipping.
+2026-06-10 15:59:04.334 +01:00 [INF] Lecturer john.doe@wigweuniversity.edu.ng already exists. Skipping.
+2026-06-10 15:59:04.337 +01:00 [INF] Lecturer jane.smith@wigweuniversity.edu.ng already exists. Skipping.
+2026-06-10 15:59:04.357 +01:00 [INF] All document types already exist. Skipping.
+2026-06-10 15:59:04.366 +01:00 [INF] Sponsors already seeded. Skipping.
+2026-06-10 15:59:04.375 +01:00 [INF] Subjects already seeded. Skipping.
+2026-06-10 15:59:04.388 +01:00 [INF] Countries already seeded. Skipping.
+2026-06-10 15:59:04.398 +01:00 [INF] Grading scales already seeded. Skipping.
+2026-06-10 15:59:04.408 +01:00 [INF] Credit transfer rules already seeded. Skipping.
+2026-06-10 15:59:04.418 +01:00 [INF] Program credit mappings already seeded. Skipping.
+2026-06-10 15:59:04.418 +01:00 [INF] Database initialization completed successfully.
+2026-06-10 15:59:04.459 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 84022968-6bdc-4c6b-8eab-57b75fa5d0b1, Domain: wigweuniversity.edu.ng
+2026-06-10 15:59:04.477 +01:00 [INF] Entra ID Service initialized successfully
+2026-06-10 15:59:04.576 +01:00 [INF] Registered 287 endpoints in 1,706 milliseconds.
+2026-06-10 15:59:04.605 +01:00 [INF] Now listening on: http://localhost:5021
+2026-06-10 15:59:04.605 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-06-10 15:59:04.605 +01:00 [INF] Hosting environment: Development
+2026-06-10 15:59:04.605 +01:00 [INF] Content root path: /Users/mac/Apps/LMS APP/LMSApi
