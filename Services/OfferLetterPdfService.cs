@@ -27,106 +27,57 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                  page.PageColor(Colors.White);
                  page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Verdana));
 
-                page.Content().Column(col =>
-                {
-                    // HEADER (Only on first page as it's at the top of Content)
-                    col.Item().PaddingBottom(30).Row(row =>
-                    {
-                        row.RelativeItem().Row(innerRow =>
-                        {
-                            if (template != null && !string.IsNullOrEmpty(template.LogoBase64))
-                            {
-                                try 
-                                { 
-                                    var bytes = Convert.FromBase64String(template.LogoBase64.Contains(",") ? template.LogoBase64.Split(',')[1] : template.LogoBase64);
-                                    innerRow.AutoItem().Height(70).Image(bytes); 
-                                } catch { /* Fallback */ }
-                            }
-                            
-                            var headerTitle = template?.HeaderTitle ?? "WIGWE UNIVERSITY";
-                            var headerSubtitle = template?.HeaderSubtitle ?? "OFFICE OF ACADEMIC ADMISSIONS";
-                            var headerContact = template?.HeaderContact ?? "Rivers State, Nigeria • www.wigweuniversity.edu.ng";
-
-                             innerRow.RelativeItem().PaddingLeft(10).Column(innerCol =>
-                             {
-                                 innerCol.Item().PaddingTop(5).Text(headerTitle.ToUpper()).FontSize(20).Bold().FontColor("#0F172A");
-                                 innerCol.Item().Text(headerSubtitle.ToUpper()).FontSize(9).Bold().FontColor("#D4AF37").LetterSpacing(0.2f);
-                                 innerCol.Item().Text(headerContact).FontSize(8).FontColor("#64748B");
-                             });
-                         });
-
-                         row.AutoItem().AlignRight().Column(dateCol =>
+                 page.Content().Column(col =>
+                 {
+                     // Dynamic or Fallback Content
+                     if (template != null && !string.IsNullOrEmpty(template.SectionsJson))
+                     {
+                         try
                          {
-                             dateCol.Item().Text("DATE").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
-                             var displayDate = !string.IsNullOrEmpty(template?.HeaderDate) 
-                                 ? template.HeaderDate 
-                                 : DateTime.UtcNow.ToString("MMMM dd, yyyy");
-                            dateCol.Item().Text(displayDate).FontSize(11).Bold().FontColor("#1E293B");
-                        });
-                    });
+                             var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                             var sections = System.Text.Json.JsonSerializer.Deserialize<List<LetterSectionDto>>(template.SectionsJson, options);
+                             if (sections != null && sections.Any())
+                             {
+                                 var hasHeader = sections.Any(s => s.Type == "header");
+                                 var hasRecipient = sections.Any(s => s.Type == "recipient");
 
-                    // Recipient Section
-                    col.Item().PaddingBottom(30).Column(c =>
-                    {
-                        c.Item().Text("ADMISSION OFFER TO:").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
-                        var fullName = $"{application.FirstName} {application.MiddleName} {application.LastName}".Trim();
-                        c.Item().Text((fullName ?? "APPLICANT").ToUpper()).FontSize(14).Bold().FontColor("#1E293B");
-                        
-                        if (!string.IsNullOrEmpty(application.EmergencyContactJson))
-                        {
-                            try
-                            {
-                                using var doc = System.Text.Json.JsonDocument.Parse(application.EmergencyContactJson);
-                                var root = doc.RootElement;
-                                var address = root.TryGetProperty("address", out var a) ? a.GetString() : null;
-                                var city = root.TryGetProperty("city", out var ci) ? ci.GetString() : null;
-                                var state = root.TryGetProperty("state", out var s) ? s.GetString() : null;
-                                var country = root.TryGetProperty("country", out var co) ? co.GetString() : "Nigeria";
+                                 if (!hasHeader)
+                                 {
+                                     RenderStaticHeader(col, template);
+                                 }
 
-                                if (!string.IsNullOrEmpty(address))
-                                    c.Item().PaddingTop(2).Text(address).FontSize(10).FontColor("#475569");
-                                
-                                var cityState = string.Join(", ", new[] { city, state, country }.Where(x => !string.IsNullOrEmpty(x)));
-                                if (!string.IsNullOrEmpty(cityState))
-                                    c.Item().Text(cityState).FontSize(10).FontColor("#475569");
-                            }
-                            catch { /* Skip address */ }
-                        }
+                                 if (!hasRecipient)
+                                 {
+                                     RenderStaticRecipient(col, application);
+                                 }
 
-                        c.Item().PaddingTop(5).Text($"EMAIL: {application.StudentEmail ?? "N/A"}").FontSize(9).FontColor("#64748B");
-                        c.Item().Text($"APPLICATION ID: {application.ApplicationNumber ?? "N/A"}").FontSize(9).FontColor("#64748B");
-                    });
-
-                    // Dynamic or Fallback Content
-                    if (template != null && !string.IsNullOrEmpty(template.SectionsJson))
-                    {
-                        try
-                        {
-                            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                            var sections = System.Text.Json.JsonSerializer.Deserialize<List<LetterSectionDto>>(template.SectionsJson, options);
-                            if (sections != null && sections.Any())
-                            {
-                                foreach (var section in sections.Where(s => s.IsVisible))
-                                {
-                                    RenderSection(col, section, application, template);
-                                }
-                            }
-                            else
-                            {
-                                RenderFallbackContent(col, application);
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                             col.Item().Text($"Content Rendering Error: {ex.Message}").FontColor(Colors.Red.Medium).FontSize(8);
-                             RenderFallbackContent(col, application);
-                        }
-                    }
-                    else
-                    {
-                        RenderFallbackContent(col, application);
-                    }
-                });
+                                 foreach (var section in sections.Where(s => s.IsVisible))
+                                 {
+                                     RenderSection(col, section, application, template);
+                                 }
+                             }
+                             else
+                             {
+                                 RenderStaticHeader(col, template);
+                                 RenderStaticRecipient(col, application);
+                                 RenderFallbackContent(col, application);
+                             }
+                         }
+                         catch (Exception ex)
+                         {
+                              col.Item().Text($"Content Rendering Error: {ex.Message}").FontColor(Colors.Red.Medium).FontSize(8);
+                              RenderStaticHeader(col, template);
+                              RenderStaticRecipient(col, application);
+                              RenderFallbackContent(col, application);
+                         }
+                     }
+                     else
+                     {
+                         RenderStaticHeader(col, template);
+                         RenderStaticRecipient(col, application);
+                         RenderFallbackContent(col, application);
+                     }
+                 });
 
                 page.Footer().Column(fcol => {
                     // Decorative Bottom Bar
@@ -163,6 +114,18 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
         switch (section.Type)
         {
+            case "header":
+                RenderStaticHeader(col, template);
+                break;
+            case "recipient":
+                RenderStaticRecipient(col, app);
+                break;
+            case "date":
+                var dateStr = string.IsNullOrEmpty(rawContent) || rawContent == "{date}"
+                    ? (!string.IsNullOrEmpty(template?.HeaderDate) ? template.HeaderDate : app.CreatedAt.ToString("MMMM dd, yyyy"))
+                    : rawContent;
+                col.Item().PaddingBottom(15).Text(dateStr).FontSize(11).Bold().FontColor("#1E293B");
+                break;
             case "subject":
                 col.Item().PaddingBottom(25).Text(rawContent).FontSize(22).Bold().FontColor("#0F172A").LineHeight(1.1f);
                 break;
@@ -243,6 +206,93 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                 });
                 break;
         }
+    }
+
+    private void RenderStaticHeader(ColumnDescriptor col, LetterTemplateResponse? template)
+    {
+        col.Item().PaddingBottom(30).Row(row =>
+        {
+            row.RelativeItem().Row(innerRow =>
+            {
+                if (template != null && !string.IsNullOrEmpty(template.LogoBase64))
+                {
+                    try 
+                    { 
+                        var bytes = Convert.FromBase64String(template.LogoBase64.Contains(",") ? template.LogoBase64.Split(',')[1] : template.LogoBase64);
+                        innerRow.AutoItem().Height(70).Image(bytes); 
+                    } catch { /* Fallback */ }
+                }
+                
+                var headerTitle = template?.HeaderTitle ?? "WIGWE UNIVERSITY";
+                var headerSubtitle = template?.HeaderSubtitle ?? "OFFICE OF ACADEMIC ADMISSIONS";
+                var headerContact = template?.HeaderContact ?? "Rivers State, Nigeria • www.wigweuniversity.edu.ng";
+
+                 innerRow.RelativeItem().PaddingLeft(10).Column(innerCol =>
+                 {
+                     innerCol.Item().PaddingTop(5).Text(headerTitle.ToUpper()).FontSize(20).Bold().FontColor("#0F172A");
+                     innerCol.Item().Text(headerSubtitle.ToUpper()).FontSize(9).Bold().FontColor("#D4AF37").LetterSpacing(0.2f);
+                     innerCol.Item().Text(headerContact).FontSize(8).FontColor("#64748B");
+                 });
+             });
+
+             var hasDateSection = false;
+             if (template != null && !string.IsNullOrEmpty(template.SectionsJson))
+             {
+                 try
+                 {
+                     var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                     var sections = System.Text.Json.JsonSerializer.Deserialize<List<LetterSectionDto>>(template.SectionsJson, options);
+                     hasDateSection = sections?.Any(s => s.Type == "date" && s.IsVisible) ?? false;
+                 }
+                 catch {}
+             }
+
+             if (!hasDateSection)
+             {
+                 row.AutoItem().AlignRight().Column(dateCol =>
+                 {
+                     dateCol.Item().Text("DATE").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
+                     var displayDate = !string.IsNullOrEmpty(template?.HeaderDate) 
+                         ? template.HeaderDate 
+                         : DateTime.UtcNow.ToString("MMMM dd, yyyy");
+                     dateCol.Item().Text(displayDate).FontSize(11).Bold().FontColor("#1E293B");
+                 });
+             }
+        });
+    }
+
+    private void RenderStaticRecipient(ColumnDescriptor col, AdmissionApplication application)
+    {
+        col.Item().PaddingBottom(30).Column(c =>
+        {
+            c.Item().Text("ADMISSION OFFER TO:").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
+            var fullName = $"{application.FirstName} {application.MiddleName} {application.LastName}".Trim();
+            c.Item().Text((fullName ?? "APPLICANT").ToUpper()).FontSize(14).Bold().FontColor("#1E293B");
+            
+            if (!string.IsNullOrEmpty(application.EmergencyContactJson))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(application.EmergencyContactJson);
+                    var root = doc.RootElement;
+                    var address = root.TryGetProperty("address", out var a) ? a.GetString() : null;
+                    var city = root.TryGetProperty("city", out var ci) ? ci.GetString() : null;
+                    var state = root.TryGetProperty("state", out var s) ? s.GetString() : null;
+                    var country = root.TryGetProperty("country", out var co) ? co.GetString() : "Nigeria";
+
+                    if (!string.IsNullOrEmpty(address))
+                        c.Item().PaddingTop(2).Text(address).FontSize(10).FontColor("#475569");
+                    
+                    var cityState = string.Join(", ", new[] { city, state, country }.Where(x => !string.IsNullOrEmpty(x)));
+                    if (!string.IsNullOrEmpty(cityState))
+                        c.Item().Text(cityState).FontSize(10).FontColor("#475569");
+                }
+                catch { /* Skip address */ }
+            }
+
+            c.Item().PaddingTop(5).Text($"EMAIL: {application.StudentEmail ?? "N/A"}").FontSize(9).FontColor("#64748B");
+            c.Item().Text($"APPLICATION ID: {application.ApplicationNumber ?? "N/A"}").FontSize(9).FontColor("#64748B");
+        });
     }
 
     private void RenderHtmlContent(ColumnDescriptor col, string html)
@@ -345,6 +395,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
             .Replace("{programName}", app.AcademicProgram?.Name ?? "Selected Program")
             .Replace("{collegeName}", app.Faculty?.Name ?? "Selected College")
             .Replace("{year}", app.CreatedAt.Year.ToString())
+            .Replace("{date}", app.CreatedAt.ToString("MMMM dd, yyyy"))
             .Replace("{applicationNumber}", app.ApplicationNumber);
     }
 
