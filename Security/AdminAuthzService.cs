@@ -17,6 +17,7 @@ public sealed class AdminAuthzService(
         var users = await userRepository.ListForManagementAsync(search, ct);
         var payload = users
             .Select(user => new ManagedUserSummary(
+                user.Id,
                 user.EntraObjectId,
                 user.Email,
                 user.DisplayName,

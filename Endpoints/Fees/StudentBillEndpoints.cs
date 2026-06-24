@@ -8,13 +8,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Fees;
 
-public sealed class GetStudentBillEndpoint(IFeeService feeService)
+public sealed class GetStudentBillEndpoint(IFeeService feeService, LmsDbContext db)
     : ApiEndpointWithoutRequest<StudentBillResponse>
 {
     public override void Configure()
     {
         Get("fees/bill/{studentId}/{sessionId}");
-        Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry");
+        Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry", "Parent");
         Tags("Fees");
     }
 
@@ -22,16 +22,26 @@ public sealed class GetStudentBillEndpoint(IFeeService feeService)
     {
         var studentId = Route<Guid>("studentId");
         var sessionId = Route<Guid>("sessionId");
+        var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
 
-        // Ownership check: students can only access their own bill
+        // Ownership check: students can only access their own bill, parents can only access linked student bills
         if (User.IsInRole("Student") &&
             !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
             !User.IsInRole("Finance") && !User.IsInRole("Registry"))
         {
-            var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
             if (callerId != studentId)
             {
                 await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only access your own fee bill.", ct);
+                return;
+            }
+        }
+        else if (User.IsInRole("Parent") &&
+                 !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
+                 !User.IsInRole("Finance") && !User.IsInRole("Registry"))
+        {
+            if (callerId == null || !await db.ParentStudentLinks.AnyAsync(psl => psl.StudentId == studentId && psl.ParentGuardian!.UserId == callerId.Value, ct))
+            {
+                await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You are not linked to this student.", ct);
                 return;
             }
         }
@@ -72,6 +82,67 @@ public sealed class GetStudentBillEndpoint(IFeeService feeService)
         if (student == null) return "";
         var name = $"{student.FirstName} {student.LastName}".Trim();
         return string.IsNullOrWhiteSpace(name) ? student.OfficialEmail : name;
+    }
+}
+
+public sealed class GetStudentBillActiveSessionEndpoint(IFeeService feeService, LmsDbContext db)
+    : ApiEndpointWithoutRequest<StudentBillResponse>
+{
+    public override void Configure()
+    {
+        Get("fees/bill/{studentId}");
+        Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry", "Parent");
+        Tags("Fees");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var studentId = Route<Guid>("studentId");
+        var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
+
+        // Ownership check: students can only access their own bill, parents can only access linked student bills
+        if (User.IsInRole("Student") &&
+            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
+            !User.IsInRole("Finance") && !User.IsInRole("Registry"))
+        {
+            if (callerId != studentId)
+            {
+                await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only access your own fee bill.", ct);
+                return;
+            }
+        }
+        else if (User.IsInRole("Parent") &&
+                 !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
+                 !User.IsInRole("Finance") && !User.IsInRole("Registry"))
+        {
+            if (callerId == null || !await db.ParentStudentLinks.AnyAsync(psl => psl.StudentId == studentId && psl.ParentGuardian!.UserId == callerId.Value, ct))
+            {
+                await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You are not linked to this student.", ct);
+                return;
+            }
+        }
+
+        // Resolve active session
+        var activeSession = await db.AcademicSessions
+            .Where(s => s.IsActive)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (activeSession is null)
+        {
+            await SendFailureAsync(400, "No active session found.", "NO_ACTIVE_SESSION",
+                "No active academic session found. Please contact the Registry.", ct);
+            return;
+        }
+
+        var record = await feeService.GetStudentBillAsync(studentId, activeSession.Value);
+        if (record == null)
+        {
+            await SendFailureAsync(404, "Bill not found", "NOT_FOUND", "No fee bill found for this student and session.", ct);
+            return;
+        }
+
+        await SendSuccessAsync(GetStudentBillEndpoint.MapBill(record), ct);
     }
 }
 

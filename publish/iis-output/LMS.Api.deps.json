@@ -28,7 +28,8 @@
           "Serilog.Enrichers.Environment": "3.0.1",
           "Serilog.Enrichers.Thread": "4.0.0",
           "Serilog.Sinks.File": "7.0.0",
-          "Serilog.Sinks.Grafana.Loki": "8.3.2"
+          "Serilog.Sinks.Grafana.Loki": "8.3.2",
+          "WebPush": "1.0.13"
         },
         "runtime": {
           "LMS.Api.dll": {}
@@ -761,6 +762,14 @@
           }
         }
       },
+      "Portable.BouncyCastle/1.9.0": {
+        "runtime": {
+          "lib/netstandard2.0/BouncyCastle.Crypto.dll": {
+            "assemblyVersion": "1.9.0.0",
+            "fileVersion": "1.9.0.1"
+          }
+        }
+      },
       "QuestPDF/2024.12.3": {
         "runtime": {
           "lib/net8.0/QuestPDF.dll": {
@@ -1010,6 +1019,17 @@
           "lib/net9.0/System.Security.Cryptography.ProtectedData.dll": {
             "assemblyVersion": "9.0.0.0",
             "fileVersion": "9.0.425.16305"
+          }
+        }
+      },
+      "WebPush/1.0.13": {
+        "dependencies": {
+          "Portable.BouncyCastle": "1.9.0"
+        },
+        "runtime": {
+          "lib/net10.0/WebPush.dll": {
+            "assemblyVersion": "1.0.13.0",
+            "fileVersion": "1.0.13.0"
           }
         }
       },
@@ -1463,6 +1483,13 @@
       "path": "nswag.generation.aspnetcore/14.6.3",
       "hashPath": "nswag.generation.aspnetcore.14.6.3.nupkg.sha512"
     },
+    "Portable.BouncyCastle/1.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-eZZBCABzVOek+id9Xy04HhmgykF0wZg9wpByzrWN7q8qEI0Qen9b7tfd7w8VA3dOeesumMG7C5ZPy0jk7PSRHw==",
+      "path": "portable.bouncycastle/1.9.0",
+      "hashPath": "portable.bouncycastle.1.9.0.nupkg.sha512"
+    },
     "QuestPDF/2024.12.3": {
       "type": "package",
       "serviceable": true,
@@ -1623,6 +1650,13 @@
       "sha512": "sha512-o94k2RKuAce3GeDMlUvIXlhVa1kWpJw95E6C9LwW0KlG0nj5+SgCiIxJ2Eroqb9sLtG1mEMbFttZIBZ13EJPvQ==",
       "path": "system.security.cryptography.protecteddata/9.0.4",
       "hashPath": "system.security.cryptography.protecteddata.9.0.4.nupkg.sha512"
+    },
+    "WebPush/1.0.13": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Qyypsk6j+GqncCa/IgbmZLnL7DxqKFGz3jIdquGSLeiD3NtN+HPnIFBMwIJHffDU9ZEztTkaMMYxvW3PJxJL7Q==",
+      "path": "webpush/1.0.13",
+      "hashPath": "webpush.1.0.13.nupkg.sha512"
     },
     "YamlDotNet/16.3.0": {
       "type": "package",

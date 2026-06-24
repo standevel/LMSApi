@@ -20,6 +20,8 @@ public sealed class LectureSession
     public bool IsCompleted { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid CreatedBy { get; set; }
+    public string? OnlineMeetingId { get; set; }
+    public string? OnlineMeetingJoinUrl { get; set; }
 
     // Navigation properties
     [JsonIgnore]

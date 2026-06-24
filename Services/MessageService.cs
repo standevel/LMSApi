@@ -6,13 +6,16 @@ using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using LMS.Api.Security;
 
 namespace LMS.Api.Services;
 
 public sealed class MessageService(
     LmsDbContext dbContext,
     IUserRepository userRepository,
-    IAuditService auditService) : BaseService(auditService), IMessageService
+    IAuditService auditService,
+    IConfiguration configuration) : BaseService(auditService), IMessageService
 {
     public async Task<ErrorOr<MessageDto>> CreateAsync(CreateMessageRequest request, CancellationToken ct = default)
     {
@@ -60,10 +63,42 @@ public sealed class MessageService(
 
     public async Task<ErrorOr<List<MessageDto>>> GetByRecipientIdAsync(Guid recipientId, CancellationToken ct = default)
     {
-        var messages = await dbContext.Messages
+        var isAdmin = await dbContext.UserRoles
+            .Include(ur => ur.Role)
+            .AnyAsync(ur => ur.UserId == recipientId &&
+                            (ur.Role.Name == LmsRoles.SuperAdmin || ur.Role.Name == LmsRoles.Admin), ct);
+
+        Guid? bootstrapAdminId = null;
+        if (isAdmin)
+        {
+            var bootstrapAdminEmail = configuration["BootstrapAdmin:Email"];
+            if (!string.IsNullOrWhiteSpace(bootstrapAdminEmail))
+            {
+                var bootstrapAdmin = await dbContext.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Email == bootstrapAdminEmail, ct);
+                if (bootstrapAdmin != null)
+                {
+                    bootstrapAdminId = bootstrapAdmin.Id;
+                }
+            }
+        }
+
+        var query = dbContext.Messages
             .Include(m => m.Sender)
             .Include(m => m.Recipient)
-            .Where(m => m.RecipientId == recipientId && m.IsActive)
+            .AsNoTracking();
+
+        if (isAdmin && bootstrapAdminId.HasValue)
+        {
+            query = query.Where(m => (m.RecipientId == recipientId || m.RecipientId == bootstrapAdminId.Value) && m.IsActive);
+        }
+        else
+        {
+            query = query.Where(m => m.RecipientId == recipientId && m.IsActive);
+        }
+
+        var messages = await query
             .OrderByDescending(m => m.SentAt)
             .ToListAsync(ct);
 

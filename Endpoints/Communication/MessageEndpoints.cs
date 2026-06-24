@@ -2,6 +2,10 @@ using FastEndpoints;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using LMS.Api.Data;
+using LMS.Api.Data.Entities;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Communication;
 
@@ -113,5 +117,63 @@ public sealed class DeleteMessageEndpoint(IMessageService messageService)
         await SendAsync(result.Match(
             deleted => true,
             errors => false), ct);
+    }
+}
+
+public sealed record AdminRecipientDto(Guid AdminId);
+
+public sealed class GetAdminRecipientEndpoint(LmsDbContext dbContext, IConfiguration configuration)
+    : ApiEndpointWithoutRequest<AdminRecipientDto>
+{
+    public override void Configure()
+    {
+        Get("messages/admin-recipient");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Tags("Communication");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var bootstrapAdminEmail = configuration["BootstrapAdmin:Email"];
+        if (string.IsNullOrWhiteSpace(bootstrapAdminEmail))
+        {
+            await SendFailureAsync(404, "Not Found", "NOT_FOUND", "Bootstrap admin email is not configured", ct);
+            return;
+        }
+
+        var adminUser = await dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Email == bootstrapAdminEmail, ct);
+
+        if (adminUser != null)
+        {
+            await SendSuccessAsync(new AdminRecipientDto(adminUser.Id), ct);
+            return;
+        }
+
+        // If the bootstrap admin hasn't logged in yet, provision them dynamically
+        var superAdminRole = await dbContext.Roles.FirstOrDefaultAsync(r => r.Name == LmsRoles.SuperAdmin, ct);
+        if (superAdminRole == null)
+        {
+            await SendFailureAsync(404, "Not Found", "NOT_FOUND", "SuperAdmin role not found", ct);
+            return;
+        }
+
+        var newAdmin = new AppUser
+        {
+            Id = Guid.NewGuid(),
+            EntraObjectId = Guid.NewGuid().ToString(),
+            Email = bootstrapAdminEmail,
+            DisplayName = "System Administrator",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+            IsActive = true
+        };
+
+        dbContext.Users.Add(newAdmin);
+        dbContext.UserRoles.Add(new UserRole { UserId = newAdmin.Id, RoleId = superAdminRole.Id, AssignedUtc = DateTime.UtcNow });
+        await dbContext.SaveChangesAsync(ct);
+
+        await SendSuccessAsync(new AdminRecipientDto(newAdmin.Id), ct);
     }
 }

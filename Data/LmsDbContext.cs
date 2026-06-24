@@ -17,6 +17,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<AcademicProgram> Programs => Set<AcademicProgram>();
     public DbSet<AcademicLevel> Levels => Set<AcademicLevel>();
     public DbSet<ProgramEnrollment> Enrollments => Set<ProgramEnrollment>();
+    public DbSet<CourseEnrollment> CourseEnrollments => Set<CourseEnrollment>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<CourseOffering> CourseOfferings => Set<CourseOffering>();
     public DbSet<Curriculum> Curricula => Set<Curriculum>();
@@ -65,6 +66,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     
      // Gradebook Management
      public DbSet<SystemGradingConfiguration> SystemGradingConfigurations => Set<SystemGradingConfiguration>();
+     public DbSet<SystemRegistrationConfiguration> SystemRegistrationConfigurations => Set<SystemRegistrationConfiguration>();
      public DbSet<AssessmentCategory> AssessmentCategories => Set<AssessmentCategory>();
      public DbSet<Assessment> Assessments => Set<Assessment>();
      public DbSet<Grade> Grades => Set<Grade>();
@@ -86,6 +88,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
       public DbSet<CourseSwapRequest> CourseSwapRequests => Set<CourseSwapRequest>();
       public DbSet<ScheduleAdjustmentRequest> ScheduleAdjustmentRequests => Set<ScheduleAdjustmentRequest>();
       public DbSet<PrerequisiteOverride> PrerequisiteOverrides => Set<PrerequisiteOverride>();
+      public DbSet<ProgramSwitchRequest> ProgramSwitchRequests => Set<ProgramSwitchRequest>();
 
       // Assessment Engine (Phase 2)
       public DbSet<Quiz> Quizzes => Set<Quiz>();
@@ -113,6 +116,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
       public DbSet<ApiRateLimit> ApiRateLimits => Set<ApiRateLimit>();
       public DbSet<ParentGuardian> ParentGuardians => Set<ParentGuardian>();
       public DbSet<ParentStudentLink> ParentStudentLinks => Set<ParentStudentLink>();
+      public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -253,6 +257,19 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasOne(x => x.AcademicSession).WithMany().HasForeignKey(x => x.AcademicSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Curriculum).WithMany().HasForeignKey(x => x.CurriculumId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.UserId, x.AcademicSessionId }).IsUnique();
+        });
+
+        modelBuilder.Entity<CourseEnrollment>(entity =>
+        {
+            entity.ToTable("CourseEnrollments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.StudentId, x.CourseOfferingId }).IsUnique();
+            entity.HasIndex(x => new { x.StudentId, x.Status });
+            entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CourseOffering).WithMany().HasForeignKey(x => x.CourseOfferingId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.UpdatedBy).WithMany().HasForeignKey(x => x.UpdatedById).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Course>(entity =>
@@ -614,6 +631,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.IsManuallyCreated).IsRequired();
             entity.Property(x => x.IsCompleted).IsRequired();
             entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.OnlineMeetingId).HasMaxLength(500);
+            entity.Property(x => x.OnlineMeetingJoinUrl).HasMaxLength(2000);
 
             entity.HasOne(x => x.CourseOffering).WithMany().HasForeignKey(x => x.CourseOfferingId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.TimetableSlot).WithMany().HasForeignKey(x => x.TimetableSlotId).OnDelete(DeleteBehavior.SetNull);
@@ -717,6 +736,14 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.DefaultExamWeight).HasPrecision(5, 2);
         });
 
+        modelBuilder.Entity<SystemRegistrationConfiguration>(entity =>
+        {
+            entity.ToTable("SystemRegistrationConfigurations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Strategy).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.EnforceMinCredits).IsRequired();
+        });
+
         modelBuilder.Entity<AssessmentCategory>(entity =>
         {
             entity.ToTable("AssessmentCategories");
@@ -798,6 +825,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.PersonalEmail).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(255).IsRequired();
             entity.Property(x => x.EmergencyContactPhone).HasMaxLength(255);
+            entity.Property(x => x.EmergencyContactEmail).HasMaxLength(256);
+            entity.Property(x => x.EmergencyContactName).HasMaxLength(200);
             entity.Property(x => x.StudentNumber).HasMaxLength(50); // Nullable - assigned by Registrar after admission
             entity.Property(x => x.JambRegistrationNumber).HasMaxLength(50);
             entity.Property(x => x.JambScore).HasColumnType("int");
@@ -833,9 +862,12 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.OfficialEmail).IsUnique();
             entity.HasIndex(x => x.StudentNumber).IsUnique().HasFilter("[StudentNumber] IS NOT NULL");
             entity.HasIndex(x => x.AdmissionApplicationId).IsUnique().HasFilter("[AdmissionApplicationId] IS NOT NULL");
+            entity.HasIndex(x => x.EmergencyContactEmail).HasFilter("[EmergencyContactEmail] IS NOT NULL");
+            entity.HasIndex(x => x.EmergencyContactName).HasFilter("[EmergencyContactName] IS NOT NULL");
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
         });
+
 
         // --- New entity configurations ---
         modelBuilder.Entity<Country>(entity =>
@@ -1369,6 +1401,59 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.RequestedAtUtc);
         });
 
+        modelBuilder.Entity<ProgramSwitchRequest>(entity =>
+        {
+            entity.ToTable("ProgramSwitchRequests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.JambDocumentUrl).HasMaxLength(500);
+            entity.Property(x => x.JambDocumentFileName).HasMaxLength(255);
+            entity.Property(x => x.HoDNotes).HasMaxLength(1000);
+            entity.Property(x => x.DeanNotes).HasMaxLength(1000);
+            entity.Property(x => x.AdminNotes).HasMaxLength(1000);
+            entity.Property(x => x.RejectionReason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.FromProgram)
+                .WithMany()
+                .HasForeignKey(x => x.FromProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ToProgram)
+                .WithMany()
+                .HasForeignKey(x => x.ToProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.HoDReviewedBy)
+                .WithMany()
+                .HasForeignKey(x => x.HoDReviewedById)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.DeanReviewedBy)
+                .WithMany()
+                .HasForeignKey(x => x.DeanReviewedById)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.AdminCompletedBy)
+                .WithMany()
+                .HasForeignKey(x => x.AdminCompletedById)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.RejectedBy)
+                .WithMany()
+                .HasForeignKey(x => x.RejectedById)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(x => x.StudentId);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => new { x.StudentId, x.Status });
+        });
+
         // ===== Phase 5: Advanced Features =====
 
         modelBuilder.Entity<FamilyCommunicationPreference>(entity =>
@@ -1553,6 +1638,24 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.ParentGuardianId);
             entity.HasIndex(x => x.StudentId);
             entity.HasIndex(x => new { x.ParentGuardianId, x.StudentId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PushSubscription>(entity =>
+        {
+            entity.ToTable("PushSubscriptions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Endpoint).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.P256dh).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Auth).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.Endpoint);
         });
     }
 }

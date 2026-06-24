@@ -39,15 +39,15 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
-        // Get all course offerings the student is enrolled in via ProgramEnrollment
-        var enrollments = await _dbContext.Enrollments
-            .Where(e => e.UserId == studentId)
-            .Select(e => new { e.ProgramId, e.LevelId, e.AcademicSessionId })
+        var enrollments = await _dbContext.CourseEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => new { e.CourseOfferingId, e.CourseOffering.AcademicSessionId })
             .ToListAsync(ct);
 
         var sessionGpas = new List<SessionGpaDto>();
 
-        foreach (var enrollment in enrollments)
+        foreach (var enrollment in enrollments.GroupBy(e => e.AcademicSessionId).Select(g => new
+                 { AcademicSessionId = g.Key, CourseOfferingIds = g.Select(x => x.CourseOfferingId).ToList() }))
         {
             var session = await _dbContext.AcademicSessions
                 .FirstOrDefaultAsync(s => s.Id == enrollment.AcademicSessionId, ct);
@@ -55,12 +55,7 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
             if (session == null) continue;
 
             // Get all grades for this student in this session
-            var courseOfferingIds = await _dbContext.CourseOfferings
-                .Where(co => co.ProgramId == enrollment.ProgramId
-                    && co.LevelId == enrollment.LevelId
-                    && co.AcademicSessionId == enrollment.AcademicSessionId)
-                .Select(co => co.Id)
-                .ToListAsync(ct);
+            var courseOfferingIds = enrollment.CourseOfferingIds;
 
             var assessmentIds = await _dbContext.Assessments
                 .Where(a => courseOfferingIds.Contains(a.CourseOfferingId))

@@ -10,7 +10,7 @@ public class GetAllCourseOfferingsForSessionEndpoint(ILectureSessionService lect
     public override void Configure()
     {
         Get("lecture-sessions/course-offerings/{academicSessionId}");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("Admin", "Registrar", "SuperAdmin", "Student");
         Description(d => d
             .WithName("GetAllCourseOfferingsForSession")
             .WithTags("Lecture Sessions")

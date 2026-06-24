@@ -30,6 +30,8 @@ app.UseApplicationMiddleware()
 
 app.Run();
 
+// Triggering seeder run
 public partial class Program
 {
 }
+

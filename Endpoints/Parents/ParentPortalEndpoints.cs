@@ -3,16 +3,21 @@ using FastEndpoints;
 using LMS.Api.Contracts;
 using LMS.Api.Security;
 using LMS.Api.Services;
+using LMS.Api.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 
 namespace LMS.Api.Endpoints.Parents;
 
-public sealed class GetLinkedStudentsEndpoint(IParentPortalService parentPortalService, ICurrentUserContext currentUserContext)
-    : ApiEndpoint<GetLinkedStudentsEndpoint.GetLinkedStudentsRequest, List<ParentGuardianDto>>
+public sealed class GetLinkedStudentsEndpoint(
+    IParentPortalService parentPortalService, 
+    ICurrentUserContext currentUserContext,
+    LmsDbContext dbContext)
+    : ApiEndpoint<GetLinkedStudentsEndpoint.GetLinkedStudentsRequest, List<ParentStudentLinkDto>>
 {
     public class GetLinkedStudentsRequest
     {
-        [Microsoft.AspNetCore.Mvc.FromRoute] public Guid ParentId { get; set; }
+        [Microsoft.AspNetCore.Mvc.FromRoute] public string ParentId { get; set; } = string.Empty;
     }
 
     public override void Configure()
@@ -31,9 +36,21 @@ public sealed class GetLinkedStudentsEndpoint(IParentPortalService parentPortalS
             return;
         }
 
-        // In a real implementation, you'd verify that the authenticated user is actually the parent
-        // For now, we'll just use the requested parent ID
-        var result = await parentPortalService.GetLinkedStudentsAsync(req.ParentId, ct);
+        Guid parentGuid;
+        if (req.ParentId == "current-parent-id" || req.ParentId == "me" || !Guid.TryParse(req.ParentId, out parentGuid))
+        {
+            var parentGuardian = await dbContext.ParentGuardians
+                .FirstOrDefaultAsync(pg => pg.UserId == userId.Value, ct);
+
+            if (parentGuardian == null)
+            {
+                await SendSuccessAsync(new List<ParentStudentLinkDto>(), ct);
+                return;
+            }
+            parentGuid = parentGuardian.Id;
+        }
+
+        var result = await parentPortalService.GetLinkedStudentsAsync(parentGuid, ct);
         await SendAsync(result, ct);
     }
 }
@@ -104,7 +121,8 @@ public sealed class SendMessageToStudentEndpoint(IParentPortalService parentPort
     public class SendMessageToStudentRequest
     {
         [Microsoft.AspNetCore.Mvc.FromRoute] public Guid StudentId { get; set; }
-        [Microsoft.AspNetCore.Mvc.FromBody] public string Content { get; set; } = default!;
+        public string? Subject { get; set; }
+        public string Content { get; set; } = string.Empty;
     }
 
     public override void Configure()
@@ -123,8 +141,10 @@ public sealed class SendMessageToStudentEndpoint(IParentPortalService parentPort
             return;
         }
 
-        // In a real implementation, you'd verify that the authenticated parent is linked to this student
-        var result = await parentPortalService.SendMessageToStudentAsync(req.StudentId, userId.Value, req.Content, ct);
-        await SendAsync(result.Match(deleted => true, errors => false), ct);
+        var content = string.IsNullOrWhiteSpace(req.Subject)
+            ? req.Content
+            : $"{req.Subject.Trim()}\n\n{req.Content}";
+        var result = await parentPortalService.SendMessageToStudentAsync(req.StudentId, userId.Value, content, ct);
+        await SendAsync(result, ct);
     }
 }

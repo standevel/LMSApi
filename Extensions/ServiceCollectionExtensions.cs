@@ -151,6 +151,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<IAdmissionService, AdmissionService>();
         services.AddScoped<IRegistrationService, RegistrationService>();
+        services.AddScoped<IProgramSwitchService, ProgramSwitchService>();
         services.AddHttpClient<IEmailService, BrevoEmailService>();
         services.AddScoped<IActiveDirectoryService, EntraIdService>();
         services.AddScoped<IPdfService, OfferLetterPdfService>();
@@ -165,6 +166,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITimetableService, TimetableService>();
         services.AddScoped<ILectureSessionService, LectureSessionService>();
         services.AddScoped<ISessionManagementService, SessionManagementService>();
+        services.AddScoped<ITeamsMeetingService, TeamsMeetingService>();
+        services.AddScoped<IPushNotificationService, PushNotificationService>();
 
         // Admission enhancement services
         services.AddScoped<ICreditTransferService, CreditTransferService>();

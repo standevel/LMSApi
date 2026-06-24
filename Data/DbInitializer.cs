@@ -31,6 +31,8 @@ await SeedCountriesAsync(ct);
         await SeedGradingScalesAsync(ct);
         await SeedCreditTransferRulesAsync(ct);
         await SeedProgramCreditMappingsAsync(ct);
+        await SeedCourseOfferingsAsync(ct);
+        await SeedRegistrationConfigurationAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
     }
@@ -694,4 +696,82 @@ await SeedCountriesAsync(ct);
         await dbContext.SaveChangesAsync(ct);
     }
 
-}
+    private async Task SeedCourseOfferingsAsync(CancellationToken ct)
+    {
+        var activeSession = await dbContext.AcademicSessions.FirstOrDefaultAsync(s => s.IsActive, ct);
+        if (activeSession == null)
+        {
+            logger.LogWarning("No active academic session found for seeding course offerings.");
+            return;
+        }
+
+        // Get all curriculum courses from active curricula
+        var curriculumCourses = await dbContext.CurriculumCourses
+            .Include(cc => cc.Curriculum)
+            .Where(cc => cc.Curriculum.IsActive)
+            .ToListAsync(ct);
+
+        if (!curriculumCourses.Any())
+        {
+            logger.LogInformation("No curriculum courses found. Skipping course offerings seeding.");
+            return;
+        }
+
+        logger.LogInformation("Seeding Course Offerings from active curricula for session {SessionName}...", activeSession.Name);
+
+        var existingOfferings = await dbContext.CourseOfferings
+            .Where(co => co.AcademicSessionId == activeSession.Id)
+            .Select(co => new { co.CourseId, co.ProgramId, co.LevelId, co.Semester })
+            .ToListAsync(ct);
+
+        var existingSet = existingOfferings.ToHashSet();
+        var addedCount = 0;
+
+        foreach (var cc in curriculumCourses)
+        {
+            var key = new { cc.CourseId, ProgramId = cc.Curriculum.ProgramId, cc.LevelId, cc.Semester };
+            if (existingSet.Contains(key))
+            {
+                continue;
+            }
+
+            dbContext.CourseOfferings.Add(new CourseOffering
+            {
+                CourseId = cc.CourseId,
+                ProgramId = cc.Curriculum.ProgramId,
+                LevelId = cc.LevelId,
+                AcademicSessionId = activeSession.Id,
+                Semester = cc.Semester,
+                CurriculumId = cc.CurriculumId,
+                LecturerId = null // Assigned later
+            });
+            addedCount++;
+        }
+
+            if (addedCount > 0)
+            {
+                await dbContext.SaveChangesAsync(ct);
+                logger.LogInformation("Seeded {Count} new Course Offerings for session {SessionName}.", addedCount, activeSession.Name);
+            }
+            else
+            {
+                logger.LogInformation("All course offerings already exist for session {SessionName}.", activeSession.Name);
+            }
+        }
+
+        private async Task SeedRegistrationConfigurationAsync(CancellationToken ct)
+        {
+            if (await dbContext.SystemRegistrationConfigurations.AnyAsync(ct))
+            {
+                return;
+            }
+
+            logger.LogInformation("Seeding default global Course Registration Configuration...");
+            dbContext.SystemRegistrationConfigurations.Add(new SystemRegistrationConfiguration
+            {
+                Strategy = "Single",
+                EnforceMinCredits = true
+            });
+            await dbContext.SaveChangesAsync(ct);
+        }
+    }

@@ -10,7 +10,8 @@ namespace LMS.Api.Services;
 
 public sealed class NotificationService(
     LmsDbContext dbContext,
-    IAuditService auditService) : BaseService(auditService), INotificationService
+    IAuditService auditService,
+    IPushNotificationService pushNotificationService) : BaseService(auditService), INotificationService
 {
     public async Task<ErrorOr<NotificationDto>> CreateAsync(CreateNotificationRequest request, CancellationToken ct = default)
     {
@@ -30,6 +31,24 @@ public sealed class NotificationService(
         await dbContext.SaveChangesAsync(ct);
 
         await LogActionAsync("Create", "Notification", notification.Id.ToString(), $"Created notification: {notification.Title}", ct);
+
+        // Fire-and-forget push notification to user's registered browser endpoints
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await pushNotificationService.SendNotificationAsync(
+                    notification.RecipientId,
+                    notification.Title,
+                    notification.Message,
+                    notification.RelatedUrl,
+                    CancellationToken.None);
+            }
+            catch
+            {
+                // Fail silently in background fire-and-forget task
+            }
+        }, CancellationToken.None);
 
         var createdNotification = await dbContext.Notifications
             .Include(n => n.Recipient)

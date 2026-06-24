@@ -108,7 +108,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                             {
                                 foreach (var section in sections.Where(s => s.IsVisible))
                                 {
-                                    RenderSection(col, section, application, template.SignatureBase64);
+                                    RenderSection(col, section, application, template);
                                 }
                             }
                             else
@@ -157,7 +157,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
         col.Item().Text("Your application stood out among a highly competitive pool of candidates. We were particularly impressed by your academic record and your demonstrated passion for technological innovation.").LineHeight(1.5f).FontColor("#334155");
     }
 
-    private void RenderSection(ColumnDescriptor col, LetterSectionDto section, AdmissionApplication app, string signatureBase64)
+    private void RenderSection(ColumnDescriptor col, LetterSectionDto section, AdmissionApplication app, LetterTemplateResponse? template)
     {
         var rawContent = ReplacePlaceholders(section.Content ?? "", app);
 
@@ -167,9 +167,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                 col.Item().PaddingBottom(25).Text(rawContent).FontSize(22).Bold().FontColor("#0F172A").LineHeight(1.1f);
                 break;
             case "text":
-                // Support whitespace-pre-line by treating each line separately if needed, 
-                // or just using the LineHeight and relying on QuestPDF's text wrapping for the rest.
-                col.Item().PaddingBottom(20).Text(rawContent).FontSize(11).LineHeight(1.6f).FontColor("#334155");
+                RenderHtmlContent(col, rawContent);
                 break;
             case "program_details":
                 col.Item().PaddingBottom(30).Border(1).BorderColor("#F1F5F9").Background("#F8FAFC").Padding(20).Column(details =>
@@ -207,17 +205,19 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
             case "financial_aid":
                 col.Item().PaddingBottom(25).BorderLeft(3).BorderColor("#D4AF37").PaddingLeft(15).Column(f => {
                     f.Item().Text("FINANCIAL SUPPORT & SCHOLARSHIP").FontSize(9).Bold().FontColor("#64748B").LetterSpacing(0.05f);
-                    f.Item().PaddingTop(5).Text(rawContent).Italic().FontSize(11).LineHeight(1.5f).FontColor("#475569");
+                    f.Item().PaddingTop(5).Column(fc => {
+                        RenderHtmlContent(fc, rawContent);
+                    });
                 });
                 break;
             case "signature":
                 col.Item().PaddingTop(20).Column(s => {
                     s.Item().Text("Sincerely,").FontSize(11).FontColor("#334155");
-                    if (!string.IsNullOrEmpty(signatureBase64))
+                    if (template != null && !string.IsNullOrEmpty(template.SignatureBase64))
                     {
                          try 
                          { 
-                            var bytes = Convert.FromBase64String(signatureBase64.Contains(",") ? signatureBase64.Split(',')[1] : signatureBase64);
+                            var bytes = Convert.FromBase64String(template.SignatureBase64.Contains(",") ? template.SignatureBase64.Split(',')[1] : template.SignatureBase64);
                             s.Item().PaddingVertical(10).Height(60).Image(bytes); 
                          } catch { s.Item().Height(40); }
                     }
@@ -225,10 +225,115 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                     {
                         s.Item().Height(40);
                     }
-                    s.Item().Text("THE REGISTRAR").FontSize(10).Bold().FontColor("#1E293B");
-                    s.Item().Text("Wigwe University").FontSize(9).Bold().FontColor("#64748B");
+                    
+                    if (template != null && !string.IsNullOrEmpty(template.SignatoryName))
+                    {
+                        s.Item().Text(template.SignatoryName).FontSize(10).Bold().FontColor("#1E293B");
+                    }
+                    
+                    var signatoryPosition = template != null && !string.IsNullOrEmpty(template.SignatoryPosition)
+                        ? template.SignatoryPosition
+                        : "Registrar";
+                    s.Item().Text(signatoryPosition.ToUpper()).FontSize(9).Bold().FontColor("#64748B");
+                    
+                    var institution = template != null && !string.IsNullOrEmpty(template.HeaderTitle)
+                        ? template.HeaderTitle
+                        : "Wigwe University";
+                    s.Item().Text(institution).FontSize(9).Bold().FontColor("#64748B");
                 });
                 break;
+        }
+    }
+
+    private void RenderHtmlContent(ColumnDescriptor col, string html)
+    {
+        // If it doesn't look like HTML (e.g. no <p> or <ul>), treat it as standard multiline text
+        if (!html.Contains("<p>") && !html.Contains("<ul>") && !html.Contains("<li>") && !html.Contains("<ol>"))
+        {
+            var lines = html.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                col.Item().PaddingBottom(15).Text(text => {
+                    text.Span(line).FontSize(11).FontColor("#334155").LineHeight(1.6f);
+                });
+            }
+            return;
+        }
+
+        // Parse HTML block by block
+        var blockMatches = System.Text.RegularExpressions.Regex.Matches(html, @"(<p\b[^>]*>.*?</p>|<ul\b[^>]*>.*?</ul>|<ol\b[^>]*>.*?</ol>)");
+        
+        foreach (System.Text.RegularExpressions.Match match in blockMatches)
+        {
+            var block = match.Value;
+            if (block.StartsWith("<p"))
+            {
+                var innerHtml = System.Text.RegularExpressions.Regex.Replace(block, @"^<p\b[^>]*>", "").Replace("</p>", "");
+                col.Item().PaddingBottom(15).Text(text => {
+                    RenderRichText(text, innerHtml);
+                });
+            }
+            else if (block.StartsWith("<ul"))
+            {
+                var items = System.Text.RegularExpressions.Regex.Matches(block, @"<li\b[^>]*>(.*?)</li>");
+                foreach (System.Text.RegularExpressions.Match item in items)
+                {
+                    var liHtml = item.Groups[1].Value;
+                    col.Item().PaddingBottom(5).Row(row => {
+                        row.AutoItem().PaddingRight(8).Text("•").FontSize(11).FontColor("#334155").LineHeight(1.6f);
+                        row.RelativeItem().Text(text => {
+                            RenderRichText(text, liHtml);
+                        });
+                    });
+                }
+                col.Item().PaddingBottom(10);
+            }
+            else if (block.StartsWith("<ol"))
+            {
+                var items = System.Text.RegularExpressions.Regex.Matches(block, @"<li\b[^>]*>(.*?)</li>");
+                int index = 1;
+                foreach (System.Text.RegularExpressions.Match item in items)
+                {
+                    var liHtml = item.Groups[1].Value;
+                    col.Item().PaddingBottom(5).Row(row => {
+                        row.AutoItem().PaddingRight(8).Text($"{index}.").FontSize(11).FontColor("#334155").LineHeight(1.6f);
+                        row.RelativeItem().Text(text => {
+                            RenderRichText(text, liHtml);
+                        });
+                    });
+                    index++;
+                }
+                col.Item().PaddingBottom(10);
+            }
+        }
+    }
+
+    private void RenderRichText(TextDescriptor text, string content)
+    {
+        var matches = System.Text.RegularExpressions.Regex.Matches(content, @"(<strong\b[^>]*>.*?</strong>|<b\b[^>]*>.*?</b>|<em\b[^>]*>.*?</em>|<i\b[^>]*>.*?</i>|[^<]+)");
+        
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            var textSegment = match.Value;
+            if (textSegment.StartsWith("<strong>") || textSegment.StartsWith("<b>"))
+            {
+                var innerText = textSegment.Replace("<strong>", "").Replace("</strong>", "").Replace("<b>", "").Replace("</b>", "");
+                text.Span(innerText).Bold().FontSize(11).FontColor("#334155").LineHeight(1.6f);
+            }
+            else if (textSegment.StartsWith("<em>") || textSegment.StartsWith("<i>"))
+            {
+                var innerText = textSegment.Replace("<em>", "").Replace("</em>", "").Replace("i", "").Replace("</i>", "").Replace("<", "").Replace(">", "");
+                text.Span(innerText).Italic().FontSize(11).FontColor("#334155").LineHeight(1.6f);
+            }
+            else
+            {
+                var cleanText = System.Text.RegularExpressions.Regex.Replace(textSegment, "<[^>]*>", "");
+                if (!string.IsNullOrEmpty(cleanText))
+                {
+                    text.Span(cleanText).FontSize(11).FontColor("#334155").LineHeight(1.6f);
+                }
+            }
         }
     }
 
@@ -238,6 +343,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
         return text
             .Replace("{studentName}", fullName)
             .Replace("{programName}", app.AcademicProgram?.Name ?? "Selected Program")
+            .Replace("{collegeName}", app.Faculty?.Name ?? "Selected College")
             .Replace("{year}", app.CreatedAt.Year.ToString())
             .Replace("{applicationNumber}", app.ApplicationNumber);
     }

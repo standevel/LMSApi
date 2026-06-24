@@ -114,13 +114,133 @@ public class QuizService : BaseService, IQuizService
 
     public async Task<ErrorOr<QuizResultDto>> SubmitAnswersForGradingAsync(Guid attemptId, Dictionary<Guid, string> answers, CancellationToken ct = default)
     {
-        var attempt = await _context.QuizAttempts.FindAsync(new object[] { attemptId }, ct);
+        var attempt = await _context.QuizAttempts
+            .Include(a => a.Answers)
+            .FirstOrDefaultAsync(a => a.Id == attemptId, ct);
         if (attempt == null) return Error.NotFound("Attempt.NotFound", "Quiz attempt not found.");
 
+        var quiz = await _context.Quizzes
+            .Include(q => q.CourseOffering)
+            .FirstOrDefaultAsync(q => q.Id == attempt.QuizId, ct);
+        if (quiz == null) return Error.NotFound("Quiz.NotFound", "Quiz not found.");
+
+        var quizQuestions = await _context.QuizQuestions
+            .Include(q => q.Options)
+            .Where(q => q.QuizId == quiz.Id)
+            .ToListAsync(ct);
+
+        int correctCount = 0;
+        
+        // Remove existing answers for this attempt if any
+        if (attempt.Answers != null && attempt.Answers.Any())
+        {
+            _context.QuizAnswers.RemoveRange(attempt.Answers);
+            attempt.Answers.Clear();
+        }
+
+        foreach (var question in quizQuestions)
+        {
+            if (answers.TryGetValue(question.Id, out var submittedValue) && !string.IsNullOrWhiteSpace(submittedValue))
+            {
+                var quizAnswer = new QuizAnswer
+                {
+                    AttemptId = attempt.Id,
+                    QuestionId = question.Id
+                };
+
+                bool isMultipleChoice = string.Equals(question.QuestionType, "MultipleChoice", StringComparison.OrdinalIgnoreCase) || 
+                                         string.Equals(question.QuestionType, "SingleChoice", StringComparison.OrdinalIgnoreCase) ||
+                                         (question.Options != null && question.Options.Any());
+
+                if (isMultipleChoice && Guid.TryParse(submittedValue, out var selectedOptionId))
+                {
+                    quizAnswer.SelectedOptionId = selectedOptionId;
+                    var option = question.Options?.FirstOrDefault(o => o.Id == selectedOptionId);
+                    if (option != null && option.IsCorrectAnswer)
+                    {
+                        correctCount++;
+                    }
+                }
+                else
+                {
+                    quizAnswer.TextAnswer = submittedValue;
+                }
+
+                _context.QuizAnswers.Add(quizAnswer);
+            }
+        }
+
+        decimal totalQuestions = quizQuestions.Count;
+        decimal score = totalQuestions > 0 ? ((decimal)correctCount / totalQuestions) * 100m : 0m;
+
         attempt.EndTime = DateTime.UtcNow;
-        attempt.TotalScore = 0; // Simplified scoring
+        attempt.TotalScore = score;
+        
+        // Find or create Assessment Category for CA1 (Quiz)
+        var category = await _context.AssessmentCategories
+            .FirstOrDefaultAsync(c => c.CourseOfferingId == quiz.CourseOfferingId && c.CategoryType == AssessmentCategoryType.CA1, ct);
+        if (category == null)
+        {
+            category = new AssessmentCategory
+            {
+                CourseOfferingId = quiz.CourseOfferingId,
+                CategoryType = AssessmentCategoryType.CA1,
+                CategoryName = "CA1",
+                Weight = 15m,
+                MaxMarks = 100m,
+                IsExamCategory = false,
+                DisplayOrder = (int)AssessmentCategoryType.CA1
+            };
+            _context.AssessmentCategories.Add(category);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        // Find or create Assessment for this Quiz
+        var assessment = await _context.Assessments
+            .FirstOrDefaultAsync(a => a.CourseOfferingId == quiz.CourseOfferingId && a.AssessmentCategoryId == category.Id && a.Title == quiz.Title, ct);
+        if (assessment == null)
+        {
+            assessment = new Assessment
+            {
+                CourseOfferingId = quiz.CourseOfferingId,
+                AssessmentCategoryId = category.Id,
+                Title = quiz.Title,
+                Description = quiz.Description,
+                MaxMarks = 100m,
+                AssessmentDate = DateTime.UtcNow
+            };
+            _context.Assessments.Add(assessment);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        // Find or create Grade entry
+        var grade = await _context.Grades
+            .FirstOrDefaultAsync(g => g.AssessmentId == assessment.Id && g.StudentId == attempt.StudentId, ct);
+        if (grade == null)
+        {
+            grade = new Grade
+            {
+                AssessmentId = assessment.Id,
+                StudentId = attempt.StudentId,
+                MarksObtained = score,
+                IsLocked = false,
+                Remarks = $"Autograded score for quiz: {quiz.Title}",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _context.Grades.Add(grade);
+        }
+        else if (!grade.IsLocked)
+        {
+            grade.MarksObtained = score;
+            grade.Remarks = $"Autograded score updated for quiz: {quiz.Title}";
+            grade.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync(ct);
-        return new QuizResultDto(attemptId, attempt.TotalScore, 100);
+        await LogActionAsync("SubmitQuizAnswers", "QuizAttempt", attempt.Id.ToString(), $"Submitted and autograded quiz answers. Score: {score}", ct);
+
+        return new QuizResultDto(attemptId, score, 100);
     }
 
     public async Task<ErrorOr<QuizQuestionDto>> UpdateQuizQuestionAsync(Guid questionId, string questionText, int orderIndex, CancellationToken ct = default)

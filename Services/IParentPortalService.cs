@@ -9,10 +9,10 @@ namespace LMS.Api.Services;
 
 public interface IParentPortalService
 {
-    Task<ErrorOr<List<ParentGuardianDto>>> GetLinkedStudentsAsync(Guid parentId, CancellationToken ct = default);
+    Task<ErrorOr<List<ParentStudentLinkDto>>> GetLinkedStudentsAsync(Guid parentId, CancellationToken ct = default);
     Task<ErrorOr<StudentProgressDto>> GetStudentProgressAsync(Guid studentId, CancellationToken ct = default);
     Task<ErrorOr<StudentGradesDto>> GetStudentGradesAsync(Guid studentId, CancellationToken ct = default);
-    Task<ErrorOr<Deleted>> SendMessageToStudentAsync(Guid studentId, Guid parentId, string content, CancellationToken ct = default);
+    Task<ErrorOr<bool>> SendMessageToStudentAsync(Guid studentId, Guid parentUserId, string content, CancellationToken ct = default);
 }
 
 public record StudentProgressDto(Guid StudentId, string StudentName, decimal CumulativeGpa, int CreditsEarned, int TotalCreditsRequired, List<CourseProgressDto> CourseProgress);

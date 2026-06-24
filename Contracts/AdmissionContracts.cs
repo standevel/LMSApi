@@ -240,7 +240,11 @@ public sealed record LetterTemplateResponse(
     string LogoBase64,
     string SignatureBase64,
     string SectionsJson,
-    bool IsDefault
+    bool IsDefault,
+    string SignatoryName = "",
+    string SignatoryPosition = "Registrar",
+    Guid? SessionId = null,
+    string SessionName = ""
 );
 
 public sealed record SaveLetterTemplateRequest(
@@ -253,7 +257,11 @@ public sealed record SaveLetterTemplateRequest(
     string LogoBase64,
     string SignatureBase64,
     string SectionsJson,
-    bool IsDefault
+    bool IsDefault,
+    string SignatoryName = "",
+    string SignatoryPosition = "Registrar",
+    Guid? SessionId = null,
+    string SessionName = ""
 );
 public sealed record RegistryStatsResponse(
     int TotalStudents,

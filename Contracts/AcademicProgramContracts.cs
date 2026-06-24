@@ -125,3 +125,12 @@ public record EnrollmentDto(
     Guid CurriculumId,
     string CurriculumName,
     DateTime EnrolledAtUtc);
+
+/// <summary>Lightweight program DTO for self-service program switch selection.</summary>
+public record AcademicProgramSummaryDto(
+    Guid Id,
+    string Name,
+    string Code,
+    string? DepartmentName,
+    string? FacultyName);
+

@@ -66,6 +66,19 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             .ToListAsync(ct);
         var existingEmailsSet = new HashSet<string>(existingEmails, StringComparer.OrdinalIgnoreCase);
 
+        // Also detect emails already registered in the Users table (e.g. Lecturers, Admins)
+        var existingUserEmails = await _context.Users
+            .Where(u => u.Email != null)
+            .Select(u => u.Email!)
+            .ToListAsync(ct);
+        foreach (var ue in existingUserEmails) existingEmailsSet.Add(ue);
+
+        var existingUserUsernames = await _context.Users
+            .Where(u => u.Username != null)
+            .Select(u => u.Username!)
+            .ToListAsync(ct);
+        var existingUsernamesSet = new HashSet<string>(existingUserUsernames, StringComparer.OrdinalIgnoreCase);
+
         var existingMatricNumbers = await _context.Students
             .Where(s => s.StudentNumber != null)
             .Select(s => s.StudentNumber!)
@@ -73,6 +86,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         var existingMatricSet = new HashSet<string>(existingMatricNumbers, StringComparer.OrdinalIgnoreCase);
 
         var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMatricNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var studentRoleId = await _context.Roles
             .Where(r => r.Name == LmsRoles.Student)
@@ -96,7 +110,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
 
             var (student, error) = await MapRowToStudent(
                 values, columnMap, sessionId.Value, rowNumber,
-                existingEmailsSet, existingMatricSet, seenEmails, seenMatricNumbers, ct);
+                existingEmailsSet, existingUsernamesSet, existingMatricSet, seenEmails, seenUsernames, seenMatricNumbers, ct);
 
             if (error != null)
             {
@@ -129,6 +143,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
 
                 processedRows++;
                 existingEmailsSet.Add(student.OfficialEmail);
+                existingUsernamesSet.Add(student.OfficialEmail); // username defaults to official email
                 if (!string.IsNullOrEmpty(student.StudentNumber))
                     existingMatricSet.Add(student.StudentNumber);
             }
@@ -185,6 +200,18 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             await _context.Students.Select(s => s.OfficialEmail).ToListAsync(ct),
             StringComparer.OrdinalIgnoreCase);
 
+        // Also include emails/usernames already present in the Users table (e.g. Lecturers, Admins, Parents)
+        // to prevent silently overwriting existing accounts.
+        var existingUserEmails = await _context.Users
+            .Where(u => u.Email != null)
+            .Select(u => u.Email!)
+            .ToListAsync(ct);
+        foreach (var ue in existingUserEmails) existingEmailsSet.Add(ue);
+
+        var existingUsernamesSet = new HashSet<string>(
+            await _context.Users.Where(u => u.Username != null).Select(u => u.Username!).ToListAsync(ct),
+            StringComparer.OrdinalIgnoreCase);
+
         var existingMatricSet = new HashSet<string>(
             await _context.Students.Where(s => s.StudentNumber != null).Select(s => s.StudentNumber!).ToListAsync(ct),
             StringComparer.OrdinalIgnoreCase);
@@ -205,6 +232,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         var defaultDepartmentId = await _context.Departments.Select(d => d.Id).FirstOrDefaultAsync(ct);
 
         var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenUsernames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenMatricNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var studentRoleId = await _context.Roles
             .Where(r => r.Name == LmsRoles.Student)
@@ -235,7 +263,14 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             }
             if (existingEmailsSet.Contains(email) || !seenEmails.Add(email))
             {
-                errors.Add(new StudentImportErrorDto(rowNumber, email, "A student with this email already exists"));
+                errors.Add(new StudentImportErrorDto(rowNumber, email, "A user account with this email already exists"));
+                continue;
+            }
+
+            // --- Check username (defaults to email) against existing Users ---
+            if (existingUsernamesSet.Contains(email) || !seenUsernames.Add(email))
+            {
+                errors.Add(new StudentImportErrorDto(rowNumber, email, "A user account with this username already exists"));
                 continue;
             }
 
@@ -359,6 +394,9 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
                 MiddleName = null,
                 StudentNumber = matricNumber,
                 Phone = phone,
+                EmergencyContactName = (!string.IsNullOrWhiteSpace(row.GuardianFirstName) || !string.IsNullOrWhiteSpace(row.GuardianLastName))
+                    ? $"{row.GuardianFirstName?.Trim()} {row.GuardianLastName?.Trim()}".Trim()
+                    : null,
                 EmergencyContactPhone = string.IsNullOrWhiteSpace(row.GuardianPhone) ? null : row.GuardianPhone!.Trim(),
                 EmergencyContactEmail = string.IsNullOrWhiteSpace(row.GuardianEmail) ? null : row.GuardianEmail!.Trim(),
                 AcademicProgramId = program?.Id,
@@ -397,6 +435,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
 
                 processedRows++;
                 existingEmailsSet.Add(student.OfficialEmail);
+                existingUsernamesSet.Add(student.OfficialEmail); // username defaults to official email
                 if (!string.IsNullOrEmpty(student.StudentNumber))
                     existingMatricSet.Add(student.StudentNumber);
             }
@@ -470,8 +509,10 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         Guid sessionId,
         int rowNumber,
         HashSet<string> existingEmails,
+        HashSet<string> existingUsernames,
         HashSet<string> existingMatricNumbers,
         HashSet<string> seenEmails,
+        HashSet<string> seenUsernames,
         HashSet<string> seenMatricNumbers,
         CancellationToken ct)
     {
@@ -481,6 +522,8 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         var matricNumber = GetValue(values, columnMap, new[] { "MatricNumber", "Matric Number", "Matric", "RegistrationNumber", "Registration Number" });
         var phoneNumber = GetValue(values, columnMap, new[] { "PhoneNumber", "Phone Number", "Phone", "MobilePhone", "Mobile Phone" });
         var personalEmail = GetValue(values, columnMap, new[] { "PersonalEmailAddress", "Personal Email Address", "PersonalEmail" });
+        var guardianFirstName = GetValue(values, columnMap, new[] { "GuardianFirstName", "Guardian FirstName", "Guardian First Name" });
+        var guardianLastName = GetValue(values, columnMap, new[] { "GuardianLastName", "Guardian LastName", "Guardian Last Name" });
         var guardianPhone = GetValue(values, columnMap, new[] { "GuardianPhone", "Guardian Phone" });
         var guardianEmail = GetValue(values, columnMap, new[] { "GuardianEmail", "Guardian Email" });
         var levelName = GetValue(values, columnMap, new[] { "Level", "Year-Semester" });
@@ -498,7 +541,11 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             return (null, new StudentImportErrorDto(rowNumber, email, "Invalid email format"));
 
         if (existingEmails.Contains(email) || !seenEmails.Add(email))
-            return (null, new StudentImportErrorDto(rowNumber, email, "A student with this email already exists"));
+            return (null, new StudentImportErrorDto(rowNumber, email, "A user account with this email already exists"));
+
+        // The username defaults to the official email; reject if already taken
+        if (existingUsernames.Contains(email) || !seenUsernames.Add(email))
+            return (null, new StudentImportErrorDto(rowNumber, email, "A user account with this username already exists"));
 
         if (!string.IsNullOrEmpty(matricNumber))
         {
@@ -566,6 +613,9 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             LastName = resolvedLastName,
             StudentNumber = matricNumber,
             Phone = phoneNumber ?? string.Empty,
+            EmergencyContactName = (!string.IsNullOrEmpty(guardianFirstName) || !string.IsNullOrEmpty(guardianLastName))
+                ? $"{guardianFirstName?.Trim()} {guardianLastName?.Trim()}".Trim()
+                : null,
             EmergencyContactPhone = guardianPhone,
             EmergencyContactEmail = guardianEmail,
             AcademicProgramId = program?.Id,

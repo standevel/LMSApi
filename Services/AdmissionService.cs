@@ -2005,22 +2005,24 @@ public sealed class AdmissionService(
             return new ReminderSendResult(false, applicationId, "Application not found.", null, null);
         }
 
-        var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
+        var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Replace("  ", " ").Trim();
+        var emailName = string.IsNullOrWhiteSpace(fullName) ? "Applicant" : fullName;
+        var resultName = string.IsNullOrWhiteSpace(fullName) ? app.StudentEmail : fullName;
 
         try
         {
             await emailService.SendApplicationReminderEmailAsync(
                 app.StudentEmail,
-                fullName,
+                emailName,
                 app.ApplicationNumber ?? "Pending",
                 app.Status);
             logger.LogInformation("[REMINDER] Reminder email sent to {Email} for application {ApplicationId}", app.StudentEmail, applicationId);
-            return new ReminderSendResult(true, applicationId, null, app.StudentEmail, fullName);
+            return new ReminderSendResult(true, applicationId, null, app.StudentEmail, resultName);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "[REMINDER-ERROR] Failed to send reminder email to {Email} for application {ApplicationId}", app.StudentEmail, applicationId);
-            return new ReminderSendResult(false, applicationId, ex.Message, app.StudentEmail, fullName);
+            return new ReminderSendResult(false, applicationId, ex.Message, app.StudentEmail, resultName);
         }
     }
 

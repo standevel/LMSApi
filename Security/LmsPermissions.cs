@@ -13,6 +13,7 @@ public static class LmsPermissions
     public const string ReportsView = "reports.view";
     public const string EnrollmentsManage = "enrollments.manage";
     public const string ProfileView = "profile.view";
+    public const string UsersSwitch = "users.switch";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -26,6 +27,7 @@ public static class LmsPermissions
         RecordsManage,
         ReportsView,
         EnrollmentsManage,
-        ProfileView
+        ProfileView,
+        UsersSwitch
     ];
 }

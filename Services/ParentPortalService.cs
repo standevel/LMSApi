@@ -15,16 +15,23 @@ namespace LMS.Api.Services;
 public class ParentPortalService : BaseService, IParentPortalService
 {
     private readonly LmsDbContext _context;
+    private readonly IGpaCalculationService _gpaService;
+    private readonly IDegreeAuditService _degreeAuditService;
 
-    public ParentPortalService(LmsDbContext context, IAuditService auditService) : base(auditService)
+    public ParentPortalService(
+        LmsDbContext context, 
+        IAuditService auditService,
+        IGpaCalculationService gpaService,
+        IDegreeAuditService degreeAuditService) : base(auditService)
     {
         _context = context;
+        _gpaService = gpaService;
+        _degreeAuditService = degreeAuditService;
     }
 
-    public async Task<ErrorOr<List<ParentGuardianDto>>> GetLinkedStudentsAsync(Guid parentId, CancellationToken ct = default)
+    public async Task<ErrorOr<List<ParentStudentLinkDto>>> GetLinkedStudentsAsync(Guid parentId, CancellationToken ct = default)
     {
         var parentGuardian = await _context.ParentGuardians
-            .Include(pg => pg.AppUser)
             .FirstOrDefaultAsync(pg => pg.Id == parentId, ct);
 
         if (parentGuardian == null)
@@ -34,22 +41,34 @@ public class ParentPortalService : BaseService, IParentPortalService
 
         var links = await _context.ParentStudentLinks
             .Include(psl => psl.Student)
-            .Include(psl => psl.ParentGuardian)
             .Where(psl => psl.ParentGuardianId == parentId)
             .ToListAsync(ct);
 
-        return links.Select(psl => new ParentGuardianDto(
-            psl.ParentGuardian.Id,
-            $"{psl.ParentGuardian.FirstName} {psl.ParentGuardian.LastName}",
-            psl.ParentGuardian.Email ?? string.Empty,
-            psl.ParentGuardian.PhoneNumber,
-            psl.RelationshipType,
-            psl.ParentGuardian.DateAddedUtc)).ToList();
+        return links.Select(psl => new ParentStudentLinkDto(
+            psl.Id,
+            psl.ParentGuardianId,
+            psl.StudentId,
+            psl.Student?.StudentNumber,
+            psl.Student != null ? $"{psl.Student.FirstName} {psl.Student.LastName}".Trim() : "Unknown",
+            psl.Student != null ? (psl.Student.OfficialEmail ?? string.Empty) : string.Empty,
+            psl.Student != null ? psl.Student.Status == StudentStatus.Active : false,
+            psl.LinkedAtUtc)).ToList();
+    }
+
+    private static string ComputeLetterGrade(decimal totalMarks)
+    {
+        if (totalMarks >= 70) return "A";
+        if (totalMarks >= 60) return "B";
+        if (totalMarks >= 50) return "C";
+        if (totalMarks >= 40) return "D";
+        if (totalMarks >= 30) return "E";
+        return "F";
     }
 
     public async Task<ErrorOr<StudentProgressDto>> GetStudentProgressAsync(Guid studentId, CancellationToken ct = default)
     {
         var student = await _context.Students
+            .Include(s => s.AcademicProgram)
             .FirstOrDefaultAsync(s => s.Id == studentId, ct);
 
         if (student == null)
@@ -57,16 +76,75 @@ public class ParentPortalService : BaseService, IParentPortalService
             return Error.NotFound("Student.NotFound", "Student not found.");
         }
 
-        // In a real implementation, we would calculate actual progress
-        // For now, returning placeholder data
+        decimal gpa = 0.0m;
+        int creditsEarned = 0;
+        int creditsRequired = student.AcademicProgram != null ? student.AcademicProgram.DurationYears * 40 : 120;
+
+        var gpaResult = await _gpaService.GetStudentGpaAsync(studentId, ct);
+        if (!gpaResult.IsError)
+        {
+            gpa = gpaResult.Value.CumulativeGpa;
+            creditsEarned = gpaResult.Value.TotalCreditsEarned;
+        }
+
+        var auditsResult = await _degreeAuditService.GetStudentDegreeAuditsAsync(studentId, ct);
+        if (!auditsResult.IsError && auditsResult.Value.Any())
+        {
+            var audit = auditsResult.Value.First();
+            creditsRequired = audit.TotalCreditsRequired;
+            if (audit.TotalCreditsEarned > 0)
+            {
+                creditsEarned = audit.TotalCreditsEarned;
+            }
+        }
+
+        var courseOfferings = await _context.CourseEnrollments
+            .Where(e => e.StudentId == studentId && e.Status == "Registered")
+            .Select(e => e.CourseOffering)
+            .Include(co => co.Course)
+            .ToListAsync(ct);
+
         var courseProgress = new List<CourseProgressDto>();
+
+        foreach (var offering in courseOfferings)
+        {
+            var totalMarks = await _context.Grades
+                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
+                .SumAsync(g => g.MarksObtained, ct);
+
+            if (totalMarks > 100m) totalMarks = 100m;
+            var currentGrade = ComputeLetterGrade(totalMarks);
+            bool isCompleted = totalMarks >= 40m;
+
+            var totalSessions = await _context.LectureSessions
+                .CountAsync(ls => ls.CourseOfferingId == offering.Id && ls.IsCompleted, ct);
+
+            var attendedSessions = await _context.SessionAttendances
+                .CountAsync(sa => sa.LectureSession.CourseOfferingId == offering.Id && sa.StudentId == studentId && sa.IsPresent, ct);
+
+            var attendancePercentage = totalSessions > 0
+                ? (int)Math.Round((double)attendedSessions / totalSessions * 100)
+                : 100;
+
+            courseProgress.Add(new CourseProgressDto(
+                offering.Id,
+                offering.Course?.Code ?? string.Empty,
+                offering.Course?.Title ?? string.Empty,
+                attendancePercentage,
+                currentGrade,
+                isCompleted));
+        }
+
+        var fullName = !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) 
+            ? $"{student.FirstName} {student.LastName}".Trim() 
+            : "Unknown";
 
         return new StudentProgressDto(
             student.Id,
-            !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) ? $"{student.FirstName} {student.LastName}".Trim() : "Unknown",
-            3.5m, // Placeholder GPA
-            45,   // Placeholder credits earned
-            120,  // Placeholder total credits required
+            fullName,
+            gpa,
+            creditsEarned,
+            creditsRequired,
             courseProgress);
     }
 
@@ -80,17 +158,41 @@ public class ParentPortalService : BaseService, IParentPortalService
             return Error.NotFound("Student.NotFound", "Student not found.");
         }
 
-        // In a real implementation, we would get actual grades
-        // For now, returning placeholder data
+        var courseOfferings = await _context.CourseEnrollments
+            .Where(e => e.StudentId == studentId && e.Status == "Registered")
+            .Select(e => e.CourseOffering)
+            .Include(co => co.Course)
+            .ToListAsync(ct);
+
         var grades = new List<StudentGradeDto>();
+
+        foreach (var offering in courseOfferings)
+        {
+            var totalMarks = await _context.Grades
+                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
+                .SumAsync(g => g.MarksObtained, ct);
+
+            if (totalMarks > 100m) totalMarks = 100m;
+            var gradeLetter = ComputeLetterGrade(totalMarks);
+
+            grades.Add(new StudentGradeDto(
+                offering.Id,
+                offering.Course?.Code ?? string.Empty,
+                offering.Course?.Title ?? string.Empty,
+                gradeLetter));
+        }
+
+        var fullName = !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) 
+            ? $"{student.FirstName} {student.LastName}".Trim() 
+            : "Unknown";
 
         return new StudentGradesDto(
             student.Id,
-            !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) ? $"{student.FirstName} {student.LastName}".Trim() : "Unknown",
+            fullName,
             grades);
     }
 
-    public async Task<ErrorOr<Deleted>> SendMessageToStudentAsync(Guid studentId, Guid parentId, string content, CancellationToken ct = default)
+    public async Task<ErrorOr<bool>> SendMessageToStudentAsync(Guid studentId, Guid parentUserId, string content, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -103,7 +205,8 @@ public class ParentPortalService : BaseService, IParentPortalService
             return Error.NotFound("Student.NotFound", "Student not found.");
         }
 
-        var parent = await _context.ParentGuardians.FindAsync(new object[] { parentId }, ct);
+        var parent = await _context.ParentGuardians
+            .FirstOrDefaultAsync(pg => pg.UserId == parentUserId, ct);
         if (parent == null)
         {
             return Error.NotFound("ParentGuardian.NotFound", "Parent guardian not found.");
@@ -111,18 +214,38 @@ public class ParentPortalService : BaseService, IParentPortalService
 
         // Verify that the parent is actually linked to this student
         var link = await _context.ParentStudentLinks
-            .FirstOrDefaultAsync(psl => psl.ParentGuardianId == parentId && psl.StudentId == studentId, ct);
+            .FirstOrDefaultAsync(psl => psl.ParentGuardianId == parent.Id && psl.StudentId == studentId, ct);
 
         if (link == null)
         {
             return Error.Forbidden("AccessDenied", "Parent is not linked to this student.");
         }
 
-        // In a real implementation, we would create and save a message entity
-        // For now, just return success
-        await LogActionAsync("SendMessageToStudent", "ParentMessage", Guid.NewGuid().ToString(),
-            $"Parent {parentId} sent message to student {studentId}", ct);
+        var recipient = await _context.Users.FirstOrDefaultAsync(user =>
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && user.EntraObjectId == student.EntraObjectId)
+            || user.EntraObjectId == $"student:{student.Id}"
+            || (!string.IsNullOrWhiteSpace(student.OfficialEmail) && user.Email == student.OfficialEmail), ct);
 
-        return Result.Deleted;
+        if (recipient == null)
+        {
+            return Error.NotFound("Student.AccountNotFound", "The linked student does not have an active user account.");
+        }
+
+        var message = new Message
+        {
+            SenderId = parentUserId,
+            RecipientId = recipient.Id,
+            Content = content.Trim(),
+            SentAt = DateTime.UtcNow,
+            IsRead = false,
+            IsActive = true
+        };
+        _context.Messages.Add(message);
+        await _context.SaveChangesAsync(ct);
+
+        await LogActionAsync("SendMessageToStudent", "ParentMessage", message.Id.ToString(),
+            $"Parent {parent.Id} sent message to student {studentId}", ct);
+
+        return true;
     }
 }

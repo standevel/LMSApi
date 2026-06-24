@@ -20,6 +20,7 @@ public interface IAdminAuthzService
 }
 
 public sealed record ManagedUserSummary(
+    Guid Id,
     string EntraObjectId,
     string? Email,
     string? DisplayName,

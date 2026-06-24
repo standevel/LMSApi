@@ -136,9 +136,15 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
             Console.WriteLine($"--- ME ENDPOINT: FINAL --- ObjectId: {objectId}, Roles: {string.Join(", ", roles)}");
         }
 
-        var data = new MeResponse(name, email, objectId, roles);
+        Guid? dbUserId = user?.Id;
+        if (dbUserId == null && !string.IsNullOrEmpty(subjectId) && Guid.TryParse(subjectId, out var parsedGuid))
+        {
+            dbUserId = parsedGuid;
+        }
+
+        var data = new MeResponse(dbUserId, name, email, objectId, roles);
         await Send.OkAsync(ApiResponse<MeResponse>.Ok(data), ct);
     }
 }
 
-public sealed record MeResponse(string? Name, string? Email, string? ObjectId, List<string> Roles);
+public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles);

@@ -21,7 +21,9 @@ public record ParentStudentLinkDto(
     Guid Id,
     Guid ParentGuardianId,
     Guid StudentId,
+    string? MatricNumber,
     string StudentName,
+    string StudentEmail,
     bool IsActive,
     DateTime LinkedAt);
 

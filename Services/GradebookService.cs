@@ -267,11 +267,9 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
-        var students = await _dbContext.Enrollments
-            .Where(e => e.ProgramId == offering.ProgramId
-                && e.LevelId == offering.LevelId
-                && e.AcademicSessionId == offering.AcademicSessionId)
-            .Include(e => e.User)
+        var students = await _dbContext.CourseEnrollments
+            .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
+            .Include(e => e.Student)
             .ToListAsync(ct);
 
         // Get all assessment categories with assessments and grades
@@ -289,10 +287,10 @@ public sealed class GradebookService : IGradebookService
 
         foreach (var student in students)
         {
-            var ca1Score = CalculateCategoryScore(assessments, categories, student.User.Id, AssessmentCategoryType.CA1);
-            var ca2Score = CalculateCategoryScore(assessments, categories, student.User.Id, AssessmentCategoryType.CA2);
-            var ca3Score = CalculateCategoryScore(assessments, categories, student.User.Id, AssessmentCategoryType.CA3);
-            var examScore = CalculateCategoryScore(assessments, categories, student.User.Id, AssessmentCategoryType.Exam);
+            var ca1Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA1);
+            var ca2Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA2);
+            var ca3Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA3);
+            var examScore = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.Exam);
 
             var totalScore = sysConfig.Value.DefaultGradingStyle == GradingStyle.Weighted
                 ? (ca1Score * sysConfig.Value.DefaultCA1Weight / 100m) +
@@ -302,9 +300,9 @@ public sealed class GradebookService : IGradebookService
                 : CalculateUnweightedAverage(ca1Score, ca2Score, ca3Score, examScore);
 
             result.Add(new StudentGradeSummaryDto(
-                student.User.Id,
-                student.User.DisplayName ?? "Unknown",
-                student.User.Email ?? "",
+                student.Student.Id,
+                student.Student.DisplayName ?? "Unknown",
+                student.Student.Email ?? "",
                 ca1Score,
                 ca2Score,
                 ca3Score,
@@ -392,12 +390,10 @@ public sealed class GradebookService : IGradebookService
             .ToListAsync(ct);
 
         // Get enrolled students
-        var students = await _dbContext.Enrollments
-            .Where(e => e.ProgramId == offering.ProgramId
-                && e.LevelId == offering.LevelId
-                && e.AcademicSessionId == offering.AcademicSessionId)
-            .Include(e => e.User)
-            .OrderBy(e => e.User.DisplayName)
+        var students = await _dbContext.CourseEnrollments
+            .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
+            .Include(e => e.Student)
+            .OrderBy(e => e.Student.DisplayName)
             .ToListAsync(ct);
 
         using var workbook = new XLWorkbook();
@@ -434,9 +430,9 @@ public sealed class GradebookService : IGradebookService
         int row = 4;
         foreach (var student in students)
         {
-            worksheet.Cell(row, 1).Value = student.User.Id.ToString();
-            worksheet.Cell(row, 2).Value = student.User.DisplayName ?? "Unknown";
-            worksheet.Cell(row, 3).Value = student.User.Email ?? "";
+            worksheet.Cell(row, 1).Value = student.Student.Id.ToString();
+            worksheet.Cell(row, 2).Value = student.Student.DisplayName ?? "Unknown";
+            worksheet.Cell(row, 3).Value = student.Student.Email ?? "";
 
             // Empty cells for grades
             for (int i = 4; i <= col; i++)
@@ -634,10 +630,8 @@ public sealed class GradebookService : IGradebookService
             .OrderBy(x => x.AssessmentCategory.DisplayOrder)
             .ToListAsync(ct);
 
-        var totalStudents = await _dbContext.Enrollments
-            .CountAsync(e => e.ProgramId == offering.ProgramId
-                && e.LevelId == offering.LevelId
-                && e.AcademicSessionId == offering.AcademicSessionId, ct);
+        var totalStudents = await _dbContext.CourseEnrollments
+            .CountAsync(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered", ct);
 
         var gradesEntered = await _dbContext.Grades
             .Where(g => assessments.Select(a => a.Id).Contains(g.AssessmentId))
@@ -1378,6 +1372,10 @@ public sealed class GradebookService : IGradebookService
         var provisionedUsers = 0;
         var provisionedEnrollments = 0;
 
+        // Track already-created course offerings to prevent duplicates within the same migration.
+        // Key format: "courseCode:sessionName:programId:levelId"
+        var processedCourseOfferings = new Dictionary<string, CourseOffering>(StringComparer.OrdinalIgnoreCase);
+
         void AddRowError(int rowNumber, string message)
         {
             failedRows++;
@@ -1445,7 +1443,7 @@ public sealed class GradebookService : IGradebookService
                         provisionedUsers++;
                     }
 
-                    var courseOffering = await GetOrCreateCourseOfferingAsync(courseId, student, academicSessionId, ct);
+                    var courseOffering = await GetOrCreateCourseOfferingAsync(courseId, student, academicSessionId, ct, processedCourseOfferings);
                     if (courseOffering == null)
                     {
                         AddRowError(row.RowNumber(), "Could not create course offering for student");
@@ -1597,6 +1595,24 @@ public sealed class GradebookService : IGradebookService
                 return true;
         }
 
+        // Fallback: partial matching against all header cells.
+        // Classter Excel exports often have headers like "CA1 Score", "CA2 Score", "CA3 Score", "Exam Result"
+        // which won't match exact aliases like "ca1", "ca2", "ca3", "exam".
+        foreach (var alias in columnAliases)
+        {
+            var normalizedAlias = alias.ToLowerInvariant().Trim();
+            foreach (var kvp in columnMap)
+            {
+                if (kvp.Key.Contains(normalizedAlias))
+                {
+                    var colNum = kvp.Value;
+                    var cellValue = row.Cell(colNum).GetString();
+                    if (decimal.TryParse(cellValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                        return true;
+                }
+            }
+        }
+
         value = 0;
         return false;
     }
@@ -1659,10 +1675,28 @@ public sealed class GradebookService : IGradebookService
         return (appUser, true);
     }
 
-    private async Task<CourseOffering?> GetOrCreateCourseOfferingAsync(Guid courseId, Student student, Guid academicSessionId, CancellationToken ct)
+    private async Task<CourseOffering?> GetOrCreateCourseOfferingAsync(
+        Guid courseId,
+        Student student,
+        Guid academicSessionId,
+        CancellationToken ct,
+        Dictionary<string, CourseOffering>? processedOfferings = null)
     {
         if (!student.AcademicProgramId.HasValue || !student.LevelId.HasValue)
             return null;
+
+        // Build the cache key for duplicate detection: course Code + session + program + level
+        var course = await _dbContext.Courses.FindAsync(courseId);
+        var courseCode = course?.Code ?? string.Empty;
+        var session = await _dbContext.AcademicSessions.FindAsync(academicSessionId);
+        var sessionName = session?.Name ?? string.Empty;
+        var cacheKey = $"{courseCode}:{sessionName}:{student.AcademicProgramId}:{student.LevelId}";
+
+        // Check in-memory cache first to prevent duplicates within the same migration
+        if (processedOfferings != null && processedOfferings.TryGetValue(cacheKey, out var cachedOffering))
+        {
+            return cachedOffering;
+        }
 
         var curriculumCourse = await _dbContext.CurriculumCourses
             .Include(cc => cc.Curriculum)
@@ -1703,6 +1737,12 @@ public sealed class GradebookService : IGradebookService
                 _dbContext.Entry(offering).State = EntityState.Detached;
                 return null;
             }
+        }
+
+        // Track in the in-memory cache to prevent duplicates
+        if (processedOfferings != null)
+        {
+            processedOfferings[cacheKey] = offering;
         }
 
         return offering;

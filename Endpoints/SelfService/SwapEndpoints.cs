@@ -7,6 +7,30 @@ using Microsoft.AspNetCore.Http;
 
 namespace LMS.Api.Endpoints.SelfService;
 
+public sealed class GetCourseSwapOptionsEndpoint(IRegistrationService registrationService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<CourseSwapOptionsDto>
+{
+    public override void Configure()
+    {
+        Get("self-service/swap-options");
+        Roles("Student");
+        Tags("SelfService");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var result = await registrationService.GetCourseSwapOptionsAsync(userId.Value, ct);
+        await SendAsync(result, ct);
+    }
+}
+
 public sealed class RequestCourseSwapEndpoint(IRegistrationService registrationService, ICurrentUserContext currentUserContext)
     : ApiEndpoint<CreateCourseSwapRequest, CourseSwapRequestDto>
 {
@@ -26,9 +50,12 @@ public sealed class RequestCourseSwapEndpoint(IRegistrationService registrationS
             return;
         }
 
-        // Note: The RegistrationService doesn't currently have a RequestCourseSwap method
-        // This would need to be implemented in the service
-        await SendFailureAsync(501, "Not Implemented", "NOT_IMPLEMENTED", "Course swap functionality not yet implemented", ct);
+        var result = await registrationService.RequestCourseSwapAsync(
+            userId.Value,
+            req.CurrentCourseOfferingId,
+            req.NewCourseOfferingId,
+            ct);
+        await SendAsync(result, ct);
     }
 }
 
@@ -44,9 +71,16 @@ public sealed class GetSwapRequestsEndpoint(IRegistrationService registrationSer
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        // Note: The RegistrationService doesn't currently have a GetSwapRequests method
-        // This would need to be implemented in the service
-        await SendFailureAsync(501, "Not Implemented", "NOT_IMPLEMENTED", "Get swap requests functionality not yet implemented", ct);
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var studentId = User.IsInRole("Student") ? userId : null;
+        var result = await registrationService.GetSwapRequestsAsync(studentId, ct);
+        await SendAsync(result, ct);
     }
 }
 

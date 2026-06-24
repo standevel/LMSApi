@@ -28,8 +28,16 @@ public class PrerequisiteValidationService : BaseService, IPrerequisiteValidatio
             return Error.Validation("InvalidInput", "Student ID and Course Offering ID must be provided.");
         }
 
+        var courseOffering = await _context.CourseOfferings
+            .FirstOrDefaultAsync(co => co.Id == courseOfferingId, ct);
+
+        if (courseOffering == null)
+        {
+            return Error.NotFound("CourseOffering.NotFound", "Course offering not found.");
+        }
+
         var prerequisites = await _context.CoursePrerequisites
-            .Where(c => c.CourseId == courseOfferingId)
+            .Where(c => c.CourseId == courseOffering.CourseId)
             .ToListAsync(ct);
 
         if (!prerequisites.Any())

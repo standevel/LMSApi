@@ -53,4 +53,51 @@ public sealed class JwtTokenService(
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    public async Task<string> CreateSwitchedUserTokenAsync(Guid actorUserId, Guid targetUserId, CancellationToken ct = default)
+    {
+        var target = await userRepository.GetByIdAsync(targetUserId, ct)
+            ?? throw new InvalidOperationException("Target user not found.");
+
+        var roles = await userRoleRepository.GetRoleNamesAsync(targetUserId, ct);
+
+        var jwt = options.Value;
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var now = DateTime.UtcNow;
+
+        // Cap switched-user tokens at 60 minutes regardless of global setting
+        var expiryMinutes = Math.Min(jwt.ExpiryMinutes, 60);
+
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, target.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("name", target.DisplayName ?? target.Username ?? target.Email ?? target.Id.ToString()),
+            new("preferred_username", target.Username ?? target.Email ?? target.Id.ToString()),
+            // Audit claim — identifies the real actor behind this session
+            new("switched_by", actorUserId.ToString())
+        };
+
+        if (!string.IsNullOrEmpty(target.EntraObjectId))
+        {
+            claims.Add(new Claim("oid", target.EntraObjectId));
+        }
+
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim("roles", role));
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        var token = new JwtSecurityToken(
+            issuer: jwt.Issuer,
+            audience: jwt.Audience,
+            claims: claims,
+            notBefore: now,
+            expires: now.AddMinutes(expiryMinutes),
+            signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 }

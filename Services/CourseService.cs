@@ -129,18 +129,20 @@ public sealed class CourseService(
         return lecturers.Select(u => new SimpleUserDto(u.Id, u.DisplayName, u.Email)).ToList();
     }
 
-    public async Task<ErrorOr<LecturerCoursesResponse>> GetMyCoursesAsync(Guid lecturerId, CancellationToken ct = default)
+    public async Task<ErrorOr<LecturerCoursesResponse>> GetMyCoursesAsync(Guid lecturerId, bool isAdmin = false, CancellationToken ct = default)
     {
-        // Get all course offerings for this lecturer with related data
-        var offerings = await dbContext.CourseOfferings
+        // Admins see all offerings; lecturers see only their own
+        var query = dbContext.CourseOfferings
             .AsNoTracking()
-            .Where(co => co.LecturerId == lecturerId)
             .Include(co => co.Course)
             .Include(co => co.Program)
             .Include(co => co.Level)
             .Include(co => co.AcademicSession)
-            .OrderBy(co => co.Course.Code)
-            .ToListAsync(ct);
+            .OrderBy(co => co.Course.Code);
+
+        var offerings = isAdmin
+            ? await query.ToListAsync(ct)
+            : await query.Where(co => co.LecturerId == lecturerId).ToListAsync(ct);
 
         if (!offerings.Any())
         {
@@ -156,11 +158,8 @@ public sealed class CourseService(
 
         foreach (var offering in offerings)
         {
-            // Count enrolled students matching program + level + session
-            var studentCount = await dbContext.Enrollments
-                .CountAsync(e => e.ProgramId == offering.ProgramId
-                    && e.LevelId == offering.LevelId
-                    && e.AcademicSessionId == offering.AcademicSessionId, ct);
+            var studentCount = await dbContext.CourseEnrollments
+                .CountAsync(e => e.CourseOfferingId == offering.Id && e.Status == "Registered", ct);
 
             // Count upcoming lecture sessions for this course offering
             var sessionCount = await dbContext.LectureSessions
@@ -225,22 +224,19 @@ public sealed class CourseService(
                 cm.UploadedBy.DisplayName ?? cm.UploadedBy.Email ?? "Unknown"))
             .ToListAsync(ct);
 
-        // Get students enrolled in this program + level + session
-        var enrollments = await dbContext.Enrollments
+        var enrollments = await dbContext.CourseEnrollments
             .AsNoTracking()
-            .Where(e => e.ProgramId == offering.ProgramId
-                && e.LevelId == offering.LevelId
-                && e.AcademicSessionId == offering.AcademicSessionId)
-            .Include(e => e.User)
-            .OrderBy(e => e.User.DisplayName)
+            .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
+            .Include(e => e.Student)
+            .OrderBy(e => e.Student.DisplayName)
             .ToListAsync(ct);
 
         var students = enrollments.Select(e => new CourseStudentDto(
-            e.User.Id,
-            e.User.Id.ToString().Substring(0, 8), // Use part of GUID as student identifier
-            e.User.DisplayName ?? e.User.Email ?? "Unknown",
-            e.User.Email ?? "N/A",
-            e.EnrolledAtUtc,
+            e.Student.Id,
+            e.Student.Id.ToString().Substring(0, 8),
+            e.Student.DisplayName ?? e.Student.Email ?? "Unknown",
+            e.Student.Email ?? "N/A",
+            e.RegisteredAtUtc,
             null)).ToList();
 
         return new CourseDetailResponse(
@@ -340,4 +336,203 @@ public sealed class CourseService(
 
         return Result.Deleted;
     }
+
+    public async Task<ErrorOr<StudentCourseDetailResponse>> GetStudentCourseDetailAsync(
+        Guid offeringId,
+        Guid studentId,
+        CancellationToken ct = default)
+    {
+        // 1. Verify the student is enrolled
+        var enrollment = await dbContext.CourseEnrollments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.CourseOfferingId == offeringId
+                                   && e.StudentId == studentId
+                                   && e.Status == "Registered", ct);
+
+        if (enrollment == null)
+            return Error.Forbidden("Enrollment.Forbidden", "You are not enrolled in this course.");
+
+        // 2. Load offering details
+        var offering = await dbContext.CourseOfferings
+            .AsNoTracking()
+            .Include(co => co.Course)
+            .Include(co => co.Program)
+            .Include(co => co.Level)
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        if (offering == null)
+            return Error.NotFound("Course.NotFound", "Course offering not found.");
+
+        // 3. Materials (read-only for student)
+        var materials = await dbContext.CourseMaterials
+            .AsNoTracking()
+            .Where(cm => cm.CourseOfferingId == offeringId)
+            .Include(cm => cm.UploadedBy)
+            .OrderByDescending(cm => cm.UploadedAt)
+            .Select(cm => new CourseMaterialDto(
+                cm.Id,
+                cm.Title,
+                cm.Description,
+                cm.FileUrl,
+                cm.FileType,
+                cm.FileSize,
+                cm.UploadedAt,
+                cm.UploadedBy.DisplayName ?? cm.UploadedBy.Email ?? "Unknown"))
+            .ToListAsync(ct);
+
+        // 4. Check if grades are published for this offering
+        var publication = await dbContext.GradePublications
+            .AsNoTracking()
+            .FirstOrDefaultAsync(gp => gp.CourseOfferingId == offeringId && gp.IsVisibleToStudents, ct);
+
+        bool isPublished = publication != null;
+
+        // 5. Compute student grade from Assessment + Grade tables
+        StudentCourseGradeDto? gradeDto = null;
+        if (isPublished)
+        {
+            // Load assessments for the offering with the student's grades
+            var assessments = await dbContext.Assessments
+                .AsNoTracking()
+                .Where(a => a.CourseOfferingId == offeringId)
+                .Include(a => a.AssessmentCategory)
+                .Include(a => a.Grades.Where(g => g.StudentId == studentId))
+                .ToListAsync(ct);
+
+            if (assessments.Any())
+            {
+                // Group by category type to compute per-category weighted scores
+                double ca1 = 0, ca2 = 0, ca3 = 0, exam = 0;
+                double total = 0;
+
+                foreach (var assessment in assessments)
+                {
+                    var studentGrade = assessment.Grades.FirstOrDefault();
+                    if (studentGrade == null) continue;
+
+                    double maxMarks = (double)assessment.MaxMarks;
+                    double obtained = (double)studentGrade.MarksObtained;
+                    double weight = (double)assessment.AssessmentCategory.Weight;
+                    double weighted = maxMarks > 0 ? (obtained / maxMarks) * weight : 0;
+
+                    var catType = assessment.AssessmentCategory.CategoryType;
+                    if (catType == AssessmentCategoryType.CA1) ca1 += weighted;
+                    else if (catType == AssessmentCategoryType.CA2) ca2 += weighted;
+                    else if (catType == AssessmentCategoryType.CA3) ca3 += weighted;
+                    else if (assessment.AssessmentCategory.IsExamCategory) exam += weighted;
+
+                    total += weighted;
+                }
+
+                // Simple letter grade mapping (5-point scale)
+                string letterGrade = total >= 70 ? "A"
+                    : total >= 60 ? "B"
+                    : total >= 50 ? "C"
+                    : total >= 45 ? "D"
+                    : total >= 40 ? "E"
+                    : "F";
+
+                double gradePoints = letterGrade switch
+                {
+                    "A" => 5.0, "B" => 4.0, "C" => 3.0,
+                    "D" => 2.0, "E" => 1.0, _ => 0.0
+                };
+
+                gradeDto = new StudentCourseGradeDto(
+                    Math.Round(ca1, 1),
+                    Math.Round(ca2, 1),
+                    Math.Round(ca3, 1),
+                    Math.Round(exam, 1),
+                    Math.Round(total, 1),
+                    letterGrade,
+                    gradePoints,
+                    true);
+            }
+        }
+
+        // 6. Class analytics: score distribution across all enrolled students (published only)
+        CourseClassAnalyticsDto? analyticsDto = null;
+        if (isPublished)
+        {
+            // Get all enrolled student IDs for this offering
+            var enrolledStudentIds = await dbContext.CourseEnrollments
+                .AsNoTracking()
+                .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
+                .Select(e => e.StudentId)
+                .ToListAsync(ct);
+
+            if (enrolledStudentIds.Count > 1)
+            {
+                // Compute total scores for each enrolled student
+                var allAssessments = await dbContext.Assessments
+                    .AsNoTracking()
+                    .Where(a => a.CourseOfferingId == offeringId)
+                    .Include(a => a.AssessmentCategory)
+                    .Include(a => a.Grades.Where(g => enrolledStudentIds.Contains(g.StudentId)))
+                    .ToListAsync(ct);
+
+                // Aggregate per student
+                var studentTotals = new Dictionary<Guid, double>();
+                foreach (var sid in enrolledStudentIds)
+                {
+                    double t = 0;
+                    foreach (var assessment in allAssessments)
+                    {
+                        var g = assessment.Grades.FirstOrDefault(gr => gr.StudentId == sid);
+                        if (g == null) continue;
+                        double maxM = (double)assessment.MaxMarks;
+                        double w = (double)assessment.AssessmentCategory.Weight;
+                        if (maxM > 0) t += ((double)g.MarksObtained / maxM) * w;
+                    }
+                    studentTotals[sid] = Math.Round(t, 1);
+                }
+
+                var scores = studentTotals.Values.ToList();
+                if (scores.Count > 0)
+                {
+                    double classAverage = scores.Average();
+                    double? myScore = studentTotals.TryGetValue(studentId, out var ms) ? ms : null;
+
+                    var buckets = new List<ScoreBucketDto>();
+                    for (int start = 0; start < 100; start += 10)
+                    {
+                        int end = start == 90 ? 100 : start + 9;
+                        int count = scores.Count(s => s >= start && s <= end);
+                        buckets.Add(new ScoreBucketDto(start, end, count));
+                    }
+
+                    int? percentile = null;
+                    if (myScore.HasValue)
+                    {
+                        int below = scores.Count(s => s < myScore.Value);
+                        percentile = (int)Math.Round((double)below / scores.Count * 100);
+                    }
+
+                    analyticsDto = new CourseClassAnalyticsDto(
+                        Math.Round(classAverage, 1),
+                        myScore,
+                        percentile,
+                        scores.Count,
+                        buckets);
+                }
+            }
+        }
+
+        return new StudentCourseDetailResponse(
+            offering.Id,
+            offering.Course.Code,
+            offering.Course.Title,
+            offering.Course.Description,
+            offering.Course.CreditUnits,
+            offering.Program.Name,
+            offering.Level.Name,
+            offering.AcademicSession.Name,
+            (int)offering.Semester,
+            materials,
+            materials.Count,
+            gradeDto,
+            analyticsDto);
+    }
 }
+

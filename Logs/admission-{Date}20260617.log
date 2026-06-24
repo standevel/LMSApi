@@ -1,0 +1,81 @@
+2026-06-17 15:47:16.562 +01:00 [INF] Sessions already seeded. Skipping.
+2026-06-17 15:47:16.588 +01:00 [INF] Faculties already seeded. Skipping.
+2026-06-17 15:47:16.598 +01:00 [INF] Departments already seeded. Skipping.
+2026-06-17 15:47:16.612 +01:00 [INF] Programs already seeded. Skipping.
+2026-06-17 15:47:16.639 +01:00 [INF] Lecturer john.doe@wigweuniversity.edu.ng already exists. Skipping.
+2026-06-17 15:47:16.643 +01:00 [INF] Lecturer jane.smith@wigweuniversity.edu.ng already exists. Skipping.
+2026-06-17 15:47:16.655 +01:00 [INF] All document types already exist. Skipping.
+2026-06-17 15:47:16.663 +01:00 [INF] Sponsors already seeded. Skipping.
+2026-06-17 15:47:16.671 +01:00 [INF] Subjects already seeded. Skipping.
+2026-06-17 15:47:16.681 +01:00 [INF] Countries already seeded. Skipping.
+2026-06-17 15:47:16.690 +01:00 [INF] Grading scales already seeded. Skipping.
+2026-06-17 15:47:16.700 +01:00 [INF] Credit transfer rules already seeded. Skipping.
+2026-06-17 15:47:16.709 +01:00 [INF] Program credit mappings already seeded. Skipping.
+2026-06-17 15:47:16.709 +01:00 [INF] Database initialization completed successfully.
+2026-06-17 15:47:16.773 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 84022968-6bdc-4c6b-8eab-57b75fa5d0b1, Domain: wigweuniversity.edu.ng
+2026-06-17 15:47:16.800 +01:00 [INF] Entra ID Service initialized successfully
+2026-06-17 15:47:16.882 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:47:16.938 +01:00 [INF] Registered 305 endpoints in 1,971 milliseconds.
+2026-06-17 15:47:16.967 +01:00 [INF] Now listening on: http://localhost:5021
+2026-06-17 15:47:16.967 +01:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-06-17 15:47:16.967 +01:00 [INF] Hosting environment: Development
+2026-06-17 15:47:16.967 +01:00 [INF] Content root path: /Users/mac/Apps/LMS APP/LMSApi
+2026-06-17 15:56:57.344 +01:00 [INF] HTTP OPTIONS /api/me responded 204 in 1.6134 ms
+2026-06-17 15:56:58.720 +01:00 [INF] HTTP GET /api/me responded 200 in 1368.2040 ms
+2026-06-17 15:57:06.864 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.7867 ms
+2026-06-17 15:57:06.910 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:06.912 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 46.5616 ms
+2026-06-17 15:57:09.085 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.1805 ms
+2026-06-17 15:57:09.255 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:09.423 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 331.5494 ms
+2026-06-17 15:57:22.198 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.1075 ms
+2026-06-17 15:57:22.225 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:22.225 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 25.4598 ms
+2026-06-17 15:57:22.227 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.0549 ms
+2026-06-17 15:57:22.262 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:22.284 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 56.2197 ms
+2026-06-17 15:57:39.145 +01:00 [INF] HTTP GET /api/announcements responded 200 in 53.2971 ms
+2026-06-17 15:57:43.595 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.0756 ms
+2026-06-17 15:57:43.620 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:43.620 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 24.3392 ms
+2026-06-17 15:57:43.622 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.0464 ms
+2026-06-17 15:57:43.661 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 15:57:43.682 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 57.6329 ms
+2026-06-17 15:58:18.416 +01:00 [INF] HTTP OPTIONS /api/admin/sessions responded 204 in 0.0336 ms
+2026-06-17 15:58:18.416 +01:00 [INF] HTTP OPTIONS /api/lecture-sessions responded 204 in 0.2104 ms
+2026-06-17 15:58:18.416 +01:00 [INF] HTTP OPTIONS /api/timetable/lecturers responded 204 in 0.0881 ms
+2026-06-17 15:58:18.570 +01:00 [INF] HTTP GET /api/admin/sessions responded 200 in 149.0946 ms
+2026-06-17 15:58:18.574 +01:00 [INF] HTTP GET /api/timetable/lecturers responded 200 in 153.1353 ms
+2026-06-17 15:58:18.613 +01:00 [INF] HTTP GET /api/lecture-sessions responded 200 in 193.5477 ms
+2026-06-17 15:58:18.613 +01:00 [INF] HTTP GET /api/admin/sessions responded 200 in 42.5943 ms
+2026-06-17 16:09:36.037 +01:00 [INF] HTTP OPTIONS /api/me responded 204 in 0.0872 ms
+2026-06-17 16:09:36.097 +01:00 [INF] HTTP GET /api/me responded 200 in 59.4716 ms
+2026-06-17 16:09:36.135 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.0404 ms
+2026-06-17 16:09:36.159 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:09:36.159 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 23.0024 ms
+2026-06-17 16:09:36.161 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.0652 ms
+2026-06-17 16:09:36.185 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:09:36.219 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 57.3517 ms
+2026-06-17 16:09:36.223 +01:00 [INF] HTTP OPTIONS /api/admin/sessions responded 204 in 0.0587 ms
+2026-06-17 16:09:36.251 +01:00 [INF] HTTP GET /api/admin/sessions responded 200 in 26.8948 ms
+2026-06-17 16:10:01.271 +01:00 [INF] HTTP OPTIONS /api/me responded 204 in 0.1049 ms
+2026-06-17 16:10:01.320 +01:00 [INF] HTTP GET /api/me responded 200 in 47.1299 ms
+2026-06-17 16:10:04.252 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.2920 ms
+2026-06-17 16:10:04.283 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:10:04.283 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 25.9685 ms
+2026-06-17 16:10:06.574 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.0504 ms
+2026-06-17 16:10:06.679 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:10:06.737 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 162.5472 ms
+2026-06-17 16:11:00.578 +01:00 [INF] HTTP OPTIONS /api/me responded 204 in 0.0325 ms
+2026-06-17 16:11:00.633 +01:00 [INF] HTTP GET /api/me responded 200 in 54.1503 ms
+2026-06-17 16:11:00.657 +01:00 [INF] HTTP OPTIONS /api/notifications/push/public-key responded 204 in 0.0270 ms
+2026-06-17 16:11:00.709 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:11:00.709 +01:00 [INF] HTTP GET /api/notifications/push/public-key responded 200 in 51.2786 ms
+2026-06-17 16:11:00.712 +01:00 [INF] HTTP OPTIONS /api/notifications/push/subscribe responded 204 in 0.0284 ms
+2026-06-17 16:11:00.738 +01:00 [WRN] VAPID Keys not fully configured. Using auto-generated fallback keys. PUBLIC KEY: BOQuKfpi5omtrbfkeQec-fhw3Sajxx7h46Nue6of7m5n9L456htWjXmVt1ga9O5i81LmFtdRdyDzEEM_Fu094EA
+2026-06-17 16:11:00.783 +01:00 [INF] HTTP POST /api/notifications/push/subscribe responded 200 in 71.0251 ms
+2026-06-17 16:29:28.046 +01:00 [INF] HTTP OPTIONS /api/admin/users responded 204 in 0.0520 ms
+2026-06-17 16:29:28.305 +01:00 [INF] HTTP GET /api/admin/users responded 200 in 257.6279 ms
+2026-06-17 16:29:36.444 +01:00 [INF] HTTP OPTIONS /api/auth/switch-user-by-oid responded 204 in 0.3029 ms
+2026-06-17 16:29:36.774 +01:00 [INF] HTTP POST /api/auth/switch-user-by-oid responded 200 in 325.3765 ms
+2026-06-17 16:32:51.105 +01:00 [INF] Application is shutting down...

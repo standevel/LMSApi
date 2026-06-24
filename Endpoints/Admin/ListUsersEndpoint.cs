@@ -4,6 +4,7 @@ using LMS.Api.Security;
 namespace LMS.Api.Endpoints.Admin;
 
 public sealed record ManagedUserSummaryResponse(
+    Guid Id,
     string EntraObjectId,
     string? Email,
     string? DisplayName,
@@ -43,6 +44,7 @@ public sealed class ListUsersEndpoint(IAdminAuthzService adminAuthzService)
         var data = new ListManagedUsersResponse(
             (result.Users ?? [])
                 .Select(x => new ManagedUserSummaryResponse(
+                    x.Id,
                     x.EntraObjectId,
                     x.Email,
                     x.DisplayName,

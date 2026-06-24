@@ -82,9 +82,8 @@ public sealed class GetRegistrationHistoryEndpoint(IRegistrationService registra
             return;
         }
 
-        // Note: The RegistrationService doesn't currently have a GetRegistrationHistory method
-        // This would need to be implemented in the service
-        await SendFailureAsync(501, "Not Implemented", "NOT_IMPLEMENTED", "Get registration history functionality not yet implemented", ct);
+        var result = await registrationService.GetRegistrationHistoryAsync(userId.Value, ct);
+        await SendAsync(result, ct);
     }
 }
 
@@ -113,5 +112,68 @@ public sealed class RequestPrerequisiteOverrideEndpoint(IPrerequisiteValidationS
             req.Reason, 
             ct);
         await SendAsync(result, ct);
+    }
+}
+
+public sealed class CheckPrerequisitesEndpoint(IPrerequisiteValidationService prerequisiteValidationService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<bool>
+{
+    public override void Configure()
+    {
+        Get("self-service/prerequisite-override/check");
+        Roles("Student");
+        Tags("SelfService");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var courseOfferingId = QueryParam<Guid>("courseOfferingId");
+        if (!courseOfferingId.HasValue)
+        {
+            await SendFailureAsync(400, "Bad Request", "BAD_REQUEST", "Course offering ID is required", ct);
+            return;
+        }
+
+        var result = await prerequisiteValidationService.CheckPrerequisitesAsync(userId.Value, courseOfferingId.Value, ct);
+        await SendAsync(result, ct);
+    }
+}
+
+public sealed class GetStudentExamsEndpoint(IScheduleService scheduleService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<List<StudentExamDto>>
+{
+    public override void Configure()
+    {
+        Get("self-service/schedule/exams");
+        Roles("Student");
+        Tags("SelfService");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        Guid currentAcademicSessionId = Guid.Empty;
+
+        var result = await scheduleService.GetStudentExamsAsync(userId.Value, currentAcademicSessionId, ct);
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(result.Value, ct);
     }
 }

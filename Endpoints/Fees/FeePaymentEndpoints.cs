@@ -1,26 +1,58 @@
 using FastEndpoints;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
 using LMS.Api.Data.Enums;
 using LMS.Api.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using LMS.Api.Endpoints;
 
 namespace LMS.Api.Endpoints.Fees;
 
 // ─── Initiate gateway payment ─────────────────────────────────────────────────
 
-public sealed class InitiateGatewayPaymentEndpoint(IFeeService feeService)
+public sealed class InitiateGatewayPaymentEndpoint(IFeeService feeService, LmsDbContext db)
     : ApiEndpoint<InitiateGatewayPaymentRequest, GatewayInitResponse>
 {
     public override void Configure()
     {
         Post("fees/payments/initiate");
-        Roles("SuperAdmin", "Admin", "Finance", "Student");
+        Roles("SuperAdmin", "Admin", "Finance", "Student", "Parent");
         Tags("Fees");
     }
 
     public override async Task HandleAsync(InitiateGatewayPaymentRequest req, CancellationToken ct)
     {
+        var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
+        
+        // Ownership check
+        if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") && !User.IsInRole("Finance"))
+        {
+            var feeRecord = await db.StudentFeeRecords.FindAsync(new object[] { req.StudentFeeRecordId }, ct);
+            if (feeRecord == null)
+            {
+                await SendFailureAsync(404, "Student fee record not found.", "NOT_FOUND", "Fee record not found.", ct);
+                return;
+            }
+
+            if (User.IsInRole("Student"))
+            {
+                if (callerId != feeRecord.StudentId)
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only initiate payment for your own fee record.", ct);
+                    return;
+                }
+            }
+            else if (User.IsInRole("Parent"))
+            {
+                if (callerId == null || !await db.ParentStudentLinks.AnyAsync(psl => psl.StudentId == feeRecord.StudentId && psl.ParentGuardian!.UserId == callerId.Value, ct))
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You are not linked to the student for this fee record.", ct);
+                    return;
+                }
+            }
+        }
+
         try
         {
             var result = await feeService.InitiateGatewayPaymentAsync(req);
@@ -39,19 +71,49 @@ public sealed class InitiateGatewayPaymentEndpoint(IFeeService feeService)
 
 // ─── Record manual payment (with optional receipt file) ───────────────────────
 
-public sealed class RecordManualPaymentEndpoint(IFeeService feeService)
+public sealed class RecordManualPaymentEndpoint(IFeeService feeService, LmsDbContext db)
     : ApiEndpoint<RecordManualPaymentRequest, FeePaymentResponse>
 {
     public override void Configure()
     {
         Post("fees/payments/manual");
         AllowFileUploads();
-        Roles("SuperAdmin", "Admin", "Finance", "Student");
+        Roles("SuperAdmin", "Admin", "Finance", "Student", "Parent");
         Tags("Fees");
     }
 
     public override async Task HandleAsync(RecordManualPaymentRequest req, CancellationToken ct)
     {
+        var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
+        
+        // Ownership check
+        if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") && !User.IsInRole("Finance"))
+        {
+            var feeRecord = await db.StudentFeeRecords.FindAsync(new object[] { req.StudentFeeRecordId }, ct);
+            if (feeRecord == null)
+            {
+                await SendFailureAsync(404, "Student fee record not found.", "NOT_FOUND", "Fee record not found.", ct);
+                return;
+            }
+
+            if (User.IsInRole("Student"))
+            {
+                if (callerId != feeRecord.StudentId)
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only record payment for your own fee record.", ct);
+                    return;
+                }
+            }
+            else if (User.IsInRole("Parent"))
+            {
+                if (callerId == null || !await db.ParentStudentLinks.AnyAsync(psl => psl.StudentId == feeRecord.StudentId && psl.ParentGuardian!.UserId == callerId.Value, ct))
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You are not linked to the student for this fee record.", ct);
+                    return;
+                }
+            }
+        }
+
         string? receiptUrl = null;
 
         // If a receipt file was uploaded, save it (simplified: store in wwwroot/receipts)
@@ -136,30 +198,40 @@ public sealed class RejectPaymentEndpoint(IFeeService feeService)
 
 // ─── Payment History ──────────────────────────────────────────────────────────
 
-public sealed class GetPaymentHistoryEndpoint(IFeeService feeService)
+public sealed class GetPaymentHistoryEndpoint(IFeeService feeService, LmsDbContext db)
     : ApiEndpointWithoutRequest<IEnumerable<FeePaymentResponse>>
 {
     public override void Configure()
     {
         Get("fees/payments/student/{studentId}");
-        Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry");
+        Roles("SuperAdmin", "Admin", "Finance", "Student", "Registry", "Parent");
         Tags("Fees");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
     {
         var studentId = Route<Guid>("studentId");
+        var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
 
-        // Ownership check: students can only access their own payment history
-        if (User.IsInRole("Student") &&
-            !User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
+        // Ownership check: students can only access their own payment history, parents can only access linked student
+        if (!User.IsInRole("SuperAdmin") && !User.IsInRole("Admin") &&
             !User.IsInRole("Finance") && !User.IsInRole("Registry"))
         {
-            var callerId = HttpContext.Items["CurrentUserId"] as Guid?;
-            if (callerId != studentId)
+            if (User.IsInRole("Student"))
             {
-                await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only access your own payment history.", ct);
-                return;
+                if (callerId != studentId)
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You can only access your own payment history.", ct);
+                    return;
+                }
+            }
+            else if (User.IsInRole("Parent"))
+            {
+                if (callerId == null || !await db.ParentStudentLinks.AnyAsync(psl => psl.StudentId == studentId && psl.ParentGuardian!.UserId == callerId.Value, ct))
+                {
+                    await SendFailureAsync(403, "Access denied", "FORBIDDEN", "You are not linked to this student.", ct);
+                    return;
+                }
             }
         }
 

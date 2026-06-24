@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace LMS.Api.Endpoints.Admissions;
 
-public sealed record GetApplicationsRequest(string? Status = null, Guid? SessionId = null);
+public sealed record GetApplicationsRequest(string? Status = null, Guid? SessionId = null, string? Filter = null);
 
 public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
     : ApiEndpoint<GetApplicationsRequest, IEnumerable<AdmissionApplicationResponse>>
@@ -24,7 +24,7 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
         Description(d => d
             .WithName("Get Applications")
             .WithTags("Admissions")
-            .WithSummary("List all admission applications with optional filtering by status and session. By default returns Draft and Submitted applications for registry view.")
+            .WithSummary("List all admission applications with optional filtering by status, session, and automated reminder eligibility. By default returns Draft and Submitted applications for registry view.")
             .WithDescription("Note: When Status is not specified, applications with Draft or Submitted status are returned."));
     }
 
@@ -38,10 +38,16 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
 
         var apps = await admissionService.GetApplicationsAsync(status, req.SessionId);
 
-        // For registry view, filter to Draft and Submitted by default
+        // For registry view, filter to Draft and Submitted by default (unless Status is explicitly set)
         var filteredApps = status.HasValue
             ? apps
             : apps.Where(a => a.Status == AdmissionStatus.Draft || a.Status == AdmissionStatus.Submitted);
+
+        if (req.Filter == "drafts-eligible-for-reminder")
+        {
+            var cutoffTime = DateTime.UtcNow.AddHours(-24);
+            filteredApps = filteredApps.Where(a => a.Status == AdmissionStatus.Draft && a.CreatedAt <= cutoffTime);
+        }
 
         var response = filteredApps.Select(app => AdmissionResponseMapper.Map(app));
 

@@ -30,23 +30,9 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
-        // Get all course offerings for the student's programs
-        var enrollments = await _dbContext.Enrollments
-            .Where(e => e.UserId == studentId)
-            .Select(e => new { e.ProgramId, e.LevelId, e.AcademicSessionId })
-            .ToListAsync(ct);
-
-        var courseOfferingIds = new List<Guid>();
-        foreach (var enrollment in enrollments)
-        {
-            var offeringIds = await _dbContext.CourseOfferings
-                .Where(co => co.ProgramId == enrollment.ProgramId
-                    && co.LevelId == enrollment.LevelId
-                    && co.AcademicSessionId == enrollment.AcademicSessionId)
-                .Select(co => co.Id)
-                .ToListAsync(ct);
-            courseOfferingIds.AddRange(offeringIds);
-        }
+        var courseOfferingIds = await _dbContext.CourseEnrollments
+            .Where(e => e.StudentId == studentId)
+            .Select(e => e.CourseOfferingId).Distinct().ToListAsync(ct);
 
         // Get all assessments for these course offerings
         var assessmentIds = await _dbContext.Assessments

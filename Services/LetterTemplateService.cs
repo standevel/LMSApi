@@ -34,6 +34,10 @@ public sealed class LetterTemplateService(LmsDbContext dbContext) : ILetterTempl
         existing.SignatureBase64 = request.SignatureBase64;
         existing.SectionsJson = request.SectionsJson;
         existing.IsDefault = request.IsDefault;
+        existing.SignatoryName = request.SignatoryName;
+        existing.SignatoryPosition = request.SignatoryPosition;
+        existing.SessionId = request.SessionId;
+        existing.SessionName = request.SessionName;
         existing.UpdatedAt = DateTime.UtcNow;
 
         if (existing.IsDefault)
@@ -82,7 +86,11 @@ public sealed class LetterTemplateService(LmsDbContext dbContext) : ILetterTempl
             t.LogoBase64,
             t.SignatureBase64,
             t.SectionsJson,
-            t.IsDefault
+            t.IsDefault,
+            t.SignatoryName,
+            t.SignatoryPosition,
+            t.SessionId,
+            t.SessionName
         );
     }
 }

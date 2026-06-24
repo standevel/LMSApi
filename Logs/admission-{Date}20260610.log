@@ -19,3 +19,9 @@
 2026-06-10 15:59:04.605 +01:00 [INF] Application started. Press Ctrl+C to shut down.
 2026-06-10 15:59:04.605 +01:00 [INF] Hosting environment: Development
 2026-06-10 15:59:04.605 +01:00 [INF] Content root path: /Users/mac/Apps/LMS APP/LMSApi
+2026-06-10 16:04:14.428 +01:00 [INF] HTTP OPTIONS /api/me responded 204 in 1.5585 ms
+2026-06-10 16:04:15.614 +01:00 [INF] HTTP GET /api/me responded 200 in 1179.3490 ms
+2026-06-10 16:04:18.298 +01:00 [INF] HTTP OPTIONS /api/admissions/applications responded 204 in 0.7717 ms
+2026-06-10 16:04:18.342 +01:00 [INF] Initializing Entra ID Service with TenantId: c9a98a3d-152f-4eb3-b93f-9b26fdd08495, ClientId: 84022968-6bdc-4c6b-8eab-57b75fa5d0b1, Domain: wigweuniversity.edu.ng
+2026-06-10 16:04:18.343 +01:00 [INF] Entra ID Service initialized successfully
+2026-06-10 16:04:18.449 +01:00 [INF] HTTP GET /api/admissions/applications responded 200 in 147.3283 ms

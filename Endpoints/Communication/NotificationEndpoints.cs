@@ -114,3 +114,84 @@ public sealed class DeleteNotificationEndpoint(INotificationService notification
             errors => false), ct);
     }
 }
+
+public class PushSubscribeRequest
+{
+    public string Endpoint { get; set; } = null!;
+    public string P256dh { get; set; } = null!;
+    public string Auth { get; set; } = null!;
+}
+
+public class PushUnsubscribeRequest
+{
+    public string Endpoint { get; set; } = null!;
+}
+
+public sealed class SubscribePushEndpoint(IPushNotificationService pushNotificationService)
+    : ApiEndpoint<PushSubscribeRequest, bool>
+{
+    public override void Configure()
+    {
+        Post("notifications/push/subscribe");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Tags("Communication");
+    }
+
+    public override async Task HandleAsync(PushSubscribeRequest req, CancellationToken ct)
+    {
+        var userId = HttpContext.Items["CurrentUserId"] as Guid?;
+        if (userId == null)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
+
+        var result = await pushNotificationService.SubscribeAsync(userId.Value, req.Endpoint, req.P256dh, req.Auth, ct);
+        await SendAsync(result.Match(
+            success => true,
+            errors => false), ct);
+    }
+}
+
+public sealed class UnsubscribePushEndpoint(IPushNotificationService pushNotificationService)
+    : ApiEndpoint<PushUnsubscribeRequest, bool>
+{
+    public override void Configure()
+    {
+        Post("notifications/push/unsubscribe");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Tags("Communication");
+    }
+
+    public override async Task HandleAsync(PushUnsubscribeRequest req, CancellationToken ct)
+    {
+        var userId = HttpContext.Items["CurrentUserId"] as Guid?;
+        if (userId == null)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
+
+        var result = await pushNotificationService.UnsubscribeAsync(userId.Value, req.Endpoint, ct);
+        await SendAsync(result.Match(
+            success => true,
+            errors => false), ct);
+    }
+}
+
+public sealed class GetVapidPublicKeyEndpoint(IPushNotificationService pushNotificationService)
+    : ApiEndpointWithoutRequest<string>
+{
+    public override void Configure()
+    {
+        Get("notifications/push/public-key");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Tags("Communication");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var publicKey = pushNotificationService.GetVapidPublicKey();
+        await SendSuccessAsync(publicKey, ct);
+    }
+}

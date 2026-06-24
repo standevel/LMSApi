@@ -19,6 +19,12 @@ public sealed class LetterTemplate
     // Content Sections (Stored as JSON)
     public string SectionsJson { get; set; } = "[]";
     
+    // Signatory and Session Details
+    public string SignatoryName { get; set; } = string.Empty;
+    public string SignatoryPosition { get; set; } = "Registrar";
+    public Guid? SessionId { get; set; }
+    public string SessionName { get; set; } = string.Empty;
+    
     public bool IsDefault { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

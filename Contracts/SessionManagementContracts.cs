@@ -70,7 +70,9 @@ public record SessionDetailsResponse(
     string? Notes,
     List<MaterialInfo> Materials,
     List<ExternalLinkInfo> ExternalLinks,
-    AttendanceStatistics? AttendanceStats);
+    AttendanceStatistics? AttendanceStats,
+    string? OnlineMeetingId = null,
+    string? OnlineMeetingJoinUrl = null);
 
 public record MaterialInfo(
     Guid Id,

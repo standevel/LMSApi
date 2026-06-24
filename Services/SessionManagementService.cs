@@ -171,7 +171,9 @@ public class SessionManagementService : ISessionManagementService
             session.Notes,
             materials,
             externalLinks,
-            attendanceStats);
+            attendanceStats,
+            session.OnlineMeetingId,
+            session.OnlineMeetingJoinUrl);
     }
 
     public async Task<LectureSession> UpdateSessionAsync(
@@ -477,14 +479,13 @@ public class SessionManagementService : ISessionManagementService
             throw new InvalidOperationException("Course offering not found");
         }
 
-        return await _context.Enrollments
-            .Where(e => e.ProgramId == courseOffering.ProgramId 
-                && e.LevelId == courseOffering.LevelId 
-                && e.AcademicSessionId == courseOffering.AcademicSessionId)
+        return await _context.CourseEnrollments
+            .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
+            .Include(e => e.Student)
             .Select(e => new EnrolledStudent(
-                e.UserId,
-                e.User.DisplayName ?? e.User.Email ?? "Unknown",
-                e.User.Email ?? ""))
+                e.StudentId,
+                e.Student.DisplayName ?? e.Student.Email ?? "Unknown",
+                e.Student.Email ?? ""))
             .OrderBy(s => s.Name)
             .ToListAsync();
     }

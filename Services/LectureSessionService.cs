@@ -377,7 +377,6 @@ public class LectureSessionService : ILectureSessionService
                 CourseName = co.Course.Title,
                 SlotCount = _context.LectureTimetableSlots.Count(s => s.CourseOfferingId == co.Id)
             })
-            .Where(x => x.SlotCount > 0)
             .ToListAsync();
 
         return offerings.Select(o => new CourseOfferingWithSlotCount(
