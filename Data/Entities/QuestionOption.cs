@@ -11,11 +11,11 @@ public class QuestionOption
     public Guid Id { get; set; } = Guid.NewGuid();
 
     [Required]
-    public string OptionText { get; set; } // The text of the option/answer choice
+    public string OptionText { get; set; } = string.Empty; // The text of the option/answer choice
 
     // Relationship to QuizQuestion (Which question does this option belong to?)
     public Guid QuizQuestionId { get; set; }
-    public QuizQuestion QuizQuestion { get; set; }
+    public QuizQuestion QuizQuestion { get; set; } = null!;
 
     [Required]
     public int DisplayOrder { get; set; } // Order of display for multiple choice options

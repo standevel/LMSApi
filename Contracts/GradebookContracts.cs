@@ -1,5 +1,6 @@
 using System;
 using LMS.Api.Data.Entities;
+using System.Collections.Generic;
 
 namespace LMS.Api.Contracts;
 
@@ -7,23 +8,29 @@ namespace LMS.Api.Contracts;
 
 public record SystemGradingConfigurationDto(
     Guid Id,
-    GradingStyle DefaultGradingStyle,
+    string DefaultGradingStyle,
     decimal DefaultExamPercentage,
     bool ApprovalWorkflowEnabled,
     decimal DefaultCA1Weight,
     decimal DefaultCA2Weight,
     decimal DefaultCA3Weight,
     decimal DefaultExamWeight,
+    decimal GpaScale,
+    List<GradeMappingDto> LetterGradesMapping,
     DateTime UpdatedAt);
 
 public record UpdateSystemGradingConfigurationRequest(
-    GradingStyle? DefaultGradingStyle,
+    string? DefaultGradingStyle,
     decimal? DefaultExamPercentage,
     bool? ApprovalWorkflowEnabled,
     decimal? DefaultCA1Weight,
     decimal? DefaultCA2Weight,
     decimal? DefaultCA3Weight,
-    decimal? DefaultExamWeight);
+    decimal? DefaultExamWeight,
+    decimal? GpaScale,
+    List<GradeMappingDto>? LetterGradesMapping);
+
+public record GradeMappingDto(decimal MinPercentage, string LetterGrade, decimal GradePoints);
 
 // ==================== ASSESSMENT CATEGORIES ====================
 
@@ -66,6 +73,7 @@ public record CreateAssessmentRequest(
     DateTime? DueDate);
 
 public record UpdateAssessmentRequest(
+    Guid? AssessmentCategoryId,
     string? Title,
     string? Description,
     decimal? MaxMarks,
@@ -89,6 +97,7 @@ public record GradeDto(
 
 public record StudentGradeSummaryDto(
     Guid StudentId,
+    string MatricNumber,
     string StudentName,
     string StudentEmail,
     decimal CA1Score,
@@ -98,6 +107,18 @@ public record StudentGradeSummaryDto(
     decimal TotalScore,
     string LetterGrade,
     string? Remarks);
+
+public record GradeDistributionDto(string LetterGrade, int Count);
+
+public record UpdateStudentGradeSummaryItem(
+    Guid StudentId,
+    decimal? CA1Score,
+    decimal? CA2Score,
+    decimal? CA3Score,
+    decimal? ExamScore);
+
+public record UpdateStudentGradeSummaryRequest(
+    List<UpdateStudentGradeSummaryItem> Grades);
 
 public record EnterGradeRequest(
     Guid AssessmentId,

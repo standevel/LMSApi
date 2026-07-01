@@ -33,6 +33,8 @@ await SeedCountriesAsync(ct);
         await SeedProgramCreditMappingsAsync(ct);
         await SeedCourseOfferingsAsync(ct);
         await SeedRegistrationConfigurationAsync(ct);
+        await SeedParentPortalConfigurationAsync(ct);
+        await SeedSystemGradingConfigurationAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
     }
@@ -121,7 +123,7 @@ await SeedCountriesAsync(ct);
             .Select(x => new { x.RoleId, x.PermissionId })
             .ToListAsync(ct);
 
-        var existingSet = existingPairs.ToHashSet();
+        var existingSet = existingPairs.Select(x => (x.RoleId, x.PermissionId)).ToHashSet();
         var rowsToAdd = new List<RolePermission>();
 
         foreach (var roleMap in map)
@@ -138,8 +140,8 @@ await SeedCountriesAsync(ct);
                     continue;
                 }
 
-                var pair = new { RoleId = role.Id, PermissionId = permission.Id };
-                if (existingSet.Contains(pair))
+                var pair = (role.Id, permission.Id);
+                if (!existingSet.Add(pair))
                 {
                     continue;
                 }
@@ -773,5 +775,79 @@ await SeedCountriesAsync(ct);
                 EnforceMinCredits = true
             });
             await dbContext.SaveChangesAsync(ct);
+        }
+
+        private async Task SeedParentPortalConfigurationAsync(CancellationToken ct)
+        {
+            if (await dbContext.SystemParentPortalConfigurations.AnyAsync(ct))
+            {
+                return;
+            }
+
+            logger.LogInformation("Seeding default global Parent Portal Configuration...");
+            dbContext.SystemParentPortalConfigurations.Add(new SystemParentPortalConfiguration
+            {
+                AutoCreateGuardianAccountsOnStudentCreation = true,
+                SendGuardianInvitationEmail = true,
+                DefaultRelationship = "Guardian"
+            });
+            await dbContext.SaveChangesAsync(ct);
+        }
+
+        private async Task SeedSystemGradingConfigurationAsync(CancellationToken ct)
+        {
+            if (await dbContext.SystemGradingConfigurations.AnyAsync(ct))
+            {
+                return;
+            }
+
+            logger.LogInformation("Seeding default global System Grading Configuration...");
+
+            // Standard Nigerian University 5-point GPA grade mapping
+            const string defaultLetterGradesJson = """
+                [
+                  {"minPercentage": 70, "letterGrade": "A", "gradePoints": 5.0},
+                  {"minPercentage": 60, "letterGrade": "B", "gradePoints": 4.0},
+                  {"minPercentage": 50, "letterGrade": "C", "gradePoints": 3.0},
+                  {"minPercentage": 45, "letterGrade": "D", "gradePoints": 2.0},
+                  {"minPercentage": 40, "letterGrade": "E", "gradePoints": 1.0},
+                  {"minPercentage":  0, "letterGrade": "F", "gradePoints": 0.0}
+                ]
+                """;
+
+            var existing = await dbContext.SystemGradingConfigurations
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (existing is null)
+            {
+                dbContext.SystemGradingConfigurations.Add(new SystemGradingConfiguration
+                {
+                    DefaultGradingStyle = GradingStyle.Weighted,
+                    DefaultExamPercentage = 70,
+                    ApprovalWorkflowEnabled = false,
+                    GpaScale = 5.0m,
+                    DefaultCA1Weight = 15m,
+                    DefaultCA2Weight = 15m,
+                    DefaultCA3Weight = 10m,
+                    DefaultExamWeight = 60m,
+                    LetterGradesMappingJson = defaultLetterGradesJson
+                });
+                await dbContext.SaveChangesAsync(ct);
+                logger.LogInformation("Seeded default system grading configuration with letter grade mappings.");
+            }
+            else if (existing.LetterGradesMappingJson is "[]" or "" or null)
+            {
+                // Already exists but letter grades weren't seeded — patch it
+                existing.LetterGradesMappingJson = defaultLetterGradesJson;
+                existing.GpaScale = 5.0m;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(ct);
+                logger.LogInformation("Patched existing system grading configuration with default letter grade mappings.");
+            }
+            else
+            {
+                logger.LogInformation("System grading configuration already has letter grade mappings. Skipping.");
+            }
         }
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ErrorOr;
@@ -79,16 +80,27 @@ public class BulkOperationService : BaseService, IBulkOperationService
 
         try
         {
-            // In a real implementation, we would download the file and process it based on the operation type
-            // For now, just simulate some work and complete successfully
-            await Task.Delay(2000, ct); // Simulate processing time
+            var resolvedPath = ResolveLocalPath(operation.FileUrl);
+            if (resolvedPath == null)
+            {
+                throw new InvalidOperationException("Bulk processing currently requires a local file path or file:// URL.");
+            }
+
+            var totalRecords = await CountRecordsAsync(resolvedPath, ct);
 
             // Update with results
             operation.Status = LMS.Api.Data.Entities.BulkOperationStatus.Completed;
-            operation.TotalRecords = 100; // Placeholder
-            operation.ProcessedRecords = 95; // Placeholder
-            operation.FailedRecords = 5; // Placeholder
+            operation.TotalRecords = totalRecords;
+            operation.ProcessedRecords = totalRecords;
+            operation.FailedRecords = 0;
             operation.ErrorMessage = null;
+            operation.ResultData = JsonSerializer.Serialize(new
+            {
+                message = "Bulk file inspected successfully.",
+                operation.OperationType,
+                operation.FileName,
+                totalRecords
+            });
             operation.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync(ct);
@@ -194,4 +206,51 @@ public class BulkOperationService : BaseService, IBulkOperationService
             o.CreatedAt,
             o.UpdatedAt,
             includeResultData ? o.ResultData : null);
+
+    private static string? ResolveLocalPath(string fileUrl)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri))
+        {
+            return uri.IsFile && File.Exists(uri.LocalPath) ? uri.LocalPath : null;
+        }
+
+        var path = Path.GetFullPath(fileUrl);
+        return File.Exists(path) ? path : null;
+    }
+
+    private static async Task<int> CountRecordsAsync(string path, CancellationToken ct)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+
+        if (extension == ".json")
+        {
+            await using var stream = File.OpenRead(path);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+            return document.RootElement.ValueKind switch
+            {
+                JsonValueKind.Array => document.RootElement.GetArrayLength(),
+                JsonValueKind.Object when document.RootElement.TryGetProperty("records", out var records) &&
+                                          records.ValueKind == JsonValueKind.Array => records.GetArrayLength(),
+                _ => 1
+            };
+        }
+
+        var lineCount = 0;
+        using var reader = File.OpenText(path);
+        while (await reader.ReadLineAsync(ct) is { } line)
+        {
+            if (!string.IsNullOrWhiteSpace(line))
+            {
+                lineCount++;
+            }
+        }
+
+        return extension == ".csv" && lineCount > 0 ? lineCount - 1 : lineCount;
+    }
 }

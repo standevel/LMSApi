@@ -3,6 +3,7 @@ using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Security;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Scalar.AspNetCore; // Uncomment this if the Scalar package is installed and provides the extension
 using System.Threading;
 
@@ -25,6 +26,8 @@ public static class WebApplicationExtensions
     }
     public static WebApplication UseApplicationMiddleware(this WebApplication app)
     {
+        app.UseForwardedHeaders();
+
         if (!app.Environment.IsDevelopment())
         {
             app.UseHttpsRedirection();
@@ -110,6 +113,8 @@ public static class WebApplicationExtensions
             c.Serializer.Options.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
             c.Endpoints.RoutePrefix = "api";
         });
+
+        app.MapHub<LMS.Api.Hubs.NotificationHub>("/hubs/notifications");
 
         app.MapOpenApi();
         app.MapScalarApiReference("/docs", options =>

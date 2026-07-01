@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace LMS.Api.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class curriculumupdate : Migration
+    public partial class CurriculumUpdate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

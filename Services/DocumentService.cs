@@ -52,7 +52,8 @@ public sealed class DocumentService(LmsDbContext dbContext) : IDocumentService
             // If faculty restricted, check faculty match
             if (rules.FacultyRestricted)
             {
-                return document.FacultyId == null || document.FacultyId == (/* TODO: Get User Faculty */ Guid.Empty);
+                var userFacultyId = await ResolveUserFacultyIdAsync(userId);
+                return document.FacultyId == null || (userFacultyId.HasValue && document.FacultyId == userFacultyId);
             }
             return true;
         }
@@ -98,5 +99,39 @@ public sealed class DocumentService(LmsDbContext dbContext) : IDocumentService
         public List<string> AllowedRoles { get; set; } = new();
         public bool AllowOwner { get; set; } = true;
         public bool FacultyRestricted { get; set; }
+    }
+
+    private async Task<Guid?> ResolveUserFacultyIdAsync(Guid userId)
+    {
+        var user = await dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+        {
+            return null;
+        }
+
+        var studentFacultyId = await dbContext.Students
+            .AsNoTracking()
+            .Where(s =>
+                s.EntraObjectId == user.EntraObjectId ||
+                (!string.IsNullOrWhiteSpace(user.Email) &&
+                 (s.OfficialEmail == user.Email || s.PersonalEmail == user.Email)))
+            .Select(s => s.FacultyId)
+            .FirstOrDefaultAsync();
+
+        if (studentFacultyId.HasValue)
+        {
+            return studentFacultyId;
+        }
+
+        var lecturerProgramFacultyId = await dbContext.CourseOfferings
+            .AsNoTracking()
+            .Where(co => co.LecturerId == userId)
+            .Select(co => (Guid?)co.Program.Department.FacultyId)
+            .FirstOrDefaultAsync();
+
+        return lecturerProgramFacultyId;
     }
 }

@@ -5,16 +5,21 @@ using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Enums;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace LMS.Api.Services;
 
 public class TranscriptGenerationService : BaseService, ITranscriptGenerationService
 {
     private readonly LmsDbContext _dbContext;
+    private readonly IFileStorageService _fileStorageService;
 
-    public TranscriptGenerationService(LmsDbContext dbContext, IAuditService auditService) : base(auditService)
+    public TranscriptGenerationService(LmsDbContext dbContext, IAuditService auditService, IFileStorageService fileStorageService) : base(auditService)
     {
         _dbContext = dbContext;
+        _fileStorageService = fileStorageService;
     }
 
     public async Task<ErrorOr<TranscriptDto>> GenerateTranscriptAsync(Guid studentId, bool isOfficial = true, CancellationToken ct = default)
@@ -30,68 +35,107 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
-        var courseOfferingIds = await _dbContext.CourseEnrollments
-            .Where(e => e.StudentId == studentId)
-            .Select(e => e.CourseOfferingId).Distinct().ToListAsync(ct);
-
-        // Get all assessments for these course offerings
-        var assessmentIds = await _dbContext.Assessments
-            .Where(a => courseOfferingIds.Contains(a.CourseOfferingId))
-            .Select(a => a.Id)
-            .ToListAsync(ct);
-
-        // Get all grades for this student
-        var grades = await _dbContext.Grades
-            .Where(g => g.StudentId == studentId && assessmentIds.Contains(g.AssessmentId))
-            .Include(g => g.Assessment)
-                .ThenInclude(a => a!.CourseOffering)
-                    .ThenInclude(co => co!.Course)
-            .Include(g => g.Assessment)
-                .ThenInclude(a => a!.CourseOffering)
-                    .ThenInclude(co => co!.AcademicSession)
-            .ToListAsync(ct);
-
         // Build course records
+        var sysConfig = await _dbContext.SystemGradingConfigurations
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct) ?? new SystemGradingConfiguration();
+            
+        var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+            ? new List<LMS.Api.Contracts.GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+              ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
+        var offerings = await _dbContext.CourseEnrollments
+            .Where(e => e.StudentId == studentId && e.Status == "Registered")
+            .Select(e => e.CourseOffering)
+            .Distinct()
+            .Include(co => co.Course)
+            .Include(co => co.AcademicSession)
+            .ToListAsync(ct);
+
         var courseRecords = new List<TranscriptCourseRecord>();
-        foreach (var offeringId in courseOfferingIds.Distinct())
+        foreach (var offering in offerings)
         {
-            var offering = await _dbContext.CourseOfferings
-                .Include(co => co.Course)
-                .Include(co => co.AcademicSession)
-                .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+            // Fetch assessments for this course offering
+            var assessments = await _dbContext.Assessments
+                .Where(a => a.CourseOfferingId == offering.Id)
+                .Include(a => a.AssessmentCategory)
+                .ToListAsync(ct);
 
-            if (offering == null) continue;
+            if (!assessments.Any()) continue;
 
-            var studentGrades = grades.Where(g => g.Assessment!.CourseOfferingId == offeringId).ToList();
-            var hasGrade = studentGrades.Any(g => g.MarksObtained > 0);
+            var studentGrades = await _dbContext.Grades
+                .Where(g => g.StudentId == studentId && assessments.Select(a => a.Id).Contains(g.AssessmentId))
+                .ToListAsync(ct);
 
-            if (!hasGrade && offering.Semester != 0) // Include all offerings or those with grades
+            if (!studentGrades.Any())
             {
-                // Check if there are any assessments for this offering
-                var assessmentCount = await _dbContext.Assessments
-                    .CountAsync(a => a.CourseOfferingId == offeringId, ct);
-                if (assessmentCount == 0) continue;
+                courseRecords.Add(new TranscriptCourseRecord(
+                    offering.Id,
+                    offering.Course?.Code ?? "N/A",
+                    offering.Course?.Title ?? "N/A",
+                    offering.Course?.CreditUnits ?? 0,
+                    (int)offering.Semester,
+                    offering.AcademicSession?.Name ?? "N/A",
+                    null,
+                    null,
+                    await CalculateAttendancePercentage(offering.Id, studentId, ct)));
+                continue;
             }
 
-            var gradeRecord = studentGrades.FirstOrDefault(g => g.MarksObtained > 0);
-            var attendancePercentage = await CalculateAttendancePercentage(offeringId, studentId, ct);
+            var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: isOfficial);
+            if (!totalScore.HasValue)
+            {
+                courseRecords.Add(new TranscriptCourseRecord(
+                    offering.Id,
+                    offering.Course?.Code ?? "N/A",
+                    offering.Course?.Title ?? "N/A",
+                    offering.Course?.CreditUnits ?? 0,
+                    (int)offering.Semester,
+                    offering.AcademicSession?.Name ?? "N/A",
+                    null,
+                    null,
+                    await CalculateAttendancePercentage(offering.Id, studentId, ct)));
+                continue;
+            }
+
+            var roundedScore = Math.Round(totalScore.Value, 2);
+            var letterGrade = CalculateLetterGrade(roundedScore, mappings);
+            var gradePoints = ConvertToGradePoints(roundedScore, sysConfig);
+            var attendancePercentage = await CalculateAttendancePercentage(offering.Id, studentId, ct);
 
             courseRecords.Add(new TranscriptCourseRecord(
-                offeringId,
+                offering.Id,
                 offering.Course?.Code ?? "N/A",
                 offering.Course?.Title ?? "N/A",
                 offering.Course?.CreditUnits ?? 0,
                 (int)offering.Semester,
                 offering.AcademicSession?.Name ?? "N/A",
-                gradeRecord.MarksObtained > 0 ? CalculateLetterGrade(gradeRecord.MarksObtained) : null,
-                gradeRecord.MarksObtained > 0 ? ConvertToGradePoints(gradeRecord.MarksObtained) : null,
+                letterGrade,
+                gradePoints,
                 attendancePercentage));
         }
 
         // Calculate cumulative GPA
-        var passedGrades = grades.Where(g => g.MarksObtained >= 40).ToList();
-        var cumulativeGpa = passedGrades.Any() ? CalculateGpa(passedGrades) : 0;
-        var totalCreditsEarned = await CalculateTotalCreditsEarned(grades, ct);
+        decimal totalGpaPoints = 0;
+        decimal totalGpaCredits = 0;
+        int totalCreditsEarned = 0;
+
+        foreach (var record in courseRecords)
+        {
+            if (record.GradePoints.HasValue)
+            {
+                totalGpaPoints += record.GradePoints.Value * record.CreditUnits;
+                totalGpaCredits += record.CreditUnits;
+
+                if (record.GradePoints.Value >= 1.0m)
+                {
+                    totalCreditsEarned += record.CreditUnits;
+                }
+            }
+        }
+
+        var cumulativeGpa = totalGpaCredits > 0 ? Math.Round(totalGpaPoints / totalGpaCredits, 2) : 0;
 
         // Get academic standing
         var standing = await _dbContext.AcademicStandings
@@ -201,13 +245,17 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
 
         request.Status = TranscriptStatus.Ready;
         request.ProcessedBy = processedBy;
+        request.CompletedAt = DateTime.UtcNow;
         request.UpdatedAt = DateTime.UtcNow;
 
-        // Generate the transcript document URL (in production, this would generate an actual PDF)
+        // Generate the transcript document PDF and save it
         var transcript = await GenerateTranscriptAsync(request.StudentId, request.IsOfficial, ct);
         if (!transcript.IsError)
         {
-            request.DocumentUrl = $"/transcripts/{request.Id}.pdf";
+            var pdfBytes = GenerateTranscriptPdfBytes(transcript.Value);
+            using var pdfStream = new MemoryStream(pdfBytes);
+            var relativePath = await _fileStorageService.SaveFileAsync("transcripts", request.Id.ToString(), $"{request.Id}.pdf", pdfStream);
+            request.DocumentUrl = $"/uploads/{relativePath}";
         }
 
         await _dbContext.SaveChangesAsync(ct);
@@ -218,49 +266,112 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         return MapToTranscriptRequestDto(request);
     }
 
-    private decimal CalculateGpa(IEnumerable<Grade> grades)
+    private byte[] GenerateTranscriptPdfBytes(TranscriptDto transcript)
     {
-        if (!grades.Any()) return 0;
+        QuestPDF.Settings.License = LicenseType.Community;
 
-        const decimal creditUnits = 3m;
-        decimal totalPoints = 0;
-        decimal totalCredits = 0;
-
-        foreach (var grade in grades)
+        var document = Document.Create(container =>
         {
-            if (grade.MarksObtained < 40) continue;
-
-            totalPoints += grade.MarksObtained * creditUnits;
-            totalCredits += creditUnits;
-        }
-
-        return totalCredits > 0 ? Math.Round(totalPoints / totalCredits, 2) : 0;
-    }
-
-    private async Task<int> CalculateTotalCreditsEarned(IEnumerable<Grade> grades, CancellationToken ct)
-    {
-        var gradeList = grades.ToList();
-        var assessmentIds = gradeList.Select(g => g.AssessmentId).ToList();
-
-        var assessments = await _dbContext.Assessments
-            .Include(a => a.CourseOffering)
-                .ThenInclude(co => co!.Course)
-            .Where(a => assessmentIds.Contains(a.Id))
-            .ToListAsync(ct);
-
-        int creditsEarned = 0;
-        foreach (var grade in gradeList)
-        {
-            if (grade.MarksObtained < 40) continue;
-
-            var assessment = assessments.FirstOrDefault(a => a.Id == grade.AssessmentId);
-            if (assessment?.CourseOffering?.Course != null)
+            container.Page(page =>
             {
-                creditsEarned += assessment.CourseOffering.Course.CreditUnits;
-            }
-        }
+                page.Size(PageSizes.A4);
+                page.Margin(1.2f, Unit.Centimetre);
+                page.PageColor(Colors.White);
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily(Fonts.Verdana));
 
-        return creditsEarned;
+                page.Header().Column(col =>
+                {
+                    col.Spacing(10);
+                    col.Item().AlignCenter().Text("WIGWE UNIVERSITY").FontSize(18).Bold().FontColor("#0F172A");
+                    col.Item().AlignCenter().Text("ACADEMIC TRANSCRIPT").FontSize(12).Bold().FontColor("#059669");
+
+                    col.Item().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Row(row =>
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text($"Student Name: {transcript.StudentName}").Bold();
+                            c.Item().Text($"Student Number: {transcript.StudentNumber}");
+                            c.Item().Text($"Email: {transcript.Email}");
+                        });
+
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text($"Academic Program: {transcript.ProgramName}").Bold();
+                            c.Item().Text($"Current Level: {transcript.LevelName}");
+                            c.Item().Text($"Academic Standing: {transcript.StandingType}");
+                        });
+                    });
+                });
+
+                page.Content().PaddingVertical(15).Column(col =>
+                {
+                    col.Spacing(15);
+                    var sessions = transcript.CourseRecords.GroupBy(c => c.AcademicSessionName);
+
+                    foreach (var sessionGroup in sessions)
+                    {
+                        col.Item().Text(sessionGroup.Key).FontSize(11).Bold().FontColor("#0F172A").Underline();
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(80);
+                                columns.RelativeColumn();
+                                columns.ConstantColumn(60);
+                                columns.ConstantColumn(60);
+                                columns.ConstantColumn(60);
+                                columns.ConstantColumn(80);
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background("#0F172A").Padding(5).Text("Course Code").FontColor(Colors.White).Bold();
+                                header.Cell().Background("#0F172A").Padding(5).Text("Course Title").FontColor(Colors.White).Bold();
+                                header.Cell().Background("#0F172A").Padding(5).Text("Credits").FontColor(Colors.White).Bold().AlignCenter();
+                                header.Cell().Background("#0F172A").Padding(5).Text("Grade").FontColor(Colors.White).Bold().AlignCenter();
+                                header.Cell().Background("#0F172A").Padding(5).Text("Points").FontColor(Colors.White).Bold().AlignCenter();
+                                header.Cell().Background("#0F172A").Padding(5).Text("Attendance").FontColor(Colors.White).Bold().AlignCenter();
+                            });
+
+                            foreach (var course in sessionGroup)
+                            {
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text(course.CourseCode);
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text(course.CourseTitle);
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text(course.CreditUnits.ToString()).AlignCenter();
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text(course.GradeLetter ?? "-").AlignCenter();
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text(course.GradePoints.HasValue ? course.GradePoints.Value.ToString("0.00") : "-").AlignCenter();
+                                table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten3).Padding(5).Text($"{course.AttendancePercentage}%").AlignCenter();
+                            }
+                        });
+                    }
+
+                    col.Item().AlignRight().Border(1).BorderColor("#059669").Padding(10).Column(sc =>
+                    {
+                        sc.Item().Text($"Total Earned Credits: {transcript.TotalCreditsEarned}").Bold();
+                        sc.Item().Text($"Cumulative GPA: {transcript.CumulativeGpa:0.00}").Bold().FontColor("#059669").FontSize(11);
+                    });
+                });
+
+                page.Footer().Column(fcol =>
+                {
+                    fcol.Item().LineHorizontal(1).LineColor(Colors.Grey.Lighten2);
+                    fcol.Item().PaddingVertical(5).Row(row =>
+                    {
+                        row.RelativeItem().Text($"Status: {(transcript.IsOfficial ? "OFFICIAL TRANSCRIPT" : "UNOFFICIAL COPY")}").FontSize(8).FontColor(Colors.Grey.Medium);
+                        row.RelativeItem().AlignRight().Text(x =>
+                        {
+                            x.Span("Generated on: ").FontSize(8).FontColor(Colors.Grey.Medium);
+                            x.Span(transcript.GeneratedAt.ToString("yyyy-MM-dd HH:mm UTC")).FontSize(8).FontColor(Colors.Grey.Medium);
+                            x.Span(" | Page ").FontSize(8).FontColor(Colors.Grey.Medium);
+                            x.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Medium);
+                        });
+                    });
+                });
+            });
+        });
+
+        return document.GeneratePdf();
     }
 
     private async Task<int> CalculateAttendancePercentage(Guid courseOfferingId, Guid studentId, CancellationToken ct)
@@ -278,33 +389,122 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         return totalSessions > 0 ? (int)((decimal)attendedSessions / totalSessions * 100) : 0;
     }
 
-    private string CalculateLetterGrade(decimal marks)
+    private string CalculateLetterGrade(decimal marks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null)
     {
-        return marks switch
+        if (mappings == null || !mappings.Any())
         {
-            >= 70 => "A",
-            >= 60 => "B",
-            >= 50 => "C",
-            >= 45 => "D",
-            >= 40 => "E",
-            _ => "F"
-        };
+            return marks switch
+            {
+                >= 70 => "A",
+                >= 60 => "B",
+                >= 50 => "C",
+                >= 45 => "D",
+                >= 40 => "E",
+                _ => "F"
+            };
+        }
+        
+        var match = mappings.OrderByDescending(m => m.MinPercentage)
+            .FirstOrDefault(m => marks >= m.MinPercentage);
+            
+        return match?.LetterGrade ?? "F";
     }
 
-    private decimal ConvertToGradePoints(decimal marks)
+    private static decimal? CalculateCourseScore(
+        IReadOnlyCollection<Assessment> assessments,
+        IReadOnlyCollection<Grade> grades,
+        SystemGradingConfiguration sysConfig,
+        bool finalizedOnly)
     {
-        return marks switch
+        var usableGrades = finalizedOnly
+            ? grades.Where(g => g.IsLocked).ToList()
+            : grades.ToList();
+
+        if (usableGrades.Count == 0)
         {
-            >= 70 => 4.0m,
-            >= 65 => 3.75m,
-            >= 60 => 3.5m,
-            >= 55 => 3.0m,
-            >= 50 => 2.5m,
-            >= 45 => 2.0m,
-            >= 40 => 1.0m,
-            _ => 0.0m
-        };
+            return null;
+        }
+
+        var percentages = assessments
+            .Select(assessment =>
+            {
+                var grade = usableGrades.FirstOrDefault(g => g.AssessmentId == assessment.Id);
+                if (grade == null || assessment.MaxMarks <= 0)
+                {
+                    return null;
+                }
+
+                return new AssessmentPercentage(
+                    assessment.AssessmentCategoryId,
+                    assessment.AssessmentCategory.Weight,
+                    grade.MarksObtained / assessment.MaxMarks * 100m);
+            })
+            .Where(x => x != null)
+            .Cast<AssessmentPercentage>()
+            .ToList();
+
+        if (percentages.Count == 0)
+        {
+            return null;
+        }
+
+        if (sysConfig.DefaultGradingStyle == GradingStyle.Unweighted)
+        {
+            return percentages.Average(x => x.Percentage);
+        }
+
+        return percentages
+            .GroupBy(x => x.CategoryId)
+            .Sum(category =>
+            {
+                var categoryAverage = category.Average(x => x.Percentage);
+                var categoryWeight = category.First().CategoryWeight;
+                return categoryAverage * categoryWeight / 100m;
+            });
     }
+
+    private decimal ConvertToGradePoints(decimal marks, SystemGradingConfiguration sysConfig)
+    {
+        var mappings = string.IsNullOrEmpty(sysConfig.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+            ? new List<LMS.Api.Contracts.GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+              ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+              
+        if (mappings == null || !mappings.Any())
+        {
+            if (sysConfig.GpaScale == 5.0m)
+            {
+                return marks switch
+                {
+                    >= 70 => 5.0m,
+                    >= 60 => 4.0m,
+                    >= 50 => 3.0m,
+                    >= 45 => 2.0m,
+                    >= 40 => 1.0m,
+                    _ => 0.0m
+                };
+            }
+
+            return marks switch
+            {
+                >= 70 => 4.0m,
+                >= 65 => 3.75m,
+                >= 60 => 3.5m,
+                >= 55 => 3.0m,
+                >= 50 => 2.5m,
+                >= 45 => 2.0m,
+                >= 40 => 1.0m,
+                _ => 0.0m
+            };
+        }
+        
+        var match = mappings.OrderByDescending(m => m.MinPercentage)
+            .FirstOrDefault(m => marks >= m.MinPercentage);
+            
+        return match?.GradePoints ?? 0.0m;
+    }
+
+    private sealed record AssessmentPercentage(Guid CategoryId, decimal CategoryWeight, decimal Percentage);
 
     private TranscriptRequestDto MapToTranscriptRequestDto(TranscriptRequest request)
     {

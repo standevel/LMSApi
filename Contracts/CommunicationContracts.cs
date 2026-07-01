@@ -87,6 +87,10 @@ public sealed record CreateMessageRequest(
     string Content
 );
 
+public sealed record SendCourseLecturerMessageRequest(
+    string Content
+);
+
 public sealed record NotificationDto(
     Guid Id,
     Guid RecipientId,

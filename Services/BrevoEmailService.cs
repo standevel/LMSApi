@@ -81,8 +81,6 @@ public sealed class BrevoEmailService(
         string toEmail,
         string studentName,
         string programName,
-        string acceptOfferUrl,
-        string rejectOfferUrl,
         byte[]? pdfAttachment = null,
         string? fileName = null)
     {
@@ -93,13 +91,7 @@ public sealed class BrevoEmailService(
                 <p>Dear {studentName},</p>
                 <p>We are pleased to offer you admission into the <strong>{programName}</strong> program at Wigwe University!</p>
                 <p>Please find attached your official admission letter.</p>
-                <p>You can respond to this offer directly using the buttons below.</p>
-                <div style='margin: 24px 0; display: flex; gap: 12px; flex-wrap: wrap;'>
-                    <a href='{acceptOfferUrl}' style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>Accept Offer</a>
-                    <a href='{rejectOfferUrl}' style='background:#fff5f5; color:#c2410c; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; border:1px solid #fed7aa; display:inline-block;'>Reject Offer</a>
-                </div>
-                <p>After acceptance, you will receive instructions on how to pay your commitment fee.</p>
-                <p style='font-size: 12px; color: #666;'>If the buttons above do not work, copy and paste this link into your browser: {acceptOfferUrl}</p>
+                <p>You will receive instructions on how to pay your commitment fee.</p>
                 <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
                 <p style='font-size: 12px; color: #666;'>Wigwe University Admissions Office</p>
             </div>";

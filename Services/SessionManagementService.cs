@@ -479,15 +479,18 @@ public class SessionManagementService : ISessionManagementService
             throw new InvalidOperationException("Course offering not found");
         }
 
-        return await _context.CourseEnrollments
+        var enrollments = await _context.CourseEnrollments
             .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
             .Include(e => e.Student)
+            .ToListAsync();
+
+        return enrollments
             .Select(e => new EnrolledStudent(
                 e.StudentId,
                 e.Student.DisplayName ?? e.Student.Email ?? "Unknown",
                 e.Student.Email ?? ""))
             .OrderBy(s => s.Name)
-            .ToListAsync();
+            .ToList();
     }
 
     public async Task<List<EnrolledStudent>> GetEnrolledStudentsForSessionAsync(

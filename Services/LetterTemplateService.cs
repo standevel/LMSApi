@@ -36,7 +36,7 @@ public sealed class LetterTemplateService(LmsDbContext dbContext) : ILetterTempl
         existing.IsDefault = request.IsDefault;
         existing.SignatoryName = request.SignatoryName;
         existing.SignatoryPosition = request.SignatoryPosition;
-        existing.SessionId = request.SessionId;
+        existing.SessionId = !string.IsNullOrEmpty(request.SessionId) && Guid.TryParse(request.SessionId, out var sid) ? sid : null;
         existing.SessionName = request.SessionName;
         existing.UpdatedAt = DateTime.UtcNow;
 

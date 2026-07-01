@@ -254,7 +254,7 @@ public class DegreeAuditService : BaseService, IDegreeAuditService
             requirement.Id,
             requirement.ProgramId,
             requirement.Program?.Name ?? "N/A",
-            requirement.Name,
+            requirement.Name ?? "Unnamed requirement",
             requirement.Type,
             requirement.CreditHoursRequired,
             requirement.MinGpaRequired,

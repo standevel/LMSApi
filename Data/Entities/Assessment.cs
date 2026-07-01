@@ -39,6 +39,8 @@ public sealed class Assessment
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     
+    public bool ReminderSent { get; set; } = false;
+    
     public CourseOffering CourseOffering { get; set; } = null!;
     public AssessmentCategory AssessmentCategory { get; set; } = null!;
     public ICollection<Grade> Grades { get; set; } = [];

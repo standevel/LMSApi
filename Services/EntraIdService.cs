@@ -110,8 +110,9 @@ public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logg
         {
             _logger.LogInformation("[ENTRA-GRAPH-CALL] Calling Microsoft Graph API to create user with UPN: {UPN}", officialEmail);
             _logger.LogInformation("[ENTRA-GRAPH-CALL] Graph client initialized: {GraphClientInitialized}", _graphClient != null);
-            
-            var createdUser = await _graphClient.Users.PostAsync(user);
+
+            var usersClient = _graphClient!.Users!;
+            var createdUser = await usersClient.PostAsync(user);
             if (createdUser == null)
             {
                 _logger.LogError("[ENTRA-GRAPH-ERROR] Entra ID user creation returned null for {Email}", officialEmail);

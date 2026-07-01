@@ -23,6 +23,8 @@ public class QuizAnswer
     public Guid AttemptId { get; set; }
     public QuizAttempt Attempt { get; set; } = null!;
     public Guid QuestionId { get; set; }
+    public QuizQuestion? Question { get; set; }
     public Guid? SelectedOptionId { get; set; }
+    public QuestionOption? SelectedOption { get; set; }
     public string? TextAnswer { get; set; }
 }

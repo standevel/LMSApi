@@ -5,7 +5,7 @@
 namespace LMS.Api.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class admission : Migration
+    public partial class Admission : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

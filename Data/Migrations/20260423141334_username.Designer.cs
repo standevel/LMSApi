@@ -13,7 +13,7 @@ namespace LMS.Api.Data.Migrations
 {
     [DbContext(typeof(LmsDbContext))]
     [Migration("20260423141334_username")]
-    partial class username
+    partial class Username
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

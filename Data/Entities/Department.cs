@@ -12,6 +12,10 @@ public sealed class Department
     public Guid FacultyId { get; set; }
     [JsonIgnore]
     public Faculty Faculty { get; set; } = null!;
+    
+    public Guid? HeadId { get; set; }
+    [JsonIgnore]
+    public AppUser? Head { get; set; }
     public DateOnly CreatedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
     public DateOnly UpdatedDate { get; set; } = DateOnly.FromDateTime(DateTime.Now);
     [JsonIgnore]

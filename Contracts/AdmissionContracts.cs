@@ -260,7 +260,7 @@ public sealed record SaveLetterTemplateRequest(
     bool IsDefault,
     string SignatoryName = "",
     string SignatoryPosition = "Registrar",
-    Guid? SessionId = null,
+    string? SessionId = null,
     string SessionName = ""
 );
 public sealed record RegistryStatsResponse(

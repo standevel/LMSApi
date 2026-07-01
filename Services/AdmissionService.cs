@@ -23,7 +23,7 @@ public sealed class AdmissionService(
     ICreditTransferService creditTransferService,
     IGradeConversionService gradeConversionService,
     ICourseEquivalencyService courseEquivalencyService,
-    ICredentialEvaluationService credentialEvaluationService) : IAdmissionService
+    IGuardianProvisioningService guardianProvisioningService) : IAdmissionService
 {
     private readonly ICreditTransferService _creditTransferService = creditTransferService;
     private readonly IGradeConversionService _gradeConversionService = gradeConversionService;
@@ -705,13 +705,12 @@ public sealed class AdmissionService(
                         var pdf = await pdfService.GenerateOfferLetterAsync(app, templateType);
                         var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
                         await emailService.SendAdmissionOfferEmailAsync(
-                            app.StudentEmail,
-                            fullName,
-                            app.AcademicProgram?.Name ?? "Selected Program",
-                            $"{offerDecisionUrl}?decision=accept",
-                            $"{offerDecisionUrl}?decision=reject",
-                            pdf,
-                            "Admission_Letter.pdf");
+                            toEmail: app.StudentEmail,
+                            studentName: fullName,
+                            programName: app.AcademicProgram?.Name ?? "Selected Program",
+                            pdfAttachment: pdf,
+                            fileName: "Admission_Letter.pdf"
+                        );
                         logger.LogInformation("[ADMITTED] Admission offer email sent to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
                     }
                     catch (Exception ex)
@@ -983,8 +982,6 @@ public sealed class AdmissionService(
             }
 
             // Define thresholds
-            const decimal minTransferCGPA = 2.5m; // on 4.0 scale; 3.0 on 5.0 scale will be checked during validation
-            const int minTransferCredits = 30;
             const decimal minEnglishTOEFL = 80m;
             const decimal minEnglishIELTS = 6.5m;
 
@@ -1224,6 +1221,13 @@ public sealed class AdmissionService(
 
             logger.LogInformation("[REGISTRAR-STUDENT-CREATION] Student record created: StudentId={StudentId}", student.Id);
 
+            if (await guardianProvisioningService.AutoCreateGuardianAccountsEnabledAsync(ct)
+                && !string.IsNullOrWhiteSpace(student.EmergencyContactEmail))
+            {
+                await guardianProvisioningService.ProvisionForStudentAsync(student, ct: ct);
+                logger.LogInformation("[REGISTRAR-GUARDIAN-CREATION] Guardian provisioning completed for student {StudentId}", student.Id);
+            }
+
             // Calculate fees
             var amountDue = await CalculateProgramFeeAsync(app.AcademicProgramId ?? Guid.Empty, app.AcademicSessionId);
 
@@ -1298,7 +1302,7 @@ public sealed class AdmissionService(
         logger.LogInformation("[REGISTRAR-PENDING] Fetching pending student accounts");
 
         var pending = await dbContext.AdmissionApplications
-            .Where(a => a.Status == AdmissionStatus.OfferAccepted)
+            .Where(a => a.Status == AdmissionStatus.Admitted)
             .Where(a => string.IsNullOrEmpty(a.EntraObjectId) || !a.StudentId.HasValue)
             .Include(a => a.AcademicProgram)
             .Include(a => a.AcademicSession)
@@ -2009,6 +2013,16 @@ public sealed class AdmissionService(
         var emailName = string.IsNullOrWhiteSpace(fullName) ? "Applicant" : fullName;
         var resultName = string.IsNullOrWhiteSpace(fullName) ? app.StudentEmail : fullName;
 
+        // Progressive cooldown logic
+        if (app.ReminderCount == 1 && app.LastReminderSentAt.HasValue && app.LastReminderSentAt.Value > DateTime.UtcNow.AddHours(-24))
+        {
+            return new ReminderSendResult(false, applicationId, "Next reminder available after 24 hours.", app.StudentEmail, resultName);
+        }
+        if (app.ReminderCount >= 2 && app.LastReminderSentAt.HasValue && app.LastReminderSentAt.Value > DateTime.UtcNow.AddDays(-7))
+        {
+            return new ReminderSendResult(false, applicationId, "Next reminder available after 1 week.", app.StudentEmail, resultName);
+        }
+
         try
         {
             await emailService.SendApplicationReminderEmailAsync(
@@ -2016,6 +2030,11 @@ public sealed class AdmissionService(
                 emailName,
                 app.ApplicationNumber ?? "Pending",
                 app.Status);
+                
+            app.LastReminderSentAt = DateTime.UtcNow;
+            app.ReminderCount++;
+            await dbContext.SaveChangesAsync(ct);
+            
             logger.LogInformation("[REMINDER] Reminder email sent to {Email} for application {ApplicationId}", app.StudentEmail, applicationId);
             return new ReminderSendResult(true, applicationId, null, app.StudentEmail, resultName);
         }

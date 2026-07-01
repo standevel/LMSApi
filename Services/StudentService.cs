@@ -170,6 +170,16 @@ public class StudentService(LmsDbContext context) : IStudentService
 
     public async Task<IEnumerable<StudentCourseResultDto>> GetStudentResultsAsync(Guid studentId, CancellationToken ct)
     {
+        var sysConfig = await context.SystemGradingConfigurations
+            .AsNoTracking()
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+            
+        var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+            ? new List<LMS.Api.Contracts.GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+              ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
         var courseOfferings = await context.CourseOfferings
             .Include(co => co.Course)
             .Include(co => co.AcademicSession)
@@ -187,7 +197,6 @@ public class StudentService(LmsDbContext context) : IStudentService
             // For simplicity, treat CA as a portion and exam as remaining
             // In a real system, CA categories and exam categories would be separate
             var maxCaMarks = 40m;
-            var maxExamMarks = 60m;
 
             var caScore = totalCA > (double)maxCaMarks ? maxCaMarks : (decimal)totalCA;
             var examScore = 0m; // Would need separate exam data
@@ -195,7 +204,7 @@ public class StudentService(LmsDbContext context) : IStudentService
             var totalMarks = caScore + examScore;
 
             // Compute grade and point
-            var (grade, point) = ComputeGrade(totalMarks);
+            var (grade, point) = ComputeGrade(totalMarks, mappings);
 
             results.Add(new StudentCourseResultDto
             {
@@ -296,13 +305,21 @@ public class StudentService(LmsDbContext context) : IStudentService
         });
     }
 
-    private static (string Grade, string Point) ComputeGrade(decimal totalMarks)
+    private static (string Grade, string Point) ComputeGrade(decimal totalMarks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null)
     {
-        if (totalMarks >= 70) return ("A", "5.00");
-        if (totalMarks >= 60) return ("B", "4.00");
-        if (totalMarks >= 50) return ("C", "3.00");
-        if (totalMarks >= 40) return ("D", "2.00");
-        if (totalMarks >= 30) return ("E", "1.00");
-        return ("F", "0.00");
+        if (mappings == null || !mappings.Any())
+        {
+            if (totalMarks >= 70) return ("A", "5.00");
+            if (totalMarks >= 60) return ("B", "4.00");
+            if (totalMarks >= 50) return ("C", "3.00");
+            if (totalMarks >= 40) return ("D", "2.00");
+            if (totalMarks >= 30) return ("E", "1.00");
+            return ("F", "0.00");
+        }
+        
+        var match = mappings.OrderByDescending(m => m.MinPercentage)
+            .FirstOrDefault(m => totalMarks >= m.MinPercentage);
+            
+        return (match?.LetterGrade ?? "F", match?.GradePoints.ToString("F2") ?? "0.00");
     }
 }

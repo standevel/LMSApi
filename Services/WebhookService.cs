@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ErrorOr;
@@ -111,11 +112,56 @@ public class WebhookService : BaseService, IWebhookService
             return Error.Validation("InvalidStatus", "Webhook subscription is not active.");
         }
 
-        // In a real implementation, we would send a test payload to the webhook URL
-        // For now, just simulate success
+        var payload = JsonSerializer.Serialize(new
+        {
+            eventType = "webhook.test",
+            subscriptionId = subscription.Id,
+            sentAtUtc = DateTime.UtcNow,
+            data = new
+            {
+                message = "This is a test webhook from LMS."
+            }
+        });
+
+        var client = _httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(Math.Clamp(subscription.TimeoutSeconds, 1, 60));
+
+        var log = new WebhookDeliveryLog
+        {
+            WebhookSubscriptionId = subscription.Id,
+            EventType = "webhook.test",
+            Payload = payload,
+            SentAtUtc = DateTime.UtcNow,
+            AttemptNumber = 1
+        };
+
+        try
+        {
+            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            content.Headers.Add("X-LMS-Webhook-Event", "webhook.test");
+            content.Headers.Add("X-LMS-Webhook-Subscription", subscription.Id.ToString());
+
+            var response = await client.PostAsync(subscription.Url, content, ct);
+            log.StatusCode = (int)response.StatusCode;
+            log.ResponseBody = await response.Content.ReadAsStringAsync(ct);
+            log.IsSuccess = response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            log.StatusCode = 0;
+            log.ErrorMessage = ex.Message;
+            log.IsSuccess = false;
+        }
+
+        _context.WebhookDeliveryLogs.Add(log);
+        subscription.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+
         await LogActionAsync("TestWebhookSubscription", "WebhookSubscription", id.ToString(),
             $"Webhook subscription tested: {id}", ct);
 
-        return Result.Deleted;
+        return log.IsSuccess
+            ? Result.Deleted
+            : Error.Failure("Webhook.TestFailed", log.ErrorMessage ?? $"Webhook returned HTTP {log.StatusCode}.");
     }
 }

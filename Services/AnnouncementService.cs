@@ -4,15 +4,16 @@ using LMS.Api.Common.Mapping;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
-using LMS.Api.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
+using LMS.Api.Hubs;
 
 namespace LMS.Api.Services;
 
 public sealed class AnnouncementService(
     LmsDbContext dbContext,
-    IUserRepository userRepository,
-    IAuditService auditService) : BaseService(auditService), IAnnouncementService
+    IAuditService auditService,
+    IHubContext<NotificationHub, INotificationClient> hubContext) : BaseService(auditService), IAnnouncementService
 {
     public async Task<ErrorOr<AnnouncementDto>> CreateAsync(CreateAnnouncementRequest request, CancellationToken ct = default)
     {
@@ -35,7 +36,15 @@ public sealed class AnnouncementService(
             .Include(a => a.Author)
             .FirstOrDefaultAsync(a => a.Id == announcement.Id, ct);
 
-        return createdAnnouncement!.ToDto();
+        var dto = createdAnnouncement!.ToDto();
+
+        try
+        {
+            await hubContext.Clients.All.ReceiveAnnouncement(dto);
+        }
+        catch { }
+
+        return dto;
     }
 
     public async Task<ErrorOr<AnnouncementDto>> GetByIdAsync(Guid id, CancellationToken ct = default)

@@ -101,11 +101,11 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
                     }
 
                     // Handle Student Role - Check if user has a Student record
-                    var isStudent = await dbContext.Students.AnyAsync(s =>
+                    var student = await dbContext.Students.FirstOrDefaultAsync(s =>
                         (!string.IsNullOrWhiteSpace(entraObjectId) && s.EntraObjectId == entraObjectId) ||
                         (!string.IsNullOrWhiteSpace(email) && (s.OfficialEmail == email || s.PersonalEmail == email)), cancellationToken: default);
 
-                    if (isStudent)
+                    if (student is not null)
                     {
                         Console.WriteLine($"[Auth-Diagnostic] User {email} identified as Student.");
                         var studentRole = await dbContext.Roles.FirstOrDefaultAsync(r => r.Name == LmsRoles.Student);
@@ -118,6 +118,32 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
                             {
                                 dbContext.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = studentRole.Id, AssignedUtc = now });
                                 Console.WriteLine($"[Auth-Diagnostic] Assigned Student role to user.");
+                            }
+                        }
+
+                        // Auto-provision ProgramEnrollment for the active academic session if it doesn't exist
+                        var activeSession = await dbContext.AcademicSessions.FirstOrDefaultAsync(s => s.IsActive);
+                        if (activeSession is not null && student.AcademicProgramId.HasValue && student.LevelId.HasValue)
+                        {
+                            var hasEnrollment = await dbContext.Enrollments.AnyAsync(e =>
+                                e.UserId == user.Id && e.AcademicSessionId == activeSession.Id);
+
+                            if (!hasEnrollment)
+                            {
+                                // Find curriculum for this program (or default to Guid.Empty)
+                                var curriculum = await dbContext.Curricula.FirstOrDefaultAsync(c => c.ProgramId == student.AcademicProgramId.Value);
+                                var curriculumId = curriculum?.Id ?? Guid.Empty;
+
+                                dbContext.Enrollments.Add(new ProgramEnrollment
+                                {
+                                    ProgramId = student.AcademicProgramId.Value,
+                                    LevelId = student.LevelId.Value,
+                                    UserId = user.Id,
+                                    AcademicSessionId = activeSession.Id,
+                                    CurriculumId = curriculumId,
+                                    EnrolledAtUtc = now
+                                });
+                                Console.WriteLine($"[Auth-Diagnostic] Auto-provisioned ProgramEnrollment for user {email} in active session {activeSession.Name}");
                             }
                         }
                     }
@@ -141,6 +167,21 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
                     // INJECT ROLES INTO ALL IDENTITIES
                     foreach (var identity in context.User.Identities.OfType<ClaimsIdentity>())
                     {
+                        // Add AppUser.Id as NameIdentifier for SignalR and other standard components
+                        if (!identity.HasClaim(c => c.Type == ClaimTypes.NameIdentifier))
+                        {
+                            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
+                        }
+                        else 
+                        {
+                            var existingClaim = identity.FindFirst(ClaimTypes.NameIdentifier);
+                            if (existingClaim != null && existingClaim.Value != user.Id.ToString())
+                            {
+                                identity.RemoveClaim(existingClaim);
+                                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
+                            }
+                        }
+
                         var roleClaimType = identity.RoleClaimType ?? "roles";
                         foreach (var roleName in roleNames)
                         {

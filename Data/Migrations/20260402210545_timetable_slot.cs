@@ -5,7 +5,7 @@
 namespace LMS.Api.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class timetable_slot : Migration
+    public partial class Timetable_slot : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

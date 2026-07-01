@@ -263,8 +263,8 @@ public class ScheduleService : BaseService, IScheduleService
             DesiredSlotDetails = desiredSlotDetails,
             Status = "Pending",
             RequestedDate = DateTime.UtcNow,
-            CreatedById = Guid.Empty, // In a real implementation, this would be the requesting user's ID
-            CreatedByUserId = Guid.Empty
+            CreatedById = studentId,
+            CreatedByUserId = studentId
         };
 
         _context.ScheduleAdjustmentRequests.Add(adjustmentRequest);

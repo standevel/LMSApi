@@ -31,7 +31,7 @@ public override void Configure()
             return;
         }
 
-        var studentId = Route<Guid?>("studentId");
+        var studentId = request.StudentId;
         if (!studentId.HasValue)
         {
             studentId = await _currentUserContext.GetUserIdAsync(ct);

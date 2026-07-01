@@ -63,7 +63,8 @@ public record CourseDetailResponse(
 public record AddCourseMaterialRequest(
     string Title,
     string? Description,
-    IFormFile File);
+    IFormFile? File,
+    string? LinkUrl);
 
 public record AddCourseMaterialResponse(
     Guid Id,

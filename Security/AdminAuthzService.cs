@@ -1,5 +1,7 @@
+using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Security;
 
@@ -10,11 +12,43 @@ public sealed class AdminAuthzService(
     IPermissionRepository permissionRepository,
     IUserPermissionRepository userPermissionRepository,
     IPermissionService permissionService,
-    ICurrentUserContext currentUserContext) : IAdminAuthzService
+    ICurrentUserContext currentUserContext,
+    LmsDbContext dbContext) : IAdminAuthzService
 {
     public async Task<ListManagedUsersResult> ListManagedUsersAsync(string? search, CancellationToken ct = default)
     {
         var users = await userRepository.ListForManagementAsync(search, ct);
+        var userEmails = users
+            .Select(x => x.Email)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x!.Trim())
+            .ToArray();
+        var userObjectIds = users
+            .Select(x => x.EntraObjectId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .ToArray();
+
+        var studentMarkers = await dbContext.Students
+            .AsNoTracking()
+            .Where(student =>
+                (student.EntraObjectId != null && userObjectIds.Contains(student.EntraObjectId)) ||
+                userEmails.Contains(student.OfficialEmail))
+            .Select(student => new
+            {
+                student.EntraObjectId,
+                student.OfficialEmail
+            })
+            .ToListAsync(ct);
+        var studentObjectIds = studentMarkers
+            .Where(x => !string.IsNullOrWhiteSpace(x.EntraObjectId))
+            .Select(x => x.EntraObjectId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var studentEmails = studentMarkers
+            .Where(x => !string.IsNullOrWhiteSpace(x.OfficialEmail))
+            .Select(x => x.OfficialEmail)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var payload = users
             .Select(user => new ManagedUserSummary(
                 user.Id,
@@ -28,10 +62,33 @@ public sealed class AdminAuthzService(
                 user.UserRoles
                     .Select(x => x.Role.Name)
                     .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                    .ToArray()))
+                    .ToArray(),
+                user.DepartmentId,
+                user.Department?.Name,
+                IsStudentUser(user, studentObjectIds, studentEmails),
+                IsLecturerUser(user)))
             .ToArray();
 
         return new ListManagedUsersResult(true, payload, StatusCode: StatusCodes.Status200OK);
+    }
+
+    private static bool IsStudentUser(
+        AppUser user,
+        ISet<string> studentObjectIds,
+        ISet<string> studentEmails)
+    {
+        var hasStudentRole = user.UserRoles.Any(role =>
+            role.Role.Name.Contains("student", StringComparison.OrdinalIgnoreCase));
+
+        return hasStudentRole ||
+            studentObjectIds.Contains(user.EntraObjectId) ||
+            (!string.IsNullOrWhiteSpace(user.Email) && studentEmails.Contains(user.Email));
+    }
+
+    private static bool IsLecturerUser(AppUser user)
+    {
+        return user.UserRoles.Any(role =>
+            string.Equals(role.Role.Name, LmsRoles.Lecturer, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<GetManagedUserResult> GetManagedUserAsync(string entraObjectId, CancellationToken ct = default)

@@ -38,7 +38,9 @@ public class ReportSchedulerService : BaseService, IReportSchedulerService
 
         try
         {
-            return JsonSerializer.Deserialize<T>(cacheEntry.CachedData);
+            return string.IsNullOrWhiteSpace(cacheEntry.CachedData)
+                ? default
+                : JsonSerializer.Deserialize<T>(cacheEntry.CachedData);
         }
         catch
         {

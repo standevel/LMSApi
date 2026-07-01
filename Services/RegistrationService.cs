@@ -226,9 +226,9 @@ public class RegistrationService : BaseService, IRegistrationService
         var query = _context.CourseSwapRequests
             .Include(r => r.Student)
             .Include(r => r.CourseOfferingToDrop)
-                .ThenInclude(co => co.Course)
+                .ThenInclude(co => co!.Course)
             .Include(r => r.CourseOfferingToAdd)
-                .ThenInclude(co => co.Course)
+                .ThenInclude(co => co!.Course)
             .Include(r => r.ProcessedBy)
             .AsQueryable();
 
@@ -539,7 +539,7 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         var maxCredits = await _context.LevelSemesterConfigs.AsNoTracking()
-            .Where(x => x.LevelId == programmeEnrollment.LevelId && x.Semester == offering.Semester && x.IsActive)
+            .Where(x => x.LevelId == programmeEnrollment!.LevelId && x.Semester == offering.Semester && x.IsActive)
             .Select(x => (int?)x.MaxCreditLoad).FirstOrDefaultAsync(ct) ?? 24;
 
         var enrolledOfferings = await _context.CourseEnrollments.AsNoTracking()
@@ -555,7 +555,7 @@ public class RegistrationService : BaseService, IRegistrationService
             blockers.Add(new("Registration.CreditLimitExceeded", $"Adding this course would exceed the {maxCredits}-credit limit."));
 
         // If the offering is at the student's current level, verify all carryovers are registered
-        if (offering.LevelId == programmeEnrollment.LevelId)
+        if (offering.LevelId == programmeEnrollment!.LevelId)
         {
             var carryoverOfferings = await _context.CourseOfferings.AsNoTracking()
                 .Where(x => x.AcademicSessionId == offering.AcademicSessionId &&

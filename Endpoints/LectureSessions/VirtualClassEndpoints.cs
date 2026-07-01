@@ -31,7 +31,7 @@ public class CreateVirtualClassEndpoint(
     public override async Task HandleAsync(CancellationToken ct)
     {
         var sessionId = Route<Guid>("id");
-        var currentUserId = HttpContext.Items["CurrentUserId"] as Guid?;
+        var currentUserId = await currentUserContext.GetUserIdAsync(ct);
 
         if (!currentUserId.HasValue)
         {
@@ -185,7 +185,7 @@ public class UpdateVirtualClassEndpoint(
     public override async Task HandleAsync(CancellationToken ct)
     {
         var sessionId = Route<Guid>("id");
-        var currentUserId = HttpContext.Items["CurrentUserId"] as Guid?;
+        var currentUserId = await currentUserContext.GetUserIdAsync(ct);
 
         if (!currentUserId.HasValue)
         {
@@ -305,7 +305,7 @@ public class DeleteVirtualClassEndpoint(
     public override async Task HandleAsync(CancellationToken ct)
     {
         var sessionId = Route<Guid>("id");
-        var currentUserId = HttpContext.Items["CurrentUserId"] as Guid?;
+        var currentUserId = await currentUserContext.GetUserIdAsync(ct);
 
         if (!currentUserId.HasValue)
         {

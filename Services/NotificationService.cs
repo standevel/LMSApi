@@ -5,13 +5,17 @@ using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.SignalR;
+using LMS.Api.Hubs;
 
 namespace LMS.Api.Services;
 
 public sealed class NotificationService(
     LmsDbContext dbContext,
     IAuditService auditService,
-    IPushNotificationService pushNotificationService) : BaseService(auditService), INotificationService
+    IServiceScopeFactory scopeFactory,
+    IHubContext<NotificationHub, INotificationClient> hubContext) : BaseService(auditService), INotificationService
 {
     public async Task<ErrorOr<NotificationDto>> CreateAsync(CreateNotificationRequest request, CancellationToken ct = default)
     {
@@ -32,11 +36,20 @@ public sealed class NotificationService(
 
         await LogActionAsync("Create", "Notification", notification.Id.ToString(), $"Created notification: {notification.Title}", ct);
 
+        try
+        {
+            var dto = notification.ToDto();
+            await hubContext.Clients.User(request.RecipientId.ToString()).ReceiveNotification(dto);
+        }
+        catch { }
+
         // Fire-and-forget push notification to user's registered browser endpoints
         _ = Task.Run(async () =>
         {
             try
             {
+                using var scope = scopeFactory.CreateScope();
+                var pushNotificationService = scope.ServiceProvider.GetRequiredService<IPushNotificationService>();
                 await pushNotificationService.SendNotificationAsync(
                     notification.RecipientId,
                     notification.Title,

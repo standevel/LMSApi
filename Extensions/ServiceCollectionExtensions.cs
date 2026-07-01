@@ -8,6 +8,7 @@ using LMS.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -16,6 +17,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Reflection;
 using System.Text;
 
@@ -38,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddEndpointsApiExplorer();
         services.AddOpenApi();
         services.AddHttpContextAccessor();
+        services.AddSignalR();
         services.AddControllers()
             .AddNewtonsoftJson(o => o.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore)
             .AddJsonOptions(options =>
@@ -97,6 +100,31 @@ public static class ServiceCollectionExtensions
     {
         JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.ForwardLimit = configuration.GetValue<int?>("ForwardedHeaders:ForwardLimit") ?? 1;
+
+            foreach (var proxy in configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? Array.Empty<string>())
+            {
+                if (IPAddress.TryParse(proxy, out var proxyAddress))
+                {
+                    options.KnownProxies.Add(proxyAddress);
+                }
+            }
+
+            foreach (var network in configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>())
+            {
+                var parts = network.Split('/', 2, StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 &&
+                    IPAddress.TryParse(parts[0], out var prefix) &&
+                    int.TryParse(parts[1], out var prefixLength))
+                {
+                    options.KnownIPNetworks.Add(new System.Net.IPNetwork(prefix, prefixLength));
+                }
+            }
+        });
+
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
         services.AddCors(options =>
         {
@@ -108,7 +136,10 @@ public static class ServiceCollectionExtensions
                     return;
                 }
 
-                policyBuilder.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+                policyBuilder.WithOrigins(allowedOrigins)
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
             });
         });
 
@@ -136,6 +167,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IGradebookService, GradebookService>();
+        services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IAnnouncementService, AnnouncementService>();
         services.AddScoped<IBulkOperationService, BulkOperationService>();
         services.AddScoped<IDiscussionService, DiscussionService>();
@@ -143,6 +175,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IParentPortalService, ParentPortalService>();
+        services.AddScoped<IGuardianProvisioningService, GuardianProvisioningService>();
         services.AddScoped<IPrerequisiteValidationService, PrerequisiteValidationService>();
         services.AddScoped<IProctoringService, ProctoringService>();
         services.AddScoped<IQuestionBankService, QuestionBankService>();
@@ -197,6 +230,9 @@ public static class ServiceCollectionExtensions
 
         // Student Management
         services.AddScoped<IStudentService, StudentService>();
+
+        // Background Services
+        services.AddHostedService<NotificationBackgroundService>();
 
         // Course Catalog Import — must be Singleton so in-memory preview dictionary survives across requests
         services.AddSingleton<ICourseCatalogImportService, CourseCatalogImportService>();

@@ -50,7 +50,8 @@ public sealed class DepartmentService(
         {
             Name = request.Name,
             Code = request.Code,
-            FacultyId = request.FacultyId
+            FacultyId = request.FacultyId,
+            HeadId = request.HeadId
         };
 
         await departmentRepository.AddAsync(department, ct);
@@ -72,6 +73,7 @@ public sealed class DepartmentService(
         department.Name = request.Name;
         department.Code = request.Code;
         department.FacultyId = request.FacultyId;
+        department.HeadId = request.HeadId;
         department.UpdatedDate = DateOnly.FromDateTime(DateTime.Now);
 
         await departmentRepository.UpdateAsync(department, ct);

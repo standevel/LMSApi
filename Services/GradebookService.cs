@@ -13,11 +13,13 @@ public sealed class GradebookService : IGradebookService
 {
     private readonly LmsDbContext _dbContext;
     private readonly IAuditService _auditService;
+    private readonly INotificationService _notificationService;
 
-    public GradebookService(LmsDbContext dbContext, IAuditService auditService)
+    public GradebookService(LmsDbContext dbContext, IAuditService auditService, INotificationService notificationService)
     {
         _dbContext = dbContext;
         _auditService = auditService;
+        _notificationService = notificationService;
     }
 
     #region System Configuration
@@ -25,15 +27,14 @@ public sealed class GradebookService : IGradebookService
     public async Task<ErrorOr<SystemGradingConfigurationDto>> GetSystemConfigurationAsync(CancellationToken ct = default)
     {
         var config = await _dbContext.SystemGradingConfigurations
+            .AsNoTracking()
             .OrderByDescending(x => x.UpdatedAt)
             .FirstOrDefaultAsync(ct);
 
         if (config == null)
         {
-            // Create default configuration
-            config = new SystemGradingConfiguration();
-            _dbContext.SystemGradingConfigurations.Add(config);
-            await _dbContext.SaveChangesAsync(ct);
+            var defaultConfig = new SystemGradingConfiguration();
+            return MapToSystemConfigurationDto(defaultConfig);
         }
 
         return MapToSystemConfigurationDto(config);
@@ -54,8 +55,9 @@ public sealed class GradebookService : IGradebookService
             _dbContext.SystemGradingConfigurations.Add(config);
         }
 
-        if (request.DefaultGradingStyle.HasValue)
-            config.DefaultGradingStyle = request.DefaultGradingStyle.Value;
+        if (!string.IsNullOrWhiteSpace(request.DefaultGradingStyle) &&
+            Enum.TryParse<GradingStyle>(request.DefaultGradingStyle, ignoreCase: true, out var parsedStyle))
+            config.DefaultGradingStyle = parsedStyle;
 
         if (request.DefaultExamPercentage.HasValue)
             config.DefaultExamPercentage = request.DefaultExamPercentage.Value;
@@ -74,6 +76,14 @@ public sealed class GradebookService : IGradebookService
 
         if (request.DefaultExamWeight.HasValue)
             config.DefaultExamWeight = request.DefaultExamWeight.Value;
+
+        if (request.GpaScale.HasValue)
+            config.GpaScale = request.GpaScale.Value;
+            
+        if (request.LetterGradesMapping != null)
+        {
+            config.LetterGradesMappingJson = System.Text.Json.JsonSerializer.Serialize(request.LetterGradesMapping);
+        }
 
         // Validate that category weights sum to 100%
         var totalWeight = config.DefaultCA1Weight + config.DefaultCA2Weight + config.DefaultCA3Weight + config.DefaultExamWeight;
@@ -202,6 +212,14 @@ public sealed class GradebookService : IGradebookService
         if (assessment == null)
             return Error.NotFound("Assessment.NotFound", "Assessment not found");
 
+        if (request.AssessmentCategoryId.HasValue)
+        {
+            var category = await _dbContext.AssessmentCategories.FindAsync(request.AssessmentCategoryId.Value);
+            if (category == null)
+                return Error.NotFound("Category.NotFound", "Assessment category not found");
+            assessment.AssessmentCategoryId = request.AssessmentCategoryId.Value;
+        }
+
         if (request.Title != null)
             assessment.Title = request.Title;
         if (request.Description != null)
@@ -267,10 +285,27 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
-        var students = await _dbContext.CourseEnrollments
+        var enrollments = await _dbContext.CourseEnrollments
+            .AsNoTracking()
             .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
-            .Include(e => e.Student)
+            .Select(e => new { e.StudentId, e.Student.DisplayName, e.Student.Email })
             .ToListAsync(ct);
+
+        var studentIds = enrollments.Select(e => e.StudentId).ToList();
+
+        var studentEntities = await _dbContext.Students
+            .AsNoTracking()
+            .Where(s => studentIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.StudentNumber })
+            .ToListAsync(ct);
+
+        var students = enrollments.Select(e => new
+        {
+            e.StudentId,
+            StudentName = e.DisplayName ?? "Unknown",
+            StudentEmail = e.Email ?? "",
+            MatricNumber = studentEntities.FirstOrDefault(s => s.Id == e.StudentId)?.StudentNumber ?? "N/A"
+        }).ToList();
 
         // Get all assessment categories with assessments and grades
         var categories = await _dbContext.AssessmentCategories
@@ -287,12 +322,12 @@ public sealed class GradebookService : IGradebookService
 
         foreach (var student in students)
         {
-            var ca1Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA1);
-            var ca2Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA2);
-            var ca3Score = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.CA3);
-            var examScore = CalculateCategoryScore(assessments, categories, student.Student.Id, AssessmentCategoryType.Exam);
+            var ca1Score = CalculateCategoryScore(assessments, categories, student.StudentId, AssessmentCategoryType.CA1);
+            var ca2Score = CalculateCategoryScore(assessments, categories, student.StudentId, AssessmentCategoryType.CA2);
+            var ca3Score = CalculateCategoryScore(assessments, categories, student.StudentId, AssessmentCategoryType.CA3);
+            var examScore = CalculateCategoryScore(assessments, categories, student.StudentId, AssessmentCategoryType.Exam);
 
-            var totalScore = sysConfig.Value.DefaultGradingStyle == GradingStyle.Weighted
+            var totalScore = sysConfig.Value.DefaultGradingStyle == nameof(GradingStyle.Weighted)
                 ? (ca1Score * sysConfig.Value.DefaultCA1Weight / 100m) +
                   (ca2Score * sysConfig.Value.DefaultCA2Weight / 100m) +
                   (ca3Score * sysConfig.Value.DefaultCA3Weight / 100m) +
@@ -300,19 +335,103 @@ public sealed class GradebookService : IGradebookService
                 : CalculateUnweightedAverage(ca1Score, ca2Score, ca3Score, examScore);
 
             result.Add(new StudentGradeSummaryDto(
-                student.Student.Id,
-                student.Student.DisplayName ?? "Unknown",
-                student.Student.Email ?? "",
+                student.StudentId,
+                student.MatricNumber,
+                student.StudentName,
+                student.StudentEmail,
                 ca1Score,
                 ca2Score,
                 ca3Score,
                 examScore,
                 Math.Round(totalScore, 2),
-                CalculateLetterGrade(totalScore),
+                CalculateLetterGrade(totalScore, sysConfig.Value.LetterGradesMapping),
                 null));
         }
 
         return result.OrderByDescending(x => x.TotalScore).ToList();
+    }
+
+    public async Task<ErrorOr<int>> UpdateStudentGradeSummariesAsync(
+        Guid courseOfferingId,
+        UpdateStudentGradeSummaryRequest request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var isPublished = await _dbContext.GradePublications
+            .AnyAsync(x => x.CourseOfferingId == courseOfferingId && x.IsVisibleToStudents, ct);
+
+        if (isPublished)
+            return Error.Forbidden("Grade.Published", "Cannot update grades after publication");
+
+        var categories = await _dbContext.AssessmentCategories
+            .Where(x => x.CourseOfferingId == courseOfferingId)
+            .OrderBy(x => x.DisplayOrder)
+            .ToListAsync(ct);
+
+        var assessments = await _dbContext.Assessments
+            .Where(x => x.CourseOfferingId == courseOfferingId)
+            .ToListAsync(ct);
+
+        int successCount = 0;
+
+        foreach (var studentGrade in request.Grades)
+        {
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA1Score, AssessmentCategoryType.CA1);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA2Score, AssessmentCategoryType.CA2);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA3Score, AssessmentCategoryType.CA3);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.ExamScore, AssessmentCategoryType.Exam);
+        }
+
+        await _dbContext.SaveChangesAsync(ct);
+        return successCount;
+
+        async Task UpdateOrAddGradeForCategory(Guid studentId, decimal? score, AssessmentCategoryType categoryType)
+        {
+            if (!score.HasValue) return;
+
+            var category = categories.FirstOrDefault(c => c.CategoryType == categoryType);
+            if (category == null) return;
+
+            var assessment = assessments.FirstOrDefault(a => a.AssessmentCategoryId == category.Id);
+
+            if (assessment == null)
+            {
+                assessment = new Assessment
+                {
+                    CourseOfferingId = courseOfferingId,
+                    AssessmentCategoryId = category.Id,
+                    Title = $"{category.CategoryName} Assessment",
+                    MaxMarks = category.MaxMarks
+                };
+                _dbContext.Assessments.Add(assessment);
+                await _dbContext.SaveChangesAsync(ct);
+                assessments.Add(assessment);
+            }
+
+            var grade = await _dbContext.Grades
+                .FirstOrDefaultAsync(g => g.AssessmentId == assessment.Id && g.StudentId == studentId, ct);
+
+            if (grade == null)
+            {
+                grade = new Grade
+                {
+                    AssessmentId = assessment.Id,
+                    StudentId = studentId,
+                    MarksObtained = score.Value,
+                    CreatedById = userId,
+                    UpdatedById = userId
+                };
+                _dbContext.Grades.Add(grade);
+                successCount++;
+            }
+            else if (!grade.IsLocked)
+            {
+                grade.MarksObtained = score.Value;
+                grade.UpdatedById = userId;
+                grade.UpdatedAt = DateTime.UtcNow;
+                successCount++;
+            }
+        }
     }
 
     public async Task<ErrorOr<GradeDto>> EnterGradeAsync(
@@ -619,10 +738,8 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
-        var categories = await _dbContext.AssessmentCategories
-            .Where(x => x.CourseOfferingId == courseOfferingId)
-            .OrderBy(x => x.DisplayOrder)
-            .ToListAsync(ct);
+        var categories = await EnsureAssessmentCategoriesAsync(courseOfferingId, ct);
+        categories = categories.OrderBy(x => x.DisplayOrder).ToList();
 
         var assessments = await _dbContext.Assessments
             .Where(x => x.CourseOfferingId == courseOfferingId)
@@ -646,7 +763,14 @@ public sealed class GradebookService : IGradebookService
             .ToListAsync(ct);
 
         // Check if user has access
-        if (userId.HasValue && offering.LecturerId != userId.Value)
+        var userIdStr = userId?.ToString() ?? string.Empty;
+        var isLecturer = userId.HasValue && (offering.LecturerId == userId.Value ||
+                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
+                             slot.CourseOfferingId == offering.Id && 
+                             (slot.LecturerId == userId.Value || 
+                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct));
+
+        if (userId.HasValue && !isLecturer)
         {
             // Check if user has admin/approval role
             var userRoles = await _dbContext.UserRoles
@@ -675,6 +799,32 @@ public sealed class GradebookService : IGradebookService
             approvals.Select(MapToApprovalDto).ToList());
     }
 
+    public async Task<ErrorOr<List<GradeDistributionDto>>> GetGradeDistributionAsync(Guid courseOfferingId, CancellationToken ct = default)
+    {
+        var summariesResult = await GetStudentGradeSummariesAsync(courseOfferingId, ct);
+        if (summariesResult.IsError)
+            return summariesResult.Errors;
+
+        var summaries = summariesResult.Value;
+
+        var distribution = summaries
+            .GroupBy(s => s.LetterGrade)
+            .Select(g => new GradeDistributionDto(g.Key, g.Count()))
+            .ToList();
+
+        // Ensure standard grades are present even if count is 0
+        var standardGrades = new[] { "A", "B", "C", "D", "E", "F" };
+        foreach (var grade in standardGrades)
+        {
+            if (!distribution.Any(d => d.LetterGrade == grade))
+            {
+                distribution.Add(new GradeDistributionDto(grade, 0));
+            }
+        }
+
+        return distribution.OrderBy(d => d.LetterGrade).ToList();
+    }
+
     #endregion
 
     #region Approval Workflow
@@ -701,7 +851,14 @@ public sealed class GradebookService : IGradebookService
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
         // Verify user is the lecturer
-        if (offering.LecturerId != userId)
+        var userIdStr = userId.ToString();
+        var isLecturer = offering.LecturerId == userId ||
+                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
+                             slot.CourseOfferingId == offering.Id && 
+                             (slot.LecturerId == userId || 
+                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
+
+        if (!isLecturer)
             return Error.Forbidden("Access.Denied", "Only the assigned lecturer can submit for approval");
 
         // Check if already published
@@ -780,7 +937,7 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
-        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, ct);
+        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, request.Level, ct);
         if (authResult.IsError)
             return authResult.FirstError;
 
@@ -828,7 +985,7 @@ public sealed class GradebookService : IGradebookService
         if (offering == null)
             return Error.NotFound("Course.NotFound", "Course offering not found");
 
-        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, ct);
+        var authResult = await ValidateApprovalAuthorityAsync(offering, userId, request.Level, ct);
         if (authResult.IsError)
             return authResult.FirstError;
 
@@ -856,17 +1013,48 @@ public sealed class GradebookService : IGradebookService
     /// Validates that the user has authority to approve/reject grades for the given course offering.
     /// Allowed if user has an admin role OR is the assigned lecturer for the offering.
     /// </summary>
-    private async Task<ErrorOr<Success>> ValidateApprovalAuthorityAsync(CourseOffering offering, Guid userId, CancellationToken ct)
+    private async Task<ErrorOr<Success>> ValidateApprovalAuthorityAsync(CourseOffering offering, Guid userId, ApprovalLevel? requestedLevel, CancellationToken ct)
     {
         var userRoles = await _dbContext.UserRoles
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.Role.Name)
             .ToListAsync(ct);
 
-        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
-        var isLecturer = offering.LecturerId == userId;
+        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
+        if (isAdmin) return Result.Success;
 
-        if (!isAdmin && !isLecturer)
+        if (requestedLevel == ApprovalLevel.Department)
+        {
+            var program = await _dbContext.Programs
+                .Include(p => p.Department)
+                .FirstOrDefaultAsync(p => p.Id == offering.ProgramId, ct);
+            
+            if (program?.Department?.HeadId != userId)
+                return Error.Forbidden("Approval.AccessDenied", "You are not the Head of Department for this course.");
+            
+            return Result.Success;
+        }
+        else if (requestedLevel == ApprovalLevel.College)
+        {
+            var program = await _dbContext.Programs
+                .Include(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
+                .FirstOrDefaultAsync(p => p.Id == offering.ProgramId, ct);
+                
+            if (program?.Department?.Faculty?.DeanId != userId)
+                return Error.Forbidden("Approval.AccessDenied", "You are not the Dean of the Faculty for this course.");
+            
+            return Result.Success;
+        }
+
+        var userIdStr = userId.ToString();
+        var isLecturer = offering.LecturerId == userId ||
+                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
+                             slot.CourseOfferingId == offering.Id && 
+                             (slot.LecturerId == userId || 
+                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
+
+        if (!isLecturer)
             return Error.Forbidden("Approval.AccessDenied", "You are not authorized to approve or reject grades for this course");
 
         return Result.Success;
@@ -883,7 +1071,16 @@ public sealed class GradebookService : IGradebookService
             .FirstOrDefaultAsync(x => x.CourseOfferingId == courseOfferingId, ct);
 
         if (publication == null)
-            return Error.NotFound("Publication.NotFound", "Grades not yet published");
+        {
+            return new GradePublicationDto(
+                Guid.Empty,
+                DateTime.MinValue,
+                Guid.Empty,
+                "Not Published",
+                false,
+                false,
+                "Grades not yet published");
+        }
 
         return MapToPublicationDto(publication);
     }
@@ -962,6 +1159,25 @@ public sealed class GradebookService : IGradebookService
         await _auditService.LogAsync("PublishGrades", "GradePublication",
             publication.Id.ToString(), "Published grades", ct);
 
+        // Notify students
+        var enrolledStudents = await _dbContext.CourseEnrollments
+            .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
+            .Select(e => e.StudentId)
+            .ToListAsync(ct);
+
+        var courseCode = offering?.Course?.Code ?? "your course";
+        foreach (var studentId in enrolledStudents)
+        {
+            await _notificationService.CreateAsync(new CreateNotificationRequest(
+                studentId,
+                userId,
+                "Grades Published",
+                $"Grades for {courseCode} have been published.",
+                "System",
+                $"/courses/{courseOfferingId}/grades"
+            ), ct);
+        }
+
         return MapToPublicationDto(publication);
     }
 
@@ -994,7 +1210,12 @@ public sealed class GradebookService : IGradebookService
             .ToListAsync(ct);
 
         var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
-        var isLecturer = offering.LecturerId == userId;
+        var userIdStr = userId.ToString();
+        var isLecturer = offering.LecturerId == userId ||
+                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
+                             slot.CourseOfferingId == offering.Id && 
+                             (slot.LecturerId == userId || 
+                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
 
         if (!isAdmin && !isLecturer)
             return Error.Forbidden("GradeManagement.AccessDenied", "You are not authorized to manage grades for this course");
@@ -1066,7 +1287,14 @@ public sealed class GradebookService : IGradebookService
             .AsQueryable();
 
         if (!isAdmin)
-            query = query.Where(x => x.LecturerId == userId);
+        {
+            var userIdStr = userId.ToString();
+            query = query.Where(x => x.LecturerId == userId ||
+                                     _dbContext.LectureTimetableSlots.Any(slot => 
+                                         slot.CourseOfferingId == x.Id && 
+                                         (slot.LecturerId == userId || 
+                                          (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr)))));
+        }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -1159,13 +1387,13 @@ public sealed class GradebookService : IGradebookService
                 assessment.AssessmentCategory.Weight,
                 Math.Round(weightedScore, 2)));
 
-            if (sysConfig.Value.DefaultGradingStyle == GradingStyle.Weighted)
+            if (sysConfig.Value.DefaultGradingStyle == nameof(GradingStyle.Weighted))
             {
                 totalScore += weightedScore;
             }
         }
 
-        if (sysConfig.Value.DefaultGradingStyle == GradingStyle.Unweighted && assessmentGrades.Any())
+        if (sysConfig.Value.DefaultGradingStyle == nameof(GradingStyle.Unweighted) && assessmentGrades.Any())
         {
             totalScore = (decimal)assessmentGrades.Average(x => x.MarksObtained / x.MaxMarks * 100);
         }
@@ -1178,7 +1406,7 @@ public sealed class GradebookService : IGradebookService
             (int)offering.Semester,
             assessmentGrades,
             Math.Round(totalScore, 2),
-            CalculateLetterGrade(totalScore),
+            CalculateLetterGrade(totalScore, sysConfig.Value.LetterGradesMapping),
             null,
             true);
     }
@@ -1210,15 +1438,21 @@ public sealed class GradebookService : IGradebookService
 
     private static SystemGradingConfigurationDto MapToSystemConfigurationDto(SystemGradingConfiguration config)
     {
+        var mapping = string.IsNullOrEmpty(config.LetterGradesMappingJson) || config.LetterGradesMappingJson == "[]"
+            ? new List<GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(config.LetterGradesMappingJson) ?? new List<GradeMappingDto>();
+
         return new SystemGradingConfigurationDto(
             config.Id,
-            config.DefaultGradingStyle,
+            config.DefaultGradingStyle.ToString(),
             config.DefaultExamPercentage,
             config.ApprovalWorkflowEnabled,
             config.DefaultCA1Weight,
             config.DefaultCA2Weight,
             config.DefaultCA3Weight,
             config.DefaultExamWeight,
+            config.GpaScale,
+            mapping,
             config.UpdatedAt);
     }
 
@@ -1318,17 +1552,25 @@ public sealed class GradebookService : IGradebookService
         return (decimal)(scores.Any() ? scores.Average() : 0);
     }
 
-    private string CalculateLetterGrade(decimal percentage)
+    private string CalculateLetterGrade(decimal percentage, List<GradeMappingDto>? mappings = null)
     {
-        return percentage switch
+        if (mappings == null || !mappings.Any())
         {
-            >= 70 => "A",
-            >= 60 => "B",
-            >= 50 => "C",
-            >= 45 => "D",
-            >= 40 => "E",
-            _ => "F"
-        };
+            return percentage switch
+            {
+                >= 70 => "A",
+                >= 60 => "B",
+                >= 50 => "C",
+                >= 45 => "D",
+                >= 40 => "E",
+                _ => "F"
+            };
+        }
+
+        var match = mappings.OrderByDescending(m => m.MinPercentage)
+            .FirstOrDefault(m => percentage >= m.MinPercentage);
+            
+        return match?.LetterGrade ?? "F";
     }
 
     private async Task<GradeApprovalDto?> GetNextPendingApprovalAsync(Guid courseOfferingId, CancellationToken ct)
@@ -1547,7 +1789,13 @@ public sealed class GradebookService : IGradebookService
 
     private IXLRow? FindHeaderRow(IXLWorksheet worksheet)
     {
-        for (int rowNum = 1; rowNum <= Math.Min(5, worksheet.LastRowUsed().RowNumber()); rowNum++)
+        var lastRow = worksheet.LastRowUsed();
+        if (lastRow == null)
+        {
+            return null;
+        }
+
+        for (int rowNum = 1; rowNum <= Math.Min(5, lastRow.RowNumber()); rowNum++)
         {
             var row = worksheet.Row(rowNum);
             var cells = row.CellsUsed().Select(c => c.GetString().ToLowerInvariant().Trim()).ToList();

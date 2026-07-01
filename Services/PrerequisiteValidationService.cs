@@ -15,6 +15,7 @@ namespace LMS.Api.Services;
 public class PrerequisiteValidationService : BaseService, IPrerequisiteValidationService
 {
     private readonly LmsDbContext _context;
+    private const decimal PassingPercent = 40m;
 
     public PrerequisiteValidationService(LmsDbContext context, IAuditService auditService) : base(auditService)
     {
@@ -37,7 +38,8 @@ public class PrerequisiteValidationService : BaseService, IPrerequisiteValidatio
         }
 
         var prerequisites = await _context.CoursePrerequisites
-            .Where(c => c.CourseId == courseOffering.CourseId)
+            .AsNoTracking()
+            .Where(c => c.CourseId == courseOffering.CourseId && c.Type == Data.Enums.PrerequisiteType.HardPrerequisite)
             .ToListAsync(ct);
 
         if (!prerequisites.Any())
@@ -45,9 +47,21 @@ public class PrerequisiteValidationService : BaseService, IPrerequisiteValidatio
             return true; // No prerequisites required
         }
 
-        // In a real implementation, we would check if the student has passed all prerequisite courses
-        // For now, we'll return true as a placeholder
-        return true;
+        var approvedOverride = await _context.PrerequisiteOverrides
+            .AnyAsync(o =>
+                o.StudentId == studentId &&
+                o.CourseOfferingId == courseOfferingId &&
+                o.Status == "Approved", ct);
+
+        if (approvedOverride)
+        {
+            return true;
+        }
+
+        var prerequisiteCourseIds = prerequisites.Select(p => p.PrerequisiteCourseId).Distinct().ToList();
+        var passedCourseIds = await GetPassedCourseIdsAsync(studentId, prerequisiteCourseIds, ct);
+
+        return prerequisiteCourseIds.All(passedCourseIds.Contains);
     }
 
     public async Task<ErrorOr<Deleted>> ProcessOverrideRequestAsync(Guid requestId, bool approvalGranted, string adminNotes, CancellationToken ct = default)
@@ -107,8 +121,8 @@ public class PrerequisiteValidationService : BaseService, IPrerequisiteValidatio
             Reason = reason,
             Status = "Pending",
             RequestedAtUtc = DateTime.UtcNow,
-            CreatedById = Guid.Empty, // In a real implementation, this would be the requesting user's ID
-            CreatedByUserId = Guid.Empty
+            CreatedById = studentId,
+            CreatedByUserId = studentId
         };
 
         _context.PrerequisiteOverrides.Add(overrideRequest);
@@ -131,5 +145,37 @@ public class PrerequisiteValidationService : BaseService, IPrerequisiteValidatio
             overrideRequest.ApprovedAtUtc,
             approvedByName,
             overrideRequest.RejectionReason);
+    }
+
+    private async Task<HashSet<Guid>> GetPassedCourseIdsAsync(Guid studentId, IReadOnlyCollection<Guid> courseIds, CancellationToken ct)
+    {
+        if (courseIds.Count == 0)
+        {
+            return [];
+        }
+
+        var gradeRows = await _context.Grades
+            .AsNoTracking()
+            .Where(g =>
+                g.StudentId == studentId &&
+                courseIds.Contains(g.Assessment.CourseOffering.CourseId) &&
+                _context.GradePublications.Any(p =>
+                    p.CourseOfferingId == g.Assessment.CourseOfferingId &&
+                    p.IsVisibleToStudents))
+            .Select(g => new
+            {
+                g.Assessment.CourseOffering.CourseId,
+                g.Assessment.CourseOfferingId,
+                g.MarksObtained,
+                g.Assessment.MaxMarks
+            })
+            .ToListAsync(ct);
+
+        return gradeRows
+            .GroupBy(g => new { g.CourseId, g.CourseOfferingId })
+            .Where(g => g.Sum(x => x.MaxMarks) > 0 &&
+                        g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= PassingPercent)
+            .Select(g => g.Key.CourseId)
+            .ToHashSet();
     }
 }

@@ -83,7 +83,7 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             // New fields
             ApplicantType = applicantType,
             DateOfBirth = req.DateOfBirth,
-            EmergencyContactEmail = req.EmergencyContactEmail,
+            EmergencyContactEmail = req.EmergencyContactEmail ?? string.Empty,
             PreviousInstitutionName = req.PreviousInstitutionName,
             PreviousInstitutionCountry = req.PreviousInstitutionCountry,
             PreviousCGPA = req.PreviousCGPA,

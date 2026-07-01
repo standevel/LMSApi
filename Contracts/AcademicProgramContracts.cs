@@ -8,21 +8,29 @@ public record FacultyDto(
     Guid Id,
     string Name,
     string Label,
+    Guid? DeanId,
+    string? DeanName,
     DateOnly CreatedDate,
     DateOnly UpdatedDate);
 
 public record CreateFacultyRequest(
     string Name,
-    string Label);
+    string Label,
+    Guid? DeanId = null);
 
 public record UpdateFacultyRequest(
     string Name,
-    string Label);
+    string Label,
+    Guid? DeanId = null);
 
 public record DepartmentDto(
     Guid Id,
     string Name,
     string Code,
+    Guid FacultyId,
+    string FacultyName,
+    Guid? HeadId,
+    string? HeadName,
     FacultyDto Faculty,
     DateOnly CreatedDate,
     DateOnly UpdatedDate);
@@ -30,12 +38,14 @@ public record DepartmentDto(
 public record CreateDepartmentRequest(
     string Name,
     string Code,
-    Guid FacultyId);
+    Guid FacultyId,
+    Guid? HeadId = null);
 
 public record UpdateDepartmentRequest(
     string Name,
     string Code,
-    Guid FacultyId);
+    Guid FacultyId,
+    Guid? HeadId = null);
 
 public record AcademicProgramDto(
     Guid Id,

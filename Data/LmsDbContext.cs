@@ -67,6 +67,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
      // Gradebook Management
      public DbSet<SystemGradingConfiguration> SystemGradingConfigurations => Set<SystemGradingConfiguration>();
      public DbSet<SystemRegistrationConfiguration> SystemRegistrationConfigurations => Set<SystemRegistrationConfiguration>();
+     public DbSet<SystemParentPortalConfiguration> SystemParentPortalConfigurations => Set<SystemParentPortalConfiguration>();
      public DbSet<AssessmentCategory> AssessmentCategories => Set<AssessmentCategory>();
      public DbSet<Assessment> Assessments => Set<Assessment>();
      public DbSet<Grade> Grades => Set<Grade>();
@@ -98,6 +99,18 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
       public DbSet<QuizAnswer> QuizAnswers => Set<QuizAnswer>();
       public DbSet<QuestionBank> QuestionBanks => Set<QuestionBank>();
       public DbSet<ExamProctoringSession> ExamProctoringSessions => Set<ExamProctoringSession>();
+      public DbSet<ProctoringViolation> ProctoringViolations => Set<ProctoringViolation>();
+      
+      // Phase 1+2: Enhanced quiz management entities
+      public DbSet<QuizSetting> QuizSettings => Set<QuizSetting>();
+      public DbSet<QuestionBankItem> QuestionBankItems => Set<QuestionBankItem>();
+      public DbSet<QuestionBankOption> QuestionBankOptions => Set<QuestionBankOption>();
+      public DbSet<QuizTimeExtension> QuizTimeExtensions => Set<QuizTimeExtension>();
+      public DbSet<QuizFeedback> QuizFeedbacks => Set<QuizFeedback>();
+      public DbSet<CbtHall> CbtHalls => Set<CbtHall>();
+      public DbSet<Assignment> Assignments => Set<Assignment>();
+      public DbSet<AssignmentSubmission> AssignmentSubmissions => Set<AssignmentSubmission>();
+      public DbSet<SubmissionGrade> SubmissionGrades => Set<SubmissionGrade>();
 
      // Reporting & Analytics (Phase 3)
      public DbSet<AcademicStanding> AcademicStandings => Set<AcademicStanding>();
@@ -134,6 +147,11 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.EntraObjectId).IsUnique();
             entity.HasIndex(x => x.Username).IsUnique().HasFilter("[Username] IS NOT NULL");
             entity.HasIndex(x => x.Email);
+
+            entity.HasOne(x => x.Department)
+                .WithMany()
+                .HasForeignKey(x => x.DepartmentId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<AppRole>(entity =>
@@ -227,6 +245,11 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .WithMany(x => x.Departments)
                 .HasForeignKey(x => x.FacultyId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Head)
+                .WithMany()
+                .HasForeignKey(x => x.HeadId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Faculty>(entity =>
@@ -236,6 +259,11 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Label).HasMaxLength(100).IsRequired();
             entity.HasIndex(x => x.Name).IsUnique();
+
+            entity.HasOne(x => x.Dean)
+                .WithMany()
+                .HasForeignKey(x => x.DeanId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<AcademicLevel>(entity =>
@@ -723,17 +751,17 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.UploadedById);
         });
 
-        // Gradebook Management
         modelBuilder.Entity<SystemGradingConfiguration>(entity =>
         {
             entity.ToTable("SystemGradingConfigurations");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.DefaultGradingStyle).IsRequired();
+            entity.Property(x => x.DefaultGradingStyle).HasConversion<string>().IsRequired();
             entity.Property(x => x.DefaultExamPercentage).HasPrecision(5, 2);
             entity.Property(x => x.DefaultCA1Weight).HasPrecision(5, 2);
             entity.Property(x => x.DefaultCA2Weight).HasPrecision(5, 2);
             entity.Property(x => x.DefaultCA3Weight).HasPrecision(5, 2);
             entity.Property(x => x.DefaultExamWeight).HasPrecision(5, 2);
+            entity.Property(x => x.GpaScale).HasPrecision(3, 2);
         });
 
         modelBuilder.Entity<SystemRegistrationConfiguration>(entity =>
@@ -742,6 +770,15 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Strategy).HasMaxLength(20).IsRequired();
             entity.Property(x => x.EnforceMinCredits).IsRequired();
+        });
+
+        modelBuilder.Entity<SystemParentPortalConfiguration>(entity =>
+        {
+            entity.ToTable("SystemParentPortalConfigurations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AutoCreateGuardianAccountsOnStudentCreation).IsRequired();
+            entity.Property(x => x.SendGuardianInvitationEmail).IsRequired();
+            entity.Property(x => x.DefaultRelationship).HasMaxLength(100).IsRequired();
         });
 
         modelBuilder.Entity<AssessmentCategory>(entity =>
@@ -1200,6 +1237,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.TimeLimitMinutes);
+            entity.Property(x => x.PassThreshold).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.TargetProgramIdsJson).HasColumnType("nvarchar(max)").IsRequired();
             
             entity.HasOne(x => x.CourseOffering)
                 .WithMany()
@@ -1252,7 +1291,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .HasForeignKey(x => x.StudentId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Quiz)
-                .WithMany()
+                .WithMany(x => x.Attempts)
                 .HasForeignKey(x => x.QuizId)
                 .OnDelete(DeleteBehavior.Restrict);
             
@@ -1270,7 +1309,18 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .HasForeignKey(x => x.AttemptId)
                 .OnDelete(DeleteBehavior.Cascade);
             
+            entity.HasOne(x => x.Question)
+                .WithMany()
+                .HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.NoAction);
+            
+            entity.HasOne(x => x.SelectedOption)
+                .WithMany()
+                .HasForeignKey(x => x.SelectedOptionId)
+                .OnDelete(DeleteBehavior.NoAction);
+            
             entity.HasIndex(x => x.AttemptId);
+            entity.HasIndex(x => x.QuestionId);
         });
 
         modelBuilder.Entity<QuestionBank>(entity =>
@@ -1297,6 +1347,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.StartTimeUtc).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ViolationCount).IsRequired();
+            entity.Property(x => x.IntegrityScore).HasPrecision(18, 2);
             
             entity.HasOne(x => x.Student)
                 .WithMany()
@@ -1310,6 +1361,150 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.StudentId);
             entity.HasIndex(x => x.QuizId);
             entity.HasIndex(x => x.Status);
+        });
+
+        modelBuilder.Entity<ProctoringViolation>(entity =>
+        {
+            entity.ToTable("ProctoringViolations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ViolationType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Details).HasMaxLength(1000);
+            entity.Property(x => x.ScreenshotUrl).HasMaxLength(1000);
+            entity.Property(x => x.OccurredAtUtc).IsRequired();
+            entity.Property(x => x.Severity).IsRequired();
+
+            entity.HasOne(x => x.Session)
+                .WithMany(x => x.Violations)
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.SessionId);
+            entity.HasIndex(x => x.OccurredAtUtc);
+            entity.HasIndex(x => x.ViolationType);
+        });
+
+        // ===== Phase 1+2: Enhanced Quiz Management Entities =====
+
+        modelBuilder.Entity<QuizSetting>(entity =>
+        {
+            entity.ToTable("QuizSettings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.FeedbackVisibility).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.PassThreshold).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.RestrictToAllowedIps).HasDefaultValue(false);
+            entity.Property(x => x.AllowedIpRangesJson).HasMaxLength(4000);
+            entity.Property(x => x.AllowedCbtHallIdsJson).HasMaxLength(4000);
+
+            entity.HasOne(x => x.Quiz)
+                .WithOne(x => x.Setting)
+                .HasForeignKey<QuizSetting>(x => x.QuizId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.PoolQuestionBank)
+                .WithMany()
+                .HasForeignKey(x => x.PoolQuestionBankId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.QuizId).IsUnique();
+        });
+
+        modelBuilder.Entity<CbtHall>(entity =>
+        {
+            entity.ToTable("CbtHalls");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.IpRangesJson).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.IsActive);
+        });
+
+        modelBuilder.Entity<QuestionBankItem>(entity =>
+        {
+            entity.ToTable("QuestionBankItems");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QuestionText).HasMaxLength(5000).IsRequired();
+            entity.Property(x => x.QuestionType).HasMaxLength(50);
+            entity.Property(x => x.Difficulty).HasMaxLength(20);
+            entity.Property(x => x.Category).HasMaxLength(100);
+            entity.Property(x => x.Tags).HasMaxLength(2000);
+            entity.Property(x => x.Explanation).HasMaxLength(5000);
+            entity.Property(x => x.Feedback).HasMaxLength(5000);
+            entity.Property(x => x.AverageScore).HasColumnType("decimal(5,2)");
+
+            entity.HasOne(x => x.QuestionBank)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.QuestionBankId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.QuestionBankId);
+        });
+
+        modelBuilder.Entity<QuestionBankOption>(entity =>
+        {
+            entity.ToTable("QuestionBankOptions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OptionText).HasMaxLength(1000).IsRequired();
+
+            entity.HasOne(x => x.QuestionBankItem)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.QuestionBankItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.QuestionBankItemId);
+        });
+
+        modelBuilder.Entity<QuizTimeExtension>(entity =>
+        {
+            entity.ToTable("QuizTimeExtensions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ApprovedBy).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000);
+            entity.Property(x => x.DocumentationUrl).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Quiz)
+                .WithMany(x => x.TimeExtensions)
+                .HasForeignKey(x => x.QuizId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.QuizId, x.StudentId }).IsUnique();
+        });
+
+        modelBuilder.Entity<QuizFeedback>(entity =>
+        {
+            entity.ToTable("QuizFeedbacks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FeedbackText).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.FeedbackType).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.GradingNotes).HasMaxLength(2000);
+            entity.Property(x => x.ManualOverrideScore).HasColumnType("decimal(5,2)");
+
+            entity.HasOne(x => x.Quiz)
+                .WithMany(x => x.Feedbacks)
+                .HasForeignKey(x => x.QuizId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.Question)
+                .WithMany()
+                .HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.QuizId);
+            entity.HasIndex(x => x.StudentId);
         });
 
         // ===== Student Self-Service (Phase 4) =====
@@ -1656,6 +1851,82 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
 
             entity.HasIndex(x => x.UserId);
             entity.HasIndex(x => x.Endpoint);
+        });
+
+        modelBuilder.Entity<Assignment>(entity =>
+        {
+            entity.ToTable("Assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.MaxPoints).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.DueDate).IsRequired();
+            entity.Property(x => x.CutoffDate);
+            entity.Property(x => x.AllowedExtensions).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.MaxFileSizeMb).HasDefaultValue(50);
+            entity.Property(x => x.IsGroupAssignment).HasDefaultValue(false);
+            entity.Property(x => x.ReleaseConditionsJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.TargetProgramIdsJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.Property(x => x.IsDeleted).IsRequired();
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            entity.HasOne(x => x.Course)
+                .WithMany()
+                .HasForeignKey(x => x.CourseId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.CourseId);
+            entity.HasIndex(x => x.DueDate);
+        });
+
+        modelBuilder.Entity<AssignmentSubmission>(entity =>
+        {
+            entity.ToTable("AssignmentSubmissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(x => x.SubmissionMetadataJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.DigitalReceipt).HasMaxLength(128);
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.Property(x => x.IsDeleted).IsRequired();
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            entity.HasOne(x => x.Assignment)
+                .WithMany(x => x.Submissions)
+                .HasForeignKey(x => x.AssignmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.AssignmentId);
+            entity.HasIndex(x => x.SubmitterId);
+            entity.HasIndex(x => new { x.AssignmentId, x.SubmitterId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SubmissionGrade>(entity =>
+        {
+            entity.ToTable("SubmissionGrades");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Score).HasColumnType("decimal(5,2)").IsRequired();
+            entity.Property(x => x.FeedbackText).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.FeedbackMediaUrl).HasMaxLength(2000);
+            entity.Property(x => x.RubricExecutionJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.GradedAt).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.Property(x => x.IsDeleted).IsRequired();
+            entity.HasQueryFilter(x => !x.IsDeleted);
+
+            entity.HasOne(x => x.Submission)
+                .WithOne(x => x.Grade)
+                .HasForeignKey<SubmissionGrade>(x => x.SubmissionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.SubmissionId).IsUnique();
+            entity.HasIndex(x => x.GraderId);
         });
     }
 }

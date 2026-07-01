@@ -7,3 +7,5 @@ appsettings.Development.json
 # appsettings.json has a tracked template; ignore the real one
 appsettings.json
 # secrets should ideally be in User Secrets or environment variables
+Logs/*.log
+publish/

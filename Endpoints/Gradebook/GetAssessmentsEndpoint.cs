@@ -88,6 +88,45 @@ public sealed class CreateAssessmentEndpoint : ApiEndpoint<CreateAssessmentReque
             var error = result.FirstError;
             var statusCode = error.Type switch
             {
+ErrorType.NotFound => 404,
+                 ErrorType.Validation => 400,
+                 _ => 400
+             };
+             await SendFailureAsync(statusCode, error.Description, error.Code, error.Description, ct);
+             return;
+         }
+
+         await SendSuccessAsync(result.Value, ct);
+    }
+}
+
+public sealed class UpdateAssessmentEndpoint : ApiEndpoint<UpdateAssessmentRequest, AssessmentDto>
+{
+    private readonly IGradebookService _gradebookService;
+
+    public UpdateAssessmentEndpoint(IGradebookService gradebookService)
+    {
+        _gradebookService = gradebookService;
+    }
+
+    public override void Configure()
+    {
+        Put("gradebook/assessments/{id:guid}");
+        Roles("Lecturer", "SuperAdmin", "Admin");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(UpdateAssessmentRequest req, CancellationToken ct)
+    {
+        var assessmentId = Route<Guid>("id");
+
+        var result = await _gradebookService.UpdateAssessmentAsync(assessmentId, req, ct);
+
+        if (result.IsError)
+        {
+            var error = result.FirstError;
+            var statusCode = error.Type switch
+            {
                 ErrorType.NotFound => 404,
                 ErrorType.Validation => 400,
                 _ => 400
@@ -97,5 +136,39 @@ public sealed class CreateAssessmentEndpoint : ApiEndpoint<CreateAssessmentReque
         }
 
         await SendSuccessAsync(result.Value, ct);
+    }
+}
+
+public sealed class DeleteAssessmentEndpoint : ApiEndpointWithoutRequest<Deleted>
+{
+    private readonly IGradebookService _gradebookService;
+
+    public DeleteAssessmentEndpoint(IGradebookService gradebookService)
+    {
+        _gradebookService = gradebookService;
+    }
+
+    public override void Configure()
+    {
+        Delete("gradebook/assessments/{id:guid}");
+        Roles("Lecturer", "SuperAdmin", "Admin");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var assessmentId = Route<Guid>("id");
+
+        var result = await _gradebookService.DeleteAssessmentAsync(assessmentId, ct);
+
+        if (result.IsError)
+        {
+            var error = result.FirstError;
+            var statusCode = error.Type == ErrorType.NotFound ? 404 : 400;
+            await SendFailureAsync(statusCode, error.Description, error.Code, error.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(default!, ct);
     }
 }

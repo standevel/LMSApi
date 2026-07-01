@@ -56,7 +56,7 @@ public interface IProgramSwitchService
     /// role: "HoD" → PendingHoDReview; "Dean" → PendingDeanReview; "Admin" → PendingAdminAction
     /// </summary>
     Task<ErrorOr<List<ProgramSwitchRequestSummaryDto>>> GetPendingForRoleAsync(
-        string role, CancellationToken ct = default);
+        string role, Guid userId, CancellationToken ct = default);
 
     /// <summary>Get all switch requests (Admin overview with optional status filter).</summary>
     Task<ErrorOr<List<ProgramSwitchRequestSummaryDto>>> GetAllRequestsAsync(

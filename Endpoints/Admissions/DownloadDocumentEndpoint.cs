@@ -1,8 +1,11 @@
 using FastEndpoints;
+using LMS.Api.Security;
 using LMS.Api.Services;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.IO;
+using System.Linq;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,13 +16,16 @@ public sealed class DownloadDocumentRequest
     public Guid Id { get; set; }
 }
 
-public sealed class DownloadDocumentEndpoint(IDocumentService documentService, IFileStorageService fileStorageService)
+public sealed class DownloadDocumentEndpoint(
+    IDocumentService documentService,
+    IFileStorageService fileStorageService,
+    ICurrentUserContext currentUserContext)
     : Endpoint<DownloadDocumentRequest>
 {
     public override void Configure()
     {
         Get("documents/download/{Id}");
-        AllowAnonymous(); // We can add permission checks in the handler
+        Roles("SuperAdmin", "Admin", "Registrar", "Lecturer", "Student", "Parent");
         Tags("Admissions");
         Description(d => d
             .WithName("Download Document") 
@@ -29,6 +35,13 @@ public sealed class DownloadDocumentEndpoint(IDocumentService documentService, I
 
     public override async Task HandleAsync(DownloadDocumentRequest req, CancellationToken ct)
     {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await Send.UnauthorizedAsync(ct);
+            return;
+        }
+
         var record = await documentService.GetDocumentByIdAsync(req.Id);
 
         if (record == null)
@@ -37,9 +50,18 @@ public sealed class DownloadDocumentEndpoint(IDocumentService documentService, I
             return;
         }
 
-        // TODO: Implement ValidateAccessAsync check here once auth is fully integrated
-        // var hasAccess = await documentService.ValidateAccessAsync(record.Id, currentUser.Id, currentUser.Roles);
-        // if (!hasAccess) { await Send.ForbiddenAsync(ct); return; }
+        var roles = User.Claims
+            .Where(c => c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles")
+            .Select(c => c.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var hasAccess = await documentService.ValidateAccessAsync(record.Id, userId.Value, roles);
+        if (!hasAccess)
+        {
+            await Send.ForbiddenAsync(ct);
+            return;
+        }
 
         var physicalPath = await fileStorageService.GetPhysicalPathAsync(record.FileUrl);
 

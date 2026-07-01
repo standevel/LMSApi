@@ -26,7 +26,7 @@ public class GetWeekViewEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Get("timetable/week-view/{sessionId}/{weekNumber}");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("Admin", "Registrar", "SuperAdmin", "Lecturer");
         Description(d => d
             .WithName("GetWeekView")
             .WithTags("Timetable")

@@ -43,6 +43,13 @@ public sealed class SystemGradingConfiguration
     /// Default Exam weight (typically 60%)
     /// </summary>
     public decimal DefaultExamWeight { get; set; } = 60m;
+
+    public decimal GpaScale { get; set; } = 4.0m;
+    
+    /// <summary>
+    /// JSON array of GradeMappingDto (e.g., [{"MinPercentage":70, "LetterGrade":"A", "GradePoints":4.0}, ...])
+    /// </summary>
+    public string LetterGradesMappingJson { get; set; } = "[]";
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

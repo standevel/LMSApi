@@ -11,7 +11,7 @@ public sealed class CreateAnnouncementEndpoint(IAnnouncementService announcement
     public override void Configure()
     {
         Post("announcements");
-        Roles("SuperAdmin", "Admin", "Lecturer");
+        Roles("SuperAdmin", "Admin", "Lecturer", "HOD", "Dean", "Finance", "Registrar");
         Tags("Communication");
     }
 
@@ -29,7 +29,7 @@ public sealed class GetAnnouncementsEndpoint(IAnnouncementService announcementSe
     {
         Get("announcements");
         AllowAnonymous(); // Or require authentication? Let's require authentication for now.
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "HOD", "Dean", "Finance", "Registrar");
         Tags("Communication");
     }
 
@@ -51,7 +51,7 @@ public sealed class GetAnnouncementByIdEndpoint(IAnnouncementService announcemen
     public override void Configure()
     {
         Get("announcements/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "HOD", "Dean", "Finance", "Registrar");
         Tags("Communication");
     }
 
@@ -77,7 +77,7 @@ public sealed class UpdateAnnouncementEndpoint(IAnnouncementService announcement
     public override void Configure()
     {
         Put("announcements/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer");
+        Roles("SuperAdmin", "Admin", "Lecturer", "HOD", "Dean", "Finance", "Registrar");
         Tags("Communication");
     }
 
@@ -100,7 +100,7 @@ public sealed class DeleteAnnouncementEndpoint(IAnnouncementService announcement
     public override void Configure()
     {
         Delete("announcements/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer");
+        Roles("SuperAdmin", "Admin", "Lecturer", "HOD", "Dean", "Finance", "Registrar");
         Tags("Communication");
     }
 

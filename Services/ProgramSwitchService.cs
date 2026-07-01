@@ -141,6 +141,14 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         if (switchRequest == null)
             return Error.NotFound("ProgramSwitchRequest.NotFound", "Program switch request not found.");
 
+        // Check scope
+        var targetProgram = await _db.Programs
+            .Include(p => p.Department)
+            .FirstOrDefaultAsync(p => p.Id == switchRequest.ToProgramId, ct);
+            
+        if (targetProgram?.Department?.HeadId != reviewerId)
+            return Error.Forbidden("ProgramSwitchRequest.Forbidden", "You are not the Head of Department for the target program.");
+
         // Enforce: must be in PendingHoDReview (ensures prior stages are complete)
         if (switchRequest.Status != ProgramSwitchStatus.PendingHoDReview)
             return Error.Conflict("ProgramSwitchRequest.InvalidStatus",
@@ -188,6 +196,15 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
 
         if (switchRequest == null)
             return Error.NotFound("ProgramSwitchRequest.NotFound", "Program switch request not found.");
+
+        // Check scope
+        var targetProgram = await _db.Programs
+            .Include(p => p.Department)
+                .ThenInclude(d => d.Faculty)
+            .FirstOrDefaultAsync(p => p.Id == switchRequest.ToProgramId, ct);
+
+        if (targetProgram?.Department?.Faculty?.DeanId != reviewerId)
+            return Error.Forbidden("ProgramSwitchRequest.Forbidden", "You are not the Dean of the Faculty for the target program.");
 
         // Enforce: must be in PendingDeanReview — guarantees HoD already approved
         if (switchRequest.Status != ProgramSwitchStatus.PendingDeanReview)
@@ -362,7 +379,7 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
     }
 
     public async Task<ErrorOr<List<ProgramSwitchRequestSummaryDto>>> GetPendingForRoleAsync(
-        string role, CancellationToken ct = default)
+        string role, Guid userId, CancellationToken ct = default)
     {
         var targetStatus = role.ToUpper() switch
         {
@@ -375,13 +392,25 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         if (targetStatus == null)
             return Error.Validation("InvalidRole", $"Unrecognized role queue: {role}. Use 'HoD', 'Dean', or 'Admin'.");
 
-        var requests = await _db.ProgramSwitchRequests
+        var query = _db.ProgramSwitchRequests
             .Include(r => r.Student)
             .Include(r => r.FromProgram)
             .Include(r => r.ToProgram)
+                .ThenInclude(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
             .Where(r => r.Status == targetStatus.Value)
-            .OrderBy(r => r.CreatedAt)
-            .ToListAsync(ct);
+            .AsQueryable();
+            
+        if (role.Equals("HOD", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(r => r.ToProgram != null && r.ToProgram.Department != null && r.ToProgram.Department.HeadId == userId);
+        }
+        else if (role.Equals("DEAN", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(r => r.ToProgram != null && r.ToProgram.Department != null && r.ToProgram.Department.Faculty != null && r.ToProgram.Department.Faculty.DeanId == userId);
+        }
+
+        var requests = await query.OrderBy(r => r.CreatedAt).ToListAsync(ct);
 
         return requests.Select(MapToSummary).ToList();
     }

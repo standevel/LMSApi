@@ -162,6 +162,10 @@ public sealed class AdmissionApplication
     public string? OfficialEmail { get; set; }
     public DateTime? AccountCreatedAt { get; set; }
 
+    // Reminder tracking
+    public DateTime? LastReminderSentAt { get; set; }
+    public int ReminderCount { get; set; } = 0;
+
     // Linked Documents
     public ICollection<DocumentRecord> Documents { get; set; } = new List<DocumentRecord>();
 

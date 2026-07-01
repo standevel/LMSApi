@@ -285,7 +285,31 @@ public class TimetableService : ITimetableService
             .FirstOrDefaultAsync(s => s.Id == conflictingSlotId)
             ?? throw new InvalidOperationException("Slot not found");
 
+        if (replacementLecturerId == Guid.Empty)
+            throw new InvalidOperationException("Replacement lecturer is required.");
+
+        var replacementExists = await _context.Set<AppUser>()
+            .AnyAsync(u => u.Id == replacementLecturerId);
+        if (!replacementExists)
+            throw new InvalidOperationException("Replacement lecturer not found.");
+
+        var conflicts = await DetectConflictsAsync(
+            replacementLecturerId,
+            (int)slot.DayOfWeek,
+            slot.StartTime,
+            slot.EndTime);
+
+        if (conflicts.HasConflicts)
+            throw new InvalidOperationException("Replacement lecturer has a scheduling conflict for this slot.");
+
+        var callerUserId = await _currentUserContext.GetUserIdAsync();
+        if (!callerUserId.HasValue || callerUserId == Guid.Empty)
+            throw new InvalidOperationException("The current user is not identified. Ensure authentication is present.");
+
         slot.LecturerId = replacementLecturerId;
+        slot.UpdatedDate = DateOnly.FromDateTime(DateTime.UtcNow);
+        slot.UpdatedBy = callerUserId.Value;
+        slot.UpdatedByUserId = callerUserId.Value;
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Resolved conflict for slot {SlotId}", conflictingSlotId);
@@ -296,11 +320,12 @@ public class TimetableService : ITimetableService
     {
         _logger.LogInformation("Getting timetable for lecturer {LecturerId}", lecturerId);
 
+        var lecturerIdStr = lecturerId.ToString();
         return await _context.Set<LectureTimetableSlot>()
             .Include(s => s.CourseOffering)
             .Include(s => s.Lecturer)
             .Include(s => s.Venue)
-            .Where(s => s.LecturerId == lecturerId)
+            .Where(s => s.LecturerId == lecturerId || (s.CoLecturersJson != null && s.CoLecturersJson.Contains(lecturerIdStr)))
             .OrderBy(s => s.DayOfWeek)
             .ThenBy(s => s.StartTime)
             .ToListAsync();
@@ -332,7 +357,8 @@ public class TimetableService : ITimetableService
 
         if (lecturerId.HasValue)
         {
-            query = query.Where(s => s.LecturerId == lecturerId.Value);
+            var lecturerIdStr = lecturerId.Value.ToString();
+            query = query.Where(s => s.LecturerId == lecturerId.Value || (s.CoLecturersJson != null && s.CoLecturersJson.Contains(lecturerIdStr)));
         }
 
         // WeekNumber is not used explicitly in this model; it can be used for week-based filtering by slot date if needed.

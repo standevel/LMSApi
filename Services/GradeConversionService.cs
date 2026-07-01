@@ -15,7 +15,9 @@ public sealed class GradeConversionService(LmsDbContext dbContext) : IGradeConve
         CancellationToken ct = default)
     {
         // First, try to find a matching conversion record
-        var conversion = await GetScaleConversionAsync(countryCode, scaleName, ct);
+        var conversion = string.IsNullOrWhiteSpace(scaleName)
+            ? null
+            : await GetScaleConversionAsync(countryCode, scaleName, ct);
 
         if (conversion != null)
         {

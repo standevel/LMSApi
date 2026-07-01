@@ -10,7 +10,7 @@ public class GetLecturersEndpoint(LmsDbContext dbContext)
     public override void Configure()
     {
         Get("timetable/lecturers");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("Admin", "Registrar", "SuperAdmin", "Lecturer");
         Description(d => d
             .WithName("GetLecturers")
             .WithTags("Timetable")

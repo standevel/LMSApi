@@ -12,7 +12,7 @@ public static class MappingExtensions
         p.Code,
         p.Description,
         p.DegreeAwarded,
-        p.Department?.ToDto() ?? new DepartmentDto(p.DepartmentId, "N/A", "N/A", new FacultyDto(Guid.Empty, "N/A", "N/A", DateOnly.MinValue, DateOnly.MinValue), DateOnly.MinValue, DateOnly.MinValue),
+        p.Department?.ToDto() ?? new DepartmentDto(p.DepartmentId, "N/A", "N/A", Guid.Empty, "N/A", null, null, new FacultyDto(Guid.Empty, "N/A", "N/A", null, null, DateOnly.MinValue, DateOnly.MinValue), DateOnly.MinValue, DateOnly.MinValue),
         p.Type,
         p.DurationYears,
         p.IsActive,
@@ -26,6 +26,8 @@ public static class MappingExtensions
         f.Id,
         f.Name,
         f.Label,
+        f.DeanId,
+        f.Dean?.DisplayName ?? f.Dean?.Email,
         f.CreatedDate,
         f.UpdatedDate);
 
@@ -33,7 +35,11 @@ public static class MappingExtensions
         d.Id,
         d.Name,
         d.Code,
-        d.Faculty?.ToDto() ?? new FacultyDto(d.FacultyId, "N/A", "N/A", DateOnly.MinValue, DateOnly.MinValue),
+        d.FacultyId,
+        d.Faculty?.Name ?? "N/A",
+        d.HeadId,
+        d.Head?.DisplayName ?? d.Head?.Email,
+        d.Faculty?.ToDto() ?? new FacultyDto(d.FacultyId, "N/A", "N/A", null, null, DateOnly.MinValue, DateOnly.MinValue),
         d.CreatedDate,
         d.UpdatedDate);
 

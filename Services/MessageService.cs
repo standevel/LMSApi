@@ -8,6 +8,8 @@ using LMS.Api.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using LMS.Api.Security;
+using Microsoft.AspNetCore.SignalR;
+using LMS.Api.Hubs;
 
 namespace LMS.Api.Services;
 
@@ -15,7 +17,9 @@ public sealed class MessageService(
     LmsDbContext dbContext,
     IUserRepository userRepository,
     IAuditService auditService,
-    IConfiguration configuration) : BaseService(auditService), IMessageService
+    IConfiguration configuration,
+    INotificationService notificationService,
+    IHubContext<NotificationHub, INotificationClient> hubContext) : BaseService(auditService), IMessageService
 {
     public async Task<ErrorOr<MessageDto>> CreateAsync(CreateMessageRequest request, CancellationToken ct = default)
     {
@@ -33,19 +37,42 @@ public sealed class MessageService(
 
         await LogActionAsync("Create", "Message", message.Id.ToString(), $"Created message from {request.SenderId} to {request.RecipientId}", ct);
 
-        // Optionally, create a notification for the recipient
-        // We can do that here or let the caller handle it. For now, we'll do it.
+        try
+        {
+            // Need to fetch them via DB query to include navigation props or map manually if we just want DTO.
+            // But wait, the Message extension method expects the Message entity to just call ToDto().
+            // Message.ToDto() maps sender/recipient properties if they exist, but if not it maps what it has.
+            // Let's just retrieve the message with its includes.
+            var createdMsg = await dbContext.Messages
+                .Include(m => m.Sender)
+                .Include(m => m.Recipient)
+                .FirstOrDefaultAsync(m => m.Id == message.Id, ct);
+            
+            if (createdMsg != null)
+            {
+                var dto = createdMsg.ToDto();
+                await hubContext.Clients.User(request.RecipientId.ToString()).ReceiveMessage(dto);
+            }
+        }
+        catch { }
+
+        // Create a notification for the recipient
         try
         {
             var recipient = await userRepository.GetByIdAsync(request.RecipientId, ct);
             if (recipient != null)
             {
-                // We would use the NotificationService, but we don't have a reference.
-                // We could inject it, but to avoid circular dependencies, we might use an event or do it in the endpoint.
-                // For simplicity, we'll skip the notification in the service and let the endpoint handle it.
-                // Alternatively, we can inject the NotificationService as well.
-                // Let's inject the NotificationService in the constructor.
-                // But we don't want to complicate now. We'll leave it to the endpoint.
+                var sender = await userRepository.GetByIdAsync(request.SenderId, ct);
+                var senderName = sender?.DisplayName ?? "Someone";
+
+                await notificationService.CreateAsync(new CreateNotificationRequest(
+                    request.RecipientId,
+                    request.SenderId,
+                    $"New Message from {senderName}",
+                    "You have received a new message.",
+                    "Message",
+                    $"/dashboard/messages"
+                ), ct);
             }
         }
         catch

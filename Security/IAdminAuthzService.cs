@@ -28,7 +28,11 @@ public sealed record ManagedUserSummary(
     bool IsActive,
     DateTime CreatedUtc,
     DateTime UpdatedUtc,
-    IReadOnlyCollection<string> Roles);
+    IReadOnlyCollection<string> Roles,
+    Guid? DepartmentId,
+    string? DepartmentName,
+    bool IsStudent,
+    bool IsLecturer);
 
 public sealed record ManagedUserPermissionOverride(
     string PermissionCode,

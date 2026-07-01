@@ -14,7 +14,8 @@ public sealed class CourseService(
     IUserRepository userRepository,
     IAuditService auditService,
     LmsDbContext dbContext,
-    IFileStorageService fileStorageService) : BaseService(auditService), ICourseService
+    IFileStorageService fileStorageService,
+    INotificationService notificationService) : BaseService(auditService), ICourseService
 {
     public async Task<ErrorOr<CourseDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
@@ -126,7 +127,7 @@ public sealed class CourseService(
     public async Task<ErrorOr<List<SimpleUserDto>>> GetLecturersAsync(CancellationToken ct = default)
     {
         var lecturers = await userRepository.GetByRoleAsync("Lecturer", ct);
-        return lecturers.Select(u => new SimpleUserDto(u.Id, u.DisplayName, u.Email)).ToList();
+        return lecturers.Select(u => new SimpleUserDto(u.Id, u.DisplayName, u.Email, u.DepartmentId, u.Department?.Name)).ToList();
     }
 
     public async Task<ErrorOr<LecturerCoursesResponse>> GetMyCoursesAsync(Guid lecturerId, bool isAdmin = false, CancellationToken ct = default)
@@ -140,9 +141,15 @@ public sealed class CourseService(
             .Include(co => co.AcademicSession)
             .OrderBy(co => co.Course.Code);
 
+        var lecturerIdStr = lecturerId.ToString();
         var offerings = isAdmin
             ? await query.ToListAsync(ct)
-            : await query.Where(co => co.LecturerId == lecturerId).ToListAsync(ct);
+            : await query.Where(co => co.LecturerId == lecturerId ||
+                                     dbContext.LectureTimetableSlots.Any(slot =>
+                                         slot.CourseOfferingId == co.Id &&
+                                         (slot.LecturerId == lecturerId ||
+                                          (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr)))))
+                         .ToListAsync(ct);
 
         if (!offerings.Any())
         {
@@ -194,13 +201,19 @@ public sealed class CourseService(
     public async Task<ErrorOr<CourseDetailResponse>> GetCourseDetailAsync(Guid offeringId, Guid lecturerId, CancellationToken ct = default)
     {
         // Verify the offering exists and belongs to this lecturer
+        var lecturerIdStr = lecturerId.ToString();
         var offering = await dbContext.CourseOfferings
             .AsNoTracking()
             .Include(co => co.Course)
             .Include(co => co.Program)
             .Include(co => co.Level)
             .Include(co => co.AcademicSession)
-            .FirstOrDefaultAsync(co => co.Id == offeringId && co.LecturerId == lecturerId, ct);
+            .FirstOrDefaultAsync(co => co.Id == offeringId && 
+                (co.LecturerId == lecturerId || 
+                 dbContext.LectureTimetableSlots.Any(slot => 
+                     slot.CourseOfferingId == co.Id && 
+                     (slot.LecturerId == lecturerId || 
+                      (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))))), ct);
 
         if (offering == null)
         {
@@ -261,26 +274,47 @@ public sealed class CourseService(
     public async Task<ErrorOr<AddCourseMaterialResponse>> AddCourseMaterialAsync(Guid offeringId, Guid lecturerId, AddCourseMaterialRequest request, CancellationToken ct = default)
     {
         // Verify the offering exists and belongs to this lecturer
+        var lecturerIdStr = lecturerId.ToString();
         var offering = await dbContext.CourseOfferings
             .Include(co => co.Course)
-            .FirstOrDefaultAsync(co => co.Id == offeringId && co.LecturerId == lecturerId, ct);
+            .FirstOrDefaultAsync(co => co.Id == offeringId && 
+                (co.LecturerId == lecturerId || 
+                 dbContext.LectureTimetableSlots.Any(slot => 
+                     slot.CourseOfferingId == co.Id && 
+                     (slot.LecturerId == lecturerId || 
+                      (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))))), ct);
 
         if (offering == null)
         {
             return Error.NotFound("Course.NotFound", "Course offering not found or you don't have access to it.");
         }
 
-        if (request.File == null || request.File.Length == 0)
-        {
-            return Error.Validation("File.Required", "Please select a file to upload.");
-        }
+        string fileUrl;
+        string? fileType;
+        long? fileSize;
 
-        // Upload file using FileStorageService
-        var fileName = $"{Guid.NewGuid()}_{request.File.FileName}";
-        var fileUrl = await fileStorageService.UploadFileAsync(
-            request.File,
-            $"course-materials/{offeringId}",
-            fileName);
+        if (!string.IsNullOrWhiteSpace(request.LinkUrl))
+        {
+            fileUrl = request.LinkUrl.Trim();
+            fileType = "Link";
+            fileSize = null;
+        }
+        else
+        {
+            if (request.File == null || request.File.Length == 0)
+            {
+                return Error.Validation("File.Required", "Please select a file or enter a link URL.");
+            }
+
+            // Upload file using FileStorageService
+            var fileName = $"{Guid.NewGuid()}_{request.File.FileName}";
+            fileUrl = await fileStorageService.UploadFileAsync(
+                request.File,
+                $"course-materials/{offeringId}",
+                fileName);
+            fileType = request.File.ContentType;
+            fileSize = request.File.Length;
+        }
 
         var material = new CourseMaterial
         {
@@ -288,8 +322,8 @@ public sealed class CourseService(
             Title = request.Title,
             Description = request.Description,
             FileUrl = fileUrl,
-            FileType = request.File.ContentType,
-            FileSize = request.File.Length,
+            FileType = fileType,
+            FileSize = fileSize,
             UploadedById = lecturerId,
             UploadedAt = DateTime.UtcNow
         };
@@ -299,6 +333,25 @@ public sealed class CourseService(
 
         await LogActionAsync("AddMaterial", "CourseMaterial", material.Id.ToString(), 
             $"Added material '{request.Title}' to course {offering.Course.Code}", ct);
+
+        // Trigger notification to enrolled students
+        var enrolledStudentIds = await dbContext.CourseEnrollments
+            .AsNoTracking()
+            .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
+            .Select(e => e.StudentId)
+            .ToListAsync(ct);
+
+        foreach (var studentId in enrolledStudentIds)
+        {
+            await notificationService.CreateAsync(new CreateNotificationRequest(
+                studentId,
+                lecturerId,
+                $"New Material: {request.Title}",
+                $"New course material has been added to {offering.Course.Code}.",
+                "System",
+                $"/courses/{offeringId}/materials"
+            ), ct);
+        }
 
         return new AddCourseMaterialResponse(
             material.Id,
@@ -319,14 +372,24 @@ public sealed class CourseService(
             return Error.NotFound("Material.NotFound", "Material not found.");
         }
 
-        // Verify the lecturer owns this course
-        if (material.CourseOffering.LecturerId != lecturerId)
+        // Verify the lecturer owns this course (primary or via timetable slot)
+        var lecturerIdStr = lecturerId.ToString();
+        var isAssigned = material.CourseOffering.LecturerId == lecturerId ||
+                         await dbContext.LectureTimetableSlots.AnyAsync(slot => 
+                             slot.CourseOfferingId == material.CourseOfferingId && 
+                             (slot.LecturerId == lecturerId || 
+                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))), ct);
+
+        if (!isAssigned)
         {
             return Error.Forbidden("Material.Forbidden", "You don't have permission to delete this material.");
         }
 
         // Delete file from storage
-        await fileStorageService.DeleteFileAsync(material.FileUrl);
+        if (material.FileType != "Link")
+        {
+            await fileStorageService.DeleteFileAsync(material.FileUrl);
+        }
 
         dbContext.CourseMaterials.Remove(material);
         await dbContext.SaveChangesAsync(ct);
@@ -425,26 +488,54 @@ public sealed class CourseService(
                     total += weighted;
                 }
 
-                // Simple letter grade mapping (5-point scale)
-                string letterGrade = total >= 70 ? "A"
-                    : total >= 60 ? "B"
-                    : total >= 50 ? "C"
-                    : total >= 45 ? "D"
-                    : total >= 40 ? "E"
-                    : "F";
+                var sysConfig = await dbContext.SystemGradingConfigurations
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.UpdatedAt)
+                    .FirstOrDefaultAsync(ct);
 
-                double gradePoints = letterGrade switch
+                var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+                    ? new List<LMS.Api.Contracts.GradeMappingDto>()
+                    : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+                      ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
+                string letterGrade = "F";
+                double gradePoints = 0.0;
+                
+                if (mappings == null || !mappings.Any())
                 {
-                    "A" => 5.0, "B" => 4.0, "C" => 3.0,
-                    "D" => 2.0, "E" => 1.0, _ => 0.0
-                };
+                    // Simple letter grade mapping (5-point scale) fallback
+                    letterGrade = total >= 70 ? "A"
+                        : total >= 60 ? "B"
+                        : total >= 50 ? "C"
+                        : total >= 45 ? "D"
+                        : total >= 40 ? "E"
+                        : "F";
+
+                    gradePoints = letterGrade switch
+                    {
+                        "A" => 5.0,
+                        "B" => 4.0,
+                        "C" => 3.0,
+                        "D" => 2.0,
+                        "E" => 1.0,
+                        _ => 0.0
+                    };
+                }
+                else
+                {
+                    var match = mappings.OrderByDescending(m => m.MinPercentage)
+                        .FirstOrDefault(m => (decimal)total >= m.MinPercentage);
+                        
+                    letterGrade = match?.LetterGrade ?? "F";
+                    gradePoints = match != null ? (double)match.GradePoints : 0.0;
+                }
 
                 gradeDto = new StudentCourseGradeDto(
-                    Math.Round(ca1, 1),
-                    Math.Round(ca2, 1),
-                    Math.Round(ca3, 1),
-                    Math.Round(exam, 1),
-                    Math.Round(total, 1),
+                    Math.Round(ca1, 2),
+                    Math.Round(ca2, 2),
+                    Math.Round(ca3, 2),
+                    Math.Round(exam, 2),
+                    Math.Round(total, 2),
                     letterGrade,
                     gradePoints,
                     true);

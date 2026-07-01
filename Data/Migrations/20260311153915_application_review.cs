@@ -5,7 +5,7 @@
 namespace LMS.Api.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class application_review : Migration
+    public partial class Application_review : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

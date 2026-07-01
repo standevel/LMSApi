@@ -14,7 +14,7 @@ public sealed class ApiReplayPreventionMiddleware(
     public async Task InvokeAsync(HttpContext context)
     {
         var settings = options.Value;
-        if (!settings.Enabled || IsSafeMethod(context.Request.Method))
+        if (!settings.Enabled || IsSafeMethod(context.Request.Method) || context.Request.Path.StartsWithSegments("/hubs"))
         {
             await next(context);
             return;

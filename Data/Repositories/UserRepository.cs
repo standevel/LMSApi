@@ -48,6 +48,7 @@ public sealed class UserRepository(LmsDbContext dbContext) : IUserRepository
             .FirstOrDefaultAsync(ct);
     public Task<List<AppUser>> GetByRoleAsync(string roleName, CancellationToken ct = default) =>
         dbContext.Users
+            .Include(u => u.Department)
             .Where(u => u.UserRoles.Any(ur => ur.Role.Name == roleName))
             .ToListAsync(ct);
 
@@ -57,6 +58,7 @@ public sealed class UserRepository(LmsDbContext dbContext) : IUserRepository
             .AsNoTracking()
             .Include(x => x.UserRoles)
                 .ThenInclude(x => x.Role)
+            .Include(x => x.Department)
             .AsSplitQuery()
             .AsQueryable();
 

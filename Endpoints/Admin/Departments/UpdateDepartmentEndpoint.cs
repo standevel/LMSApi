@@ -7,14 +7,10 @@ namespace LMS.Api.Endpoints.Admin.Departments;
 public sealed class UpdateDepartmentRequest
 {
     public Guid Id { get; set; }
-    public required UpdateDepartmentRequestBody Body { get; set; }
-}
-
-public sealed class UpdateDepartmentRequestBody
-{
     public string Name { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public Guid FacultyId { get; set; }
+    public Guid? HeadId { get; set; }
 }
 
 public sealed class UpdateDepartmentEndpoint(IDepartmentService departmentService)
@@ -37,9 +33,10 @@ public sealed class UpdateDepartmentEndpoint(IDepartmentService departmentServic
     public override async Task HandleAsync(UpdateDepartmentRequest req, CancellationToken ct)
     {
         var request = new LMS.Api.Contracts.UpdateDepartmentRequest(
-            req.Body.Name,
-            req.Body.Code,
-            req.Body.FacultyId);
+            req.Name,
+            req.Code ?? "",
+            req.FacultyId,
+            req.HeadId);
 
         var result = await departmentService.UpdateAsync(req.Id, request, ct);
         await result.Match(

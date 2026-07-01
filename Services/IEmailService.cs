@@ -10,8 +10,6 @@ public interface IEmailService
         string toEmail,
         string studentName,
         string programName,
-        string acceptOfferUrl,
-        string rejectOfferUrl,
         byte[]? pdfAttachment = null,
         string? fileName = null);
     Task SendPaymentInstructionsEmailAsync(string toEmail, string studentName, decimal amountDue, string paymentPageUrl);

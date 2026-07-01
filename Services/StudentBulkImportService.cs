@@ -17,12 +17,15 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
 {
     private const int MaxStudentPhoneLength = 255;
     private readonly LmsDbContext _context;
-    private readonly IEmailService _emailService;
+    private readonly IGuardianProvisioningService _guardianProvisioningService;
 
-    public StudentBulkImportService(LmsDbContext context, IAuditService auditService, IEmailService emailService) : base(auditService)
+    public StudentBulkImportService(
+        LmsDbContext context,
+        IAuditService auditService,
+        IGuardianProvisioningService guardianProvisioningService) : base(auditService)
     {
         _context = context;
-        _emailService = emailService;
+        _guardianProvisioningService = guardianProvisioningService;
     }
 
     public async Task<StudentImportResponse> ImportStudentsAsync(
@@ -93,10 +96,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             .Select(r => (Guid?)r.Id)
             .FirstOrDefaultAsync(ct);
 
-        var parentRoleId = await _context.Roles
-            .Where(r => r.Name == LmsRoles.Parent)
-            .Select(r => (Guid?)r.Id)
-            .FirstOrDefaultAsync(ct);
+        var autoCreateGuardians = await _guardianProvisioningService.AutoCreateGuardianAccountsEnabledAsync(ct);
 
         for (int i = 1; i < lines.Count; i++)
         {
@@ -127,18 +127,9 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
                 await _context.SaveChangesAsync(ct);
                 await EnsureAppUserForStudentAsync(student, studentRoleId, ct);
 
-                // Create guardian account if guardian email is present on the student
-                if (!string.IsNullOrWhiteSpace(student.EmergencyContactEmail))
+                if (autoCreateGuardians && !string.IsNullOrWhiteSpace(student.EmergencyContactEmail))
                 {
-                    await EnsureGuardianAccountForStudentAsync(
-                        student,
-                        guardianFirstName: null,
-                        guardianLastName: null,
-                        guardianPhone: student.EmergencyContactPhone,
-                        guardianEmail: student.EmergencyContactEmail,
-                        guardianRelationship: "Guardian",
-                        parentRoleId,
-                        ct);
+                    await _guardianProvisioningService.ProvisionForStudentAsync(student, ct: ct);
                 }
 
                 processedRows++;
@@ -239,10 +230,7 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
             .Select(r => (Guid?)r.Id)
             .FirstOrDefaultAsync(ct);
 
-        var parentRoleId = await _context.Roles
-            .Where(r => r.Name == LmsRoles.Parent)
-            .Select(r => (Guid?)r.Id)
-            .FirstOrDefaultAsync(ct);
+        var autoCreateGuardians = await _guardianProvisioningService.AutoCreateGuardianAccountsEnabledAsync(ct);
 
         for (int i = 0; i < rows.Count; i++)
         {
@@ -419,18 +407,9 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
                 await _context.SaveChangesAsync(ct);
                 await EnsureAppUserForStudentAsync(student, studentRoleId, ct);
 
-                // Create guardian account if guardian email is provided
-                if (!string.IsNullOrWhiteSpace(row.GuardianEmail))
+                if (autoCreateGuardians && !string.IsNullOrWhiteSpace(row.GuardianEmail))
                 {
-                    await EnsureGuardianAccountForStudentAsync(
-                        student,
-                        row.GuardianFirstName,
-                        row.GuardianLastName,
-                        row.GuardianPhone,
-                        row.GuardianEmail,
-                        row.GuardianRelationship,
-                        parentRoleId,
-                        ct);
+                    await _guardianProvisioningService.ProvisionForStudentAsync(student, row.GuardianRelationship, ct: ct);
                 }
 
                 processedRows++;
@@ -734,135 +713,6 @@ public class StudentBulkImportService : BaseService, IStudentBulkImportService
         }
 
         await _context.SaveChangesAsync(ct);
-    }
-
-    /// <summary>
-    /// Creates an AppUser and ParentGuardian record for the student's guardian,
-    /// then links them via ParentStudentLink. Skipped if guardian email is absent
-    /// or an account with that email already exists.
-    /// </summary>
-    private async Task EnsureGuardianAccountForStudentAsync(
-        Student student,
-        string? guardianFirstName,
-        string? guardianLastName,
-        string? guardianPhone,
-        string? guardianEmail,
-        string? guardianRelationship,
-        Guid? parentRoleId,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(guardianEmail))
-            return;
-
-        var now = DateTime.UtcNow;
-        var email = guardianEmail.Trim();
-
-        // Resolve display name — fall back to email prefix when name is absent
-        var firstName = !string.IsNullOrWhiteSpace(guardianFirstName) ? guardianFirstName!.Trim() : string.Empty;
-        var lastName  = !string.IsNullOrWhiteSpace(guardianLastName)  ? guardianLastName!.Trim()  : string.Empty;
-        if (string.IsNullOrEmpty(firstName) && string.IsNullOrEmpty(lastName))
-        {
-            firstName = email.Split('@')[0];
-            lastName  = string.Empty;
-        }
-        var displayName = $"{firstName} {lastName}".Trim();
-        var phone = !string.IsNullOrWhiteSpace(guardianPhone) ? guardianPhone!.Trim() : string.Empty;
-        var relationship = !string.IsNullOrWhiteSpace(guardianRelationship) ? guardianRelationship!.Trim() : "Guardian";
-
-        // Find or create the AppUser for the guardian
-        var guardianUser = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == email || u.Username == email, ct);
-
-        bool isNewAccount = guardianUser == null;
-
-        if (guardianUser == null)
-        {
-            guardianUser = new AppUser
-            {
-                Id = Guid.NewGuid(),
-                EntraObjectId = $"parent:{Guid.NewGuid()}",
-                Username = email,
-                Email = email,
-                DisplayName = displayName,
-                IsActive = true,
-                CreatedUtc = now,
-                UpdatedUtc = now
-            };
-            _context.Users.Add(guardianUser);
-            await _context.SaveChangesAsync(ct);
-        }
-
-        // Assign Parent role if not already assigned
-        if (parentRoleId.HasValue)
-        {
-            var hasParentRole = await _context.UserRoles
-                .AnyAsync(ur => ur.UserId == guardianUser.Id && ur.RoleId == parentRoleId.Value, ct);
-
-            if (!hasParentRole)
-            {
-                _context.UserRoles.Add(new UserRole
-                {
-                    UserId = guardianUser.Id,
-                    RoleId = parentRoleId.Value,
-                    AssignedUtc = now
-                });
-            }
-        }
-
-        // Find or create the ParentGuardian profile
-        var guardian = await _context.ParentGuardians
-            .FirstOrDefaultAsync(pg => pg.UserId == guardianUser.Id || pg.Email == email, ct);
-
-        if (guardian == null)
-        {
-            guardian = new ParentGuardian
-            {
-                Id = Guid.NewGuid(),
-                UserId = guardianUser.Id,
-                FirstName = string.IsNullOrEmpty(firstName) ? displayName : firstName,
-                LastName = lastName,
-                PhoneNumber = phone,
-                Email = email,
-                DateAddedUtc = now
-            };
-            _context.ParentGuardians.Add(guardian);
-            await _context.SaveChangesAsync(ct);
-        }
-
-        // Link guardian to student if not already linked
-        var alreadyLinked = await _context.ParentStudentLinks
-            .AnyAsync(l => l.ParentGuardianId == guardian.Id && l.StudentId == student.Id, ct);
-
-        if (!alreadyLinked)
-        {
-            _context.ParentStudentLinks.Add(new ParentStudentLink
-            {
-                Id = Guid.NewGuid(),
-                ParentGuardianId = guardian.Id,
-                StudentId = student.Id,
-                RelationshipType = relationship,
-                LinkedAtUtc = now
-            });
-            await _context.SaveChangesAsync(ct);
-        }
-
-        // Notify guardian — fire-and-forget; a failure here must not break the import
-        var studentFullName = $"{student.FirstName} {student.LastName}".Trim();
-        var guardianDisplayName = string.IsNullOrEmpty(displayName) ? email : displayName;
-        try
-        {
-            await _emailService.SendGuardianCredentialsEmailAsync(
-                email,
-                guardianDisplayName,
-                studentFullName,
-                email,
-                isNewAccount: isNewAccount);
-        }
-        catch (Exception emailEx)
-        {
-            // Log but swallow — email failure should not roll back a successful import row
-            _ = emailEx; // suppress unused-variable warning; caller can check logs
-        }
     }
 
     private static bool IsValidEmail(string email)

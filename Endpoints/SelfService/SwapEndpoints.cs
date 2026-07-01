@@ -84,7 +84,7 @@ public sealed class GetSwapRequestsEndpoint(IRegistrationService registrationSer
     }
 }
 
-public sealed class ApproveSwapRequestEndpoint(IRegistrationService registrationService)
+public sealed class ApproveSwapRequestEndpoint
     : ApiEndpoint<ApproveSwapRequestEndpoint.ApproveSwapRequest, bool>
 {
     public class ApproveSwapRequest

@@ -12,7 +12,11 @@ public sealed record ManagedUserSummaryResponse(
     bool IsActive,
     DateTime CreatedUtc,
     DateTime UpdatedUtc,
-    IReadOnlyCollection<string> Roles);
+    IReadOnlyCollection<string> Roles,
+    Guid? DepartmentId,
+    string? DepartmentName,
+    bool IsStudent,
+    bool IsLecturer);
 
 public sealed record ListManagedUsersResponse(IReadOnlyCollection<ManagedUserSummaryResponse> Users);
 
@@ -22,7 +26,7 @@ public sealed class ListUsersEndpoint(IAdminAuthzService adminAuthzService)
     public override void Configure()
     {
         Get("admin/users");
-        Policies(PermissionPolicy.Build(LmsPermissions.AccessManage));
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
         Tags("Administration");
     }
 
@@ -52,7 +56,11 @@ public sealed class ListUsersEndpoint(IAdminAuthzService adminAuthzService)
                     x.IsActive,
                     x.CreatedUtc,
                     x.UpdatedUtc,
-                    x.Roles))
+                    x.Roles,
+                    x.DepartmentId,
+                    x.DepartmentName,
+                    x.IsStudent,
+                    x.IsLecturer))
                 .ToArray());
 
         await SendSuccessAsync(data, ct);

@@ -30,7 +30,8 @@ public sealed class FacultyService(
         var faculty = new Faculty
         {
             Name = request.Name,
-            Label = request.Label
+            Label = request.Label,
+            DeanId = request.DeanId
         };
 
         await facultyRepository.AddAsync(faculty, ct);
@@ -48,13 +49,16 @@ public sealed class FacultyService(
 
         faculty.Name = request.Name;
         faculty.Label = request.Label;
+        faculty.DeanId = request.DeanId;
 
         await facultyRepository.UpdateAsync(faculty, ct);
         await facultyRepository.SaveChangesAsync(ct);
 
         await LogActionAsync("Update", "Faculty", id.ToString(), $"Updated faculty: {faculty.Name}", ct);
 
-        return faculty.ToDto();
+        // Re-fetch so Dean navigation property reflects the new DeanId
+        var updated = await facultyRepository.GetByIdAsync(id, ct);
+        return updated!.ToDto();
     }
 
     public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id, CancellationToken ct = default)

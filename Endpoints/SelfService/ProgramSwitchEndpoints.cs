@@ -173,7 +173,9 @@ public sealed class GetProgramSwitchRequestByIdEndpoint(IProgramSwitchService sw
 // GET /self-service/program-switch/pending?role=HoD  (Staff)
 // Returns requests in the caller's approval queue.
 // ─────────────────────────────────────────────────────────────────────────────
-public sealed class GetPendingProgramSwitchRequestsEndpoint(IProgramSwitchService switchService)
+public sealed class GetPendingProgramSwitchRequestsEndpoint(
+    IProgramSwitchService switchService,
+    ICurrentUserContext currentUser)
     : ApiEndpointWithoutRequest<List<ProgramSwitchRequestSummaryDto>>
 {
     public override void Configure()
@@ -189,7 +191,15 @@ public sealed class GetPendingProgramSwitchRequestsEndpoint(IProgramSwitchServic
     public override async Task HandleAsync(CancellationToken ct)
     {
         var role = Query<string>("role", isRequired: false) ?? "Admin";
-        var result = await switchService.GetPendingForRoleAsync(role, ct);
+        
+        var userId = await currentUser.GetUserIdAsync(ct);
+        if (!userId.HasValue || userId.Value == Guid.Empty)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var result = await switchService.GetPendingForRoleAsync(role, userId.Value, ct);
 
         if (result.IsError)
         {

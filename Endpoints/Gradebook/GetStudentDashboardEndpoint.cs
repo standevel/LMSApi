@@ -33,7 +33,10 @@ public record StudentDashboardResponseDto(
     StudentDashboardStatsDto Stats,
     List<EnrolledCourseDto> EnrolledCourses,
     Guid StudentId,
-    Guid AcademicSessionId);
+    Guid AcademicSessionId,
+    string? ProgramName = null,
+    string? LevelName = null,
+    string? StudentNumber = null);
 
 public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<StudentDashboardResponseDto>
 {
@@ -170,13 +173,23 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
             .ThenBy(c => c.CourseCode)
             .ToList();
 
-        var student = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == userId.Value, ct);
+        var student = await _dbContext.Students
+            .Include(s => s.AcademicProgram)
+            .Include(s => s.Level)
+            .FirstOrDefaultAsync(s => s.Id == userId.Value, ct);
         var academicSessionId = student?.AcademicSessionId 
             ?? activeOfferings.FirstOrDefault()?.AcademicSessionId 
             ?? (await _dbContext.AcademicSessions.FirstOrDefaultAsync(s => s.IsActive, ct))?.Id 
             ?? Guid.Empty;
 
-        var response = new StudentDashboardResponseDto(stats, enrolledCourses, userId.Value, academicSessionId);
+        var response = new StudentDashboardResponseDto(
+            stats, 
+            enrolledCourses, 
+            userId.Value, 
+            academicSessionId,
+            student?.AcademicProgram?.Name,
+            student?.Level?.Name,
+            student?.StudentNumber);
         await SendSuccessAsync(response, ct);
     }
 }

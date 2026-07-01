@@ -9,6 +9,7 @@ public sealed class UpdateFacultyRequestWrapper
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
+    public Guid? DeanId { get; set; }
 }
 
 public sealed class UpdateFacultyEndpoint(IFacultyService facultyService)
@@ -30,7 +31,7 @@ public sealed class UpdateFacultyEndpoint(IFacultyService facultyService)
 
     public override async Task HandleAsync(UpdateFacultyRequestWrapper req, CancellationToken ct)
     {
-        var request = new UpdateFacultyRequest(req.Name, req.Label);
+        var request = new UpdateFacultyRequest(req.Name, req.Label, req.DeanId);
         var result = await facultyService.UpdateAsync(req.Id, request, ct);
         await result.Match(
             data => SendSuccessAsync(data, ct, "Faculty updated successfully"),

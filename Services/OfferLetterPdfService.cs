@@ -99,7 +99,6 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
         return document.GeneratePdf();
     }
-
     private void RenderFallbackContent(ColumnDescriptor col, AdmissionApplication application)
     {
         col.Item().PaddingBottom(20).Text($"Subject: Official Offer of Admission - Fall {application.CreatedAt.Year}").FontSize(18).Bold().FontColor("#0F172A");
@@ -394,6 +393,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
             .Replace("{studentName}", fullName)
             .Replace("{programName}", app.AcademicProgram?.Name ?? "Selected Program")
             .Replace("{collegeName}", app.Faculty?.Name ?? "Selected College")
+            .Replace("{session}", app.AcademicSession?.Name ?? "Selected Session")
             .Replace("{year}", app.CreatedAt.Year.ToString())
             .Replace("{date}", app.CreatedAt.ToString("MMMM dd, yyyy"))
             .Replace("{applicationNumber}", app.ApplicationNumber);

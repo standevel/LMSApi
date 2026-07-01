@@ -55,14 +55,22 @@ public class ParentPortalService : BaseService, IParentPortalService
             psl.LinkedAtUtc)).ToList();
     }
 
-    private static string ComputeLetterGrade(decimal totalMarks)
+    private static string ComputeLetterGrade(decimal totalMarks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null)
     {
-        if (totalMarks >= 70) return "A";
-        if (totalMarks >= 60) return "B";
-        if (totalMarks >= 50) return "C";
-        if (totalMarks >= 40) return "D";
-        if (totalMarks >= 30) return "E";
-        return "F";
+        if (mappings == null || !mappings.Any())
+        {
+            if (totalMarks >= 70) return "A";
+            if (totalMarks >= 60) return "B";
+            if (totalMarks >= 50) return "C";
+            if (totalMarks >= 40) return "D";
+            if (totalMarks >= 30) return "E";
+            return "F";
+        }
+        
+        var match = mappings.OrderByDescending(m => m.MinPercentage)
+            .FirstOrDefault(m => totalMarks >= m.MinPercentage);
+            
+        return match?.LetterGrade ?? "F";
     }
 
     public async Task<ErrorOr<StudentProgressDto>> GetStudentProgressAsync(Guid studentId, CancellationToken ct = default)
@@ -158,6 +166,16 @@ public class ParentPortalService : BaseService, IParentPortalService
             return Error.NotFound("Student.NotFound", "Student not found.");
         }
 
+        var sysConfig = await _context.SystemGradingConfigurations
+            .AsNoTracking()
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+            
+        var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+            ? new List<LMS.Api.Contracts.GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+              ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
         var courseOfferings = await _context.CourseEnrollments
             .Where(e => e.StudentId == studentId && e.Status == "Registered")
             .Select(e => e.CourseOffering)
@@ -173,7 +191,7 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .SumAsync(g => g.MarksObtained, ct);
 
             if (totalMarks > 100m) totalMarks = 100m;
-            var gradeLetter = ComputeLetterGrade(totalMarks);
+            var gradeLetter = ComputeLetterGrade(totalMarks, mappings);
 
             grades.Add(new StudentGradeDto(
                 offering.Id,

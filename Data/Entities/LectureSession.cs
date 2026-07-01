@@ -22,6 +22,7 @@ public sealed class LectureSession
     public Guid CreatedBy { get; set; }
     public string? OnlineMeetingId { get; set; }
     public string? OnlineMeetingJoinUrl { get; set; }
+    public bool ReminderSent { get; set; } = false;
 
     // Navigation properties
     [JsonIgnore]

@@ -58,6 +58,7 @@ public record TranscriptCourseRecord(
     int AttendancePercentage);
 
 public record CreateTranscriptRequestDto(
+    Guid? StudentId,
     bool IsOfficial,
     string? DeliveryEmail,
     string? DeliveryMethod,

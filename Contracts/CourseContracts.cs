@@ -4,7 +4,7 @@ using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Contracts;
 
-public record SimpleUserDto(Guid Id, string? Name, string? Email);
+public record SimpleUserDto(Guid Id, string? Name, string? Email, Guid? DepartmentId = null, string? DepartmentName = null);
 
 public record CourseOfferingDto(
     Guid Id,

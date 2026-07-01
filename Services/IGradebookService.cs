@@ -25,11 +25,13 @@ public interface IGradebookService
     Task<ErrorOr<List<GradeDto>>> GetGradesByAssessmentAsync(Guid assessmentId, CancellationToken ct = default);
     Task<ErrorOr<List<StudentGradeSummaryDto>>> GetStudentGradeSummariesAsync(Guid courseOfferingId, CancellationToken ct = default);
     Task<ErrorOr<GradeDto>> EnterGradeAsync(EnterGradeRequest request, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<int>> UpdateStudentGradeSummariesAsync(Guid courseOfferingId, UpdateStudentGradeSummaryRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradeUploadResultDto>> BulkUploadGradesAsync(Guid courseOfferingId, IFormFile excelFile, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradebookExcelTemplateDto>> GenerateExcelTemplateAsync(Guid courseOfferingId, CancellationToken ct = default);
     
-    // Gradebook Summary
+    // Gradebook Summary & Analytics
     Task<ErrorOr<GradebookSummaryDto>> GetGradebookSummaryAsync(Guid courseOfferingId, Guid? userId, CancellationToken ct = default);
+    Task<ErrorOr<List<GradeDistributionDto>>> GetGradeDistributionAsync(Guid courseOfferingId, CancellationToken ct = default);
     
     // Approval Workflow
     Task<ErrorOr<List<GradeApprovalDto>>> GetGradeApprovalsAsync(Guid courseOfferingId, CancellationToken ct = default);
