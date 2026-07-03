@@ -90,8 +90,7 @@ public sealed class BrevoEmailService(
                 <h2 style='color: #006B62;'>Congratulations!</h2>
                 <p>Dear {studentName},</p>
                 <p>We are pleased to offer you admission into the <strong>{programName}</strong> program at Wigwe University!</p>
-                <p>Please find attached your official admission letter.</p>
-                <p>You will receive instructions on how to pay your commitment fee.</p>
+                <p>Please find attached your provisional admission letter.</p>
                 <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
                 <p style='font-size: 12px; color: #666;'>Wigwe University Admissions Office</p>
             </div>";

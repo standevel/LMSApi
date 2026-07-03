@@ -10,6 +10,8 @@ public sealed class AppUser
     public string? DisplayName { get; set; }
     public Guid? DepartmentId { get; set; }
     public Department? Department { get; set; }
+    public Guid? FacultyId { get; set; }
+    public Faculty? Faculty { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;

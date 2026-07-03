@@ -3,6 +3,7 @@ using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Endpoints.Admin;
 using Microsoft.EntityFrameworkCore;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.AcademicPrograms;
 
@@ -13,6 +14,7 @@ public sealed class GetProgramEnrollmentsEndpoint(LmsDbContext dbContext)
     {
         Get("admin/programs/{id}/enrollments");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Tags("Administration");
         Summary(s =>
         {

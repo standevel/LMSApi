@@ -17,7 +17,7 @@ public class DetectConflictsEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Post("timetable/detect-conflicts");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("DetectConflicts")
             .WithTags("Timetable")

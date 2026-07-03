@@ -25,6 +25,8 @@ public interface IQuizService
     // Question Management
     Task<ErrorOr<List<QuizQuestionDto>>> GetQuestionsForQuizAsync(Guid quizId, Guid? userId = null, CancellationToken ct = default);
     Task<ErrorOr<QuizQuestionDto>> AddQuestionToQuizAsync(Guid quizId, CreateQuizQuestionRequest request, CancellationToken ct = default);
+    Task<ErrorOr<QuestionImportTemplateDto>> GenerateQuestionImportTemplateAsync(CancellationToken ct = default);
+    Task<ErrorOr<QuestionImportResultDto>> ImportQuizQuestionsAsync(Guid quizId, IFormFile excelFile, bool previewOnly = false, CancellationToken ct = default);
     Task<ErrorOr<List<QuizQuestionDto>>> AddQuestionsFromBankAsync(Guid quizId, AddQuestionsFromBankRequest request, CancellationToken ct = default);
     Task<ErrorOr<QuizQuestionDto>> UpdateQuizQuestionAsync(Guid questionId, string questionText, int orderIndex, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> DeleteQuizQuestionAsync(Guid questionId, CancellationToken ct = default);

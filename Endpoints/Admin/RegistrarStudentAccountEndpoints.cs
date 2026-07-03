@@ -1,5 +1,6 @@
 using FastEndpoints;
 using LMS.Api.Services;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin;
 
@@ -54,7 +55,7 @@ public sealed class ListPendingStudentAccountsEndpoint(IAdmissionService admissi
     public override void Configure()
     {
         Get("admin/students/pending-accounts");
-        Roles("SuperAdmin", "Admin", "Registrar");
+        Roles("SuperAdmin", "Admin", "Registrar", "AdmissionOfficer");
         Tags("Administration");
     }
 
@@ -83,21 +84,22 @@ public sealed class ListPendingStudentAccountsEndpoint(IAdmissionService admissi
 /// Endpoint to create a student account for a single accepted application.
 /// Triggered by Registrar.
 /// </summary>
-public sealed class CreateStudentAccountEndpoint(IAdmissionService admissionService)
+public sealed class CreateStudentAccountEndpoint(IAdmissionService admissionService, ICurrentUserContext currentUserContext)
     : ApiEndpointWithoutRequest<CreateStudentAccountResponse>
 {
     public override void Configure()
     {
         Post("admin/applications/{ApplicationId}/create-account");
-        Roles("SuperAdmin", "Admin", "Registrar");
+        Roles("SuperAdmin", "Admin", "Registrar", "AdmissionOfficer");
         Tags("Administration");
     }
 
     public override async Task HandleAsync(CancellationToken ct)
     {
         var applicationId = Route<Guid>("ApplicationId");
+        var userId = await currentUserContext.GetUserIdAsync(ct);
 
-        var result = await admissionService.CreateStudentAccountAsync(applicationId, ct);
+        var result = await admissionService.CreateStudentAccountAsync(applicationId, userId, ct);
 
         if (!result.Success)
         {
@@ -124,13 +126,13 @@ public sealed class CreateStudentAccountEndpoint(IAdmissionService admissionServ
 /// Endpoint to bulk create student accounts for multiple accepted applications.
 /// Triggered by Registrar.
 /// </summary>
-public sealed class BulkCreateStudentAccountsEndpoint(IAdmissionService admissionService)
+public sealed class BulkCreateStudentAccountsEndpoint(IAdmissionService admissionService, ICurrentUserContext currentUserContext)
     : ApiEndpoint<BulkCreateStudentAccountsRequest, BulkCreateStudentAccountsResponse>
 {
     public override void Configure()
     {
         Post("admin/students/bulk-create-accounts");
-        Roles("SuperAdmin", "Admin", "Registrar");
+        Roles("SuperAdmin", "Admin", "Registrar", "AdmissionOfficer");
     }
 
     public override async Task HandleAsync(BulkCreateStudentAccountsRequest req, CancellationToken ct)
@@ -153,11 +155,13 @@ public sealed class BulkCreateStudentAccountsEndpoint(IAdmissionService admissio
         int successful = 0;
         int failed = 0;
 
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        
         foreach (var applicationId in req.ApplicationIds)
         {
             try
             {
-                var result = await admissionService.CreateStudentAccountAsync(applicationId, ct);
+                var result = await admissionService.CreateStudentAccountAsync(applicationId, userId, ct);
 
                 var response = new CreateStudentAccountResponse(
                     result.Success,

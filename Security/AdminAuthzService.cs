@@ -99,6 +99,31 @@ public sealed class AdminAuthzService(
             return new GetManagedUserResult(false, ErrorCode: "user_not_found", ErrorMessage: "User was not found.", StatusCode: StatusCodes.Status404NotFound);
         }
 
+        Guid? deptId = user.DepartmentId;
+        Guid? facId = user.FacultyId;
+        string? academicProgramName = null;
+        string? levelName = null;
+        Guid? studentId = null;
+
+        if (user.UserRoles.Any(r => r.Role.Name.Contains("student", StringComparison.OrdinalIgnoreCase)))
+        {
+            var student = await dbContext.Students
+                .AsNoTracking()
+                .Include(s => s.AcademicProgram)
+                .ThenInclude(p => p.Department)
+                .Include(s => s.Level)
+                .FirstOrDefaultAsync(s => s.EntraObjectId == entraObjectId || (!string.IsNullOrEmpty(user.Email) && s.OfficialEmail == user.Email), ct);
+                
+            if (student != null)
+            {
+                deptId = student.AcademicProgram?.DepartmentId ?? student.AcademicProgramId; // Fallback if no department
+                facId = student.FacultyId ?? student.AcademicProgram?.Department?.FacultyId;
+                academicProgramName = student.AcademicProgram?.Name;
+                levelName = student.Level?.Name;
+                studentId = student.Id;
+            }
+        }
+
         var now = DateTime.UtcNow;
         var effectivePermissions = await permissionService.GetEffectivePermissionsAsync(user.Id, ct);
         var detail = new ManagedUserDetail(
@@ -125,7 +150,12 @@ public sealed class AdminAuthzService(
                 .ToArray(),
             effectivePermissions
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-                .ToArray());
+                .ToArray(),
+            deptId,
+            facId,
+            academicProgramName,
+            levelName,
+            studentId);
 
         return new GetManagedUserResult(true, detail, StatusCode: StatusCodes.Status200OK);
     }

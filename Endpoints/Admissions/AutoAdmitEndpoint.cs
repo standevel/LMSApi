@@ -19,7 +19,7 @@ public sealed class AutoAdmitEndpoint(IAdmissionService admissionService)
     public override void Configure()
     {
         Post("admissions/auto-admit");
-        Policies(LmsPolicies.Management);
+        Policies(LmsPolicies.AdmissionsManagement);
         Tags("Admissions");
         Description(d => d
             .WithName("Auto Admit") 

@@ -139,6 +139,75 @@ public class QuestionBankService : BaseService, IQuestionBankService
         return MapItemToDto(item);
     }
 
+    public Task<ErrorOr<QuestionImportTemplateDto>> GenerateQuestionImportTemplateAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult<ErrorOr<QuestionImportTemplateDto>>(
+            QuestionExcelImportHelper.GenerateTemplate("Question_Import_Template.xlsx"));
+    }
+
+    public async Task<ErrorOr<QuestionImportResultDto>> ImportQuestionBankItemsAsync(Guid questionBankId, IFormFile excelFile, Guid createdBy, bool previewOnly = false, CancellationToken ct = default)
+    {
+        var bankExists = await _context.QuestionBanks.AnyAsync(qb => qb.Id == questionBankId, ct);
+        if (!bankExists) return Error.NotFound("QuestionBank.NotFound", "Question bank not found");
+
+        var parsed = await QuestionExcelImportHelper.ParseAsync(excelFile, ct);
+        if (parsed.IsError) return parsed.Errors;
+
+        var result = new QuestionImportResultDto
+        {
+            TotalRows = parsed.Value.Count,
+            PreviewOnly = previewOnly
+        };
+
+        var items = new List<QuestionBankItem>();
+        foreach (var row in parsed.Value)
+        {
+            var rowError = ValidateImportedQuestion(row);
+            if (rowError is not null)
+            {
+                result.Errors.Add(new QuestionImportRowErrorDto { RowNumber = row.RowNumber, Message = rowError });
+                continue;
+            }
+
+            result.Questions.Add(QuestionExcelImportHelper.ToPreview(row));
+            items.Add(new QuestionBankItem
+            {
+                QuestionBankId = questionBankId,
+                QuestionText = row.QuestionText,
+                QuestionType = row.QuestionType,
+                Points = row.Points,
+                Category = row.Category,
+                Difficulty = row.Difficulty,
+                Tags = row.Tags,
+                Explanation = row.Explanation,
+                Feedback = row.Feedback,
+                CreatedBy = createdBy,
+                Options = row.Options.Select(option => new QuestionBankOption
+                {
+                    OptionText = option.Text,
+                    DisplayOrder = option.DisplayOrder,
+                    IsCorrectAnswer = option.IsCorrect
+                }).ToList()
+            });
+        }
+
+        foreach (var item in items)
+        {
+            item.CorrectAnswer = item.Options.FirstOrDefault(option => option.IsCorrectAnswer)?.OptionText;
+        }
+
+        result.ImportedCount = previewOnly ? 0 : items.Count;
+        result.SkippedCount = result.Errors.Count;
+
+        if (!previewOnly && items.Count > 0)
+        {
+            _context.QuestionBankItems.AddRange(items);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return result;
+    }
+
     public async Task<ErrorOr<QuestionBankItemDto>> UpdateQuestionBankItemAsync(Guid itemId, UpdateQuestionBankItemRequest request, Guid updatedBy, CancellationToken ct = default)
     {
         var item = await _context.QuestionBankItems
@@ -256,4 +325,28 @@ public class QuestionBankService : BaseService, IQuestionBankService
         AverageScore = item.AverageScore,
         CreatedAt = item.CreatedAt
     };
+
+    private static string? ValidateImportedQuestion(QuestionImportRow row)
+    {
+        if (string.IsNullOrWhiteSpace(row.QuestionText))
+        {
+            return "Question text is required.";
+        }
+
+        var optionTypes = new[] { "MultipleChoice", "SingleChoice", "TrueFalse", "MCQ" };
+        if (optionTypes.Contains(row.QuestionType, StringComparer.OrdinalIgnoreCase))
+        {
+            if (row.Options.Count < 2)
+            {
+                return "At least two options are required for choice questions.";
+            }
+
+            if (!row.Options.Any(option => option.IsCorrect))
+            {
+                return "At least one correct option is required for choice questions.";
+            }
+        }
+
+        return null;
+    }
 }

@@ -8,7 +8,8 @@ namespace LMS.Api.Services;
 
 public sealed class AssignmentService(
     LmsDbContext context,
-    INotificationService notificationService) : IAssignmentService
+    INotificationService notificationService,
+    IAssignmentGroupService groupService) : IAssignmentService
 {
     public async Task<ErrorOr<AssignmentDto>> CreateAssignmentAsync(UpsertAssignmentRequest request, Guid creatorId, CancellationToken ct = default)
     {
@@ -17,44 +18,49 @@ public sealed class AssignmentService(
         var programValidation = await ValidateTargetProgramsAsync(request.CourseId, request.TargetProgramIds, ct);
         if (programValidation is not null) return programValidation.Value;
 
-        await using var tx = await context.Database.BeginTransactionAsync(ct);
-        var assignment = new Assignment();
-        Apply(assignment, request);
-        context.Assignments.Add(assignment);
-        await context.SaveChangesAsync(ct);
-
-        // Get enrolled students
-        var targetProgramIds = NormalizeTargetProgramIds(request.TargetProgramIds);
-        var enrolledStudentIds = await context.CourseEnrollments
-            .AsNoTracking()
-            .Where(e =>
-                e.CourseOffering.CourseId == request.CourseId &&
-                e.Status == "Registered" &&
-                (targetProgramIds.Count == 0 || targetProgramIds.Contains(e.CourseOffering.ProgramId)))
-            .Select(e => e.StudentId)
-            .Distinct()
-            .ToListAsync(ct);
-
-        // Fetch course details for notification
-        var course = await context.Courses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
-            
-        var courseCode = course?.Code ?? "Course";
-
-        foreach (var studentId in enrolledStudentIds)
+        var assignment = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            await notificationService.CreateAsync(new CreateNotificationRequest(
-                studentId,
-                creatorId,
-                $"New Assignment: {request.Title}",
-                $"A new assignment has been created for {courseCode}. Due date: {request.DueDate:f}",
-                "System",
-                $"/courses/{request.CourseId}/assignments/{assignment.Id}"
-            ), ct);
-        }
+            await using var tx = await context.Database.BeginTransactionAsync(ct);
+            var a = new Assignment();
+            Apply(a, request);
+            context.Assignments.Add(a);
+            await context.SaveChangesAsync(ct);
 
-        await tx.CommitAsync(ct);
+            // Get enrolled students
+            var targetProgramIds = NormalizeTargetProgramIds(request.TargetProgramIds);
+            var enrolledStudentIds = await context.CourseEnrollments
+                .AsNoTracking()
+                .Where(e =>
+                    e.CourseOffering.CourseId == request.CourseId &&
+                    e.Status == "Registered" &&
+                    (targetProgramIds.Count == 0 || targetProgramIds.Contains(e.CourseOffering.ProgramId)))
+                .Select(e => e.StudentId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            // Fetch course details for notification
+            var course = await context.Courses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
+                
+            var courseCode = course?.Code ?? "Course";
+
+            foreach (var studentId in enrolledStudentIds)
+            {
+                await notificationService.CreateAsync(new CreateNotificationRequest(
+                    studentId,
+                    creatorId,
+                    $"New Assignment: {request.Title}",
+                    $"A new assignment has been created for {courseCode}. Due date: {request.DueDate:f}",
+                    "System",
+                    $"/courses/{request.CourseId}/assignments/{a.Id}"
+                ), ct);
+            }
+
+            await tx.CommitAsync(ct);
+            return a;
+        });
+
         return ToDto(assignment);
     }
 
@@ -65,29 +71,41 @@ public sealed class AssignmentService(
         var programValidation = await ValidateTargetProgramsAsync(request.CourseId, request.TargetProgramIds, ct);
         if (programValidation is not null) return programValidation.Value;
 
-        var assignment = await context.Assignments.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (assignment is null) return Error.NotFound("Assignment.NotFound", "Assignment not found.");
+        var assignment = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            var a = await context.Assignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (a is null) return null;
 
-        await using var tx = await context.Database.BeginTransactionAsync(ct);
-        Apply(assignment, request);
-        assignment.Version++;
-        assignment.UpdatedAt = DateTimeOffset.UtcNow;
-        await context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            await using var tx = await context.Database.BeginTransactionAsync(ct);
+            Apply(a, request);
+            a.Version++;
+            a.UpdatedAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return a;
+        });
+
+        if (assignment is null) return Error.NotFound("Assignment.NotFound", "Assignment not found.");
         return ToDto(assignment);
     }
 
     public async Task<ErrorOr<Deleted>> DeleteAssignmentAsync(Guid id, CancellationToken ct = default)
     {
-        var assignment = await context.Assignments.FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (assignment is null) return Error.NotFound("Assignment.NotFound", "Assignment not found.");
+        var deleted = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            var a = await context.Assignments.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (a is null) return false;
 
-        await using var tx = await context.Database.BeginTransactionAsync(ct);
-        assignment.IsDeleted = true;
-        assignment.UpdatedAt = DateTimeOffset.UtcNow;
-        assignment.Version++;
-        await context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            await using var tx = await context.Database.BeginTransactionAsync(ct);
+            a.IsDeleted = true;
+            a.UpdatedAt = DateTimeOffset.UtcNow;
+            a.Version++;
+            await context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return true;
+        });
+
+        if (!deleted) return Error.NotFound("Assignment.NotFound", "Assignment not found.");
         return Result.Deleted;
     }
 
@@ -159,32 +177,43 @@ public sealed class AssignmentService(
         }
 
         var submitterId = currentUserId;
-        await using var tx = await context.Database.BeginTransactionAsync(ct);
-
-        var submission = await context.AssignmentSubmissions
-            .FirstOrDefaultAsync(x => x.AssignmentId == request.AssignmentId && x.SubmitterId == submitterId, ct);
-
-        if (submission is null)
+        var submission = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            submission = new AssignmentSubmission
+            await using var tx = await context.Database.BeginTransactionAsync(ct);
+
+            var s = await context.AssignmentSubmissions
+                .FirstOrDefaultAsync(x => x.AssignmentId == request.AssignmentId && x.SubmitterId == submitterId, ct);
+
+            if (s is null)
             {
-                AssignmentId = request.AssignmentId,
-                SubmitterId = submitterId
-            };
-            context.AssignmentSubmissions.Add(submission);
+                s = new AssignmentSubmission
+                {
+                    AssignmentId = request.AssignmentId,
+                    SubmitterId = submitterId
+                };
+                context.AssignmentSubmissions.Add(s);
+            }
+
+            s.SubmissionMetadataJson = string.IsNullOrWhiteSpace(request.SubmissionMetadataJson) ? "{}" : request.SubmissionMetadataJson;
+            s.Status = request.SaveAsDraft
+                ? AssignmentSubmissionStatus.Draft
+                : now > assignment.DueDate ? AssignmentSubmissionStatus.Late : AssignmentSubmissionStatus.Submitted;
+            s.SubmittedAt = request.SaveAsDraft ? null : now;
+            s.DigitalReceipt = request.SaveAsDraft ? string.Empty : BuildReceipt(s.SubmissionMetadataJson, now);
+            s.UpdatedAt = now;
+            s.Version++;
+
+            await context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return s;
+        });
+
+        // Propagate to group members if this is a group assignment (fire-and-forget errors handled silently)
+        if (submission.Assignment?.IsGroupAssignment == true || (await context.Assignments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == submission.AssignmentId, ct))?.IsGroupAssignment == true)
+        {
+            await groupService.PropagateSubmissionAsync(submission.Id, ct);
         }
 
-        submission.SubmissionMetadataJson = string.IsNullOrWhiteSpace(request.SubmissionMetadataJson) ? "{}" : request.SubmissionMetadataJson;
-        submission.Status = request.SaveAsDraft
-            ? AssignmentSubmissionStatus.Draft
-            : now > assignment.DueDate ? AssignmentSubmissionStatus.Late : AssignmentSubmissionStatus.Submitted;
-        submission.SubmittedAt = request.SaveAsDraft ? null : now;
-        submission.DigitalReceipt = request.SaveAsDraft ? string.Empty : BuildReceipt(submission.SubmissionMetadataJson, now);
-        submission.UpdatedAt = now;
-        submission.Version++;
-
-        await context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
         return ToDto(submission);
     }
 
@@ -209,26 +238,52 @@ public sealed class AssignmentService(
             return Error.Validation("Grade.InvalidScore", $"Score must be between 0 and {submission.Assignment.MaxPoints}.");
         }
 
-        await using var tx = await context.Database.BeginTransactionAsync(ct);
-        var now = DateTimeOffset.UtcNow;
-        var grade = submission.Grade ?? new SubmissionGrade { SubmissionId = submission.Id };
-        grade.GraderId = graderId;
-        grade.Score = request.Score;
-        grade.FeedbackText = request.FeedbackText;
-        grade.FeedbackMediaUrl = request.FeedbackMediaUrl;
-        grade.RubricExecutionJson = string.IsNullOrWhiteSpace(request.RubricExecutionJson) ? "{}" : request.RubricExecutionJson;
-        grade.GradedAt = now;
-        grade.UpdatedAt = now;
-        grade.Version++;
-        if (submission.Grade is null) context.SubmissionGrades.Add(grade);
+        var gradedSubmission = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            var s = await context.AssignmentSubmissions
+                .Include(x => x.Assignment)
+                .Include(x => x.Grade)
+                .FirstOrDefaultAsync(x => x.Id == request.SubmissionId, ct);
+            
+            if (s is null) return null;
 
-        submission.Status = AssignmentSubmissionStatus.Graded;
-        submission.UpdatedAt = now;
-        submission.Version++;
-        await context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
-        submission.Grade = grade;
-        return ToDto(submission);
+            await using var tx = await context.Database.BeginTransactionAsync(ct);
+            var now = DateTimeOffset.UtcNow;
+            var grade = s.Grade ?? new SubmissionGrade { SubmissionId = s.Id };
+            grade.GraderId = graderId;
+            grade.Score = request.Score;
+            grade.FeedbackText = request.FeedbackText;
+            grade.FeedbackMediaUrl = request.FeedbackMediaUrl;
+            grade.RubricExecutionJson = string.IsNullOrWhiteSpace(request.RubricExecutionJson) ? "{}" : request.RubricExecutionJson;
+            grade.GradedAt = now;
+            grade.UpdatedAt = now;
+            grade.Version++;
+            if (s.Grade is null) context.SubmissionGrades.Add(grade);
+
+            s.Status = AssignmentSubmissionStatus.Graded;
+            s.UpdatedAt = now;
+            s.Version++;
+            await context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            s.Grade = grade;
+            return s;
+        });
+
+        if (gradedSubmission is null) return Error.NotFound("Submission.NotFound", "Submission not found.");
+
+        // Propagate grade to all other group members
+        if (gradedSubmission.GroupId.HasValue)
+        {
+            await groupService.PropagateGradeAsync(
+                gradedSubmission.Id, graderId,
+                gradedSubmission.Grade!.Score,
+                gradedSubmission.Grade.FeedbackText,
+                gradedSubmission.Grade.FeedbackMediaUrl,
+                gradedSubmission.Grade.RubricExecutionJson,
+                ct);
+        }
+
+        return ToDto(gradedSubmission);
     }
 
     private static Error? ValidateAssignment(UpsertAssignmentRequest request)
@@ -274,6 +329,7 @@ public sealed class AssignmentService(
         assignment.AllowedExtensions = string.IsNullOrWhiteSpace(request.AllowedExtensions) ? "pdf,docx,zip" : request.AllowedExtensions.Trim().ToLowerInvariant();
         assignment.MaxFileSizeMb = request.MaxFileSizeMb;
         assignment.IsGroupAssignment = request.IsGroupAssignment;
+        assignment.MaxGroupSize = request.IsGroupAssignment ? request.MaxGroupSize : null;
         assignment.ReleaseConditionsJson = string.IsNullOrWhiteSpace(request.ReleaseConditionsJson) ? "{}" : request.ReleaseConditionsJson;
         assignment.TargetProgramIdsJson = JsonSerializer.Serialize(NormalizeTargetProgramIds(request.TargetProgramIds));
     }
@@ -311,9 +367,9 @@ public sealed class AssignmentService(
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt);
+    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.MaxGroupSize, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt);
 
-    private static AssignmentSubmissionDto ToDto(AssignmentSubmission x) => new(x.Id, x.AssignmentId, x.SubmitterId, x.Status.ToString(), x.SubmittedAt, x.SubmissionMetadataJson, x.DigitalReceipt, x.Grade is null ? null : ToDto(x.Grade), x.CreatedAt, x.UpdatedAt);
+    private static AssignmentSubmissionDto ToDto(AssignmentSubmission x) => new(x.Id, x.AssignmentId, x.SubmitterId, x.GroupId, x.Status.ToString(), x.SubmittedAt, x.SubmissionMetadataJson, x.DigitalReceipt, x.Grade is null ? null : ToDto(x.Grade), x.CreatedAt, x.UpdatedAt);
 
     private static SubmissionGradeDto ToDto(SubmissionGrade x) => new(x.Id, x.SubmissionId, x.GraderId, x.Score, x.FeedbackText, x.FeedbackMediaUrl, x.RubricExecutionJson, x.GradedAt);
 }

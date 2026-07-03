@@ -16,6 +16,8 @@ public interface IQuestionBankService
     Task<ErrorOr<Deleted>> DeleteQuestionBankAsync(Guid questionBankId, CancellationToken ct = default);
     Task<ErrorOr<List<QuestionBankItemDto>>> GetQuestionBankItemsAsync(Guid questionBankId, string? search, string? type, string? difficulty, string? category, CancellationToken ct = default);
     Task<ErrorOr<QuestionBankItemDto>> CreateQuestionBankItemAsync(Guid questionBankId, CreateQuestionBankItemRequest request, Guid createdBy, CancellationToken ct = default);
+    Task<ErrorOr<QuestionImportTemplateDto>> GenerateQuestionImportTemplateAsync(CancellationToken ct = default);
+    Task<ErrorOr<QuestionImportResultDto>> ImportQuestionBankItemsAsync(Guid questionBankId, IFormFile excelFile, Guid createdBy, bool previewOnly = false, CancellationToken ct = default);
     Task<ErrorOr<QuestionBankItemDto>> UpdateQuestionBankItemAsync(Guid itemId, UpdateQuestionBankItemRequest request, Guid updatedBy, CancellationToken ct = default);
     Task<ErrorOr<QuestionBankItemDto>> DuplicateQuestionBankItemAsync(Guid itemId, Guid createdBy, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> DeleteQuestionBankItemAsync(Guid itemId, CancellationToken ct = default);

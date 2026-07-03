@@ -16,7 +16,7 @@ public class AutoResolveConflictEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Post("timetable/resolve-conflict");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("AutoResolveConflict")
             .WithTags("Timetable")

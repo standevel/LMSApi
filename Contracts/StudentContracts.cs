@@ -14,6 +14,7 @@ public sealed class StudentSummaryDto
     public string OfficialEmail { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public string? ProgramName { get; set; }
+    public string? DepartmentName { get; set; }
     public string? FacultyName { get; set; }
     public string? LevelName { get; set; }
     public string? SessionName { get; set; }

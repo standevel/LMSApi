@@ -74,18 +74,45 @@ public sealed class CourseService(
         course.LevelId = request.LevelId;
         course.Semester = request.Semester;
 
-        course.Offerings.Clear();
-        foreach (var o in request.Offerings)
+        var existingOfferings = course.Offerings.ToList();
+        var requestOfferings = request.Offerings.ToList();
+
+        // 1. Remove offerings that are no longer in the request, and update matching ones
+        foreach (var existing in existingOfferings)
         {
-            course.Offerings.Add(new CourseOffering
+            var matched = requestOfferings.FirstOrDefault(r => 
+                r.ProgramId == existing.ProgramId && 
+                r.LevelId == existing.LevelId && 
+                r.AcademicSessionId == existing.AcademicSessionId &&
+                (LMS.Api.Data.Enums.Semester)r.Semester == existing.Semester);
+
+            if (matched == null)
+            {
+                // Remove from DB
+                dbContext.CourseOfferings.Remove(existing);
+            }
+            else
+            {
+                // Update properties
+                existing.LecturerId = matched.LecturerId;
+                // Remove from request so we don't add it again
+                requestOfferings.Remove(matched);
+            }
+        }
+
+        // 2. Add remaining request offerings as new
+        foreach (var reqOffering in requestOfferings)
+        {
+            var newOffering = new CourseOffering
             {
                 CourseId = id,
-                ProgramId = o.ProgramId,
-                LevelId = o.LevelId,
-                AcademicSessionId = o.AcademicSessionId,
-                LecturerId = o.LecturerId,
-                Semester = (LMS.Api.Data.Enums.Semester)o.Semester
-            });
+                ProgramId = reqOffering.ProgramId,
+                LevelId = reqOffering.LevelId,
+                AcademicSessionId = reqOffering.AcademicSessionId,
+                LecturerId = reqOffering.LecturerId,
+                Semester = (LMS.Api.Data.Enums.Semester)reqOffering.Semester
+            };
+            dbContext.CourseOfferings.Add(newOffering);
         }
 
         await courseRepository.UpdateAsync(course, ct);

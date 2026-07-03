@@ -20,7 +20,7 @@ public class CreateLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Post("timetable/slots");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("CreateLectureTimetableSlot")
             .WithTags("Timetable")

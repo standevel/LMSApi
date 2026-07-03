@@ -65,6 +65,7 @@ public sealed class GetAdminDashboardStatsEndpoint(LmsDbContext dbContext)
         // 3. Active Sessions (unique user activity in last 30 minutes based on AuditLogs)
         var activeSessions = await dbContext.AuditLogs
             .Where(log => log.Timestamp >= now.AddMinutes(-30))
+            .Where(log => log.UserId.HasValue)
             .Select(log => log.UserId)
             .Distinct()
             .CountAsync(ct);

@@ -162,9 +162,9 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             programsToImport = await dbContext.Programs.ToListAsync(ct);
         }
 
-        // Cache all existing courses by (ProgramId, Code) for program-specific lookups
+        // Cache all existing courses globally by Code for program-agnostic lookups
         var allCourses = (await dbContext.Courses.ToListAsync(ct))
-            .GroupBy(c => (c.ProgramId, c.Code.ToUpperInvariant()))
+            .GroupBy(c => Normalize(c.Code))
             .ToDictionary(g => g.Key, g => g.First());
 
         // Cache all existing AcademicLevels by (ProgramId, Name)
@@ -250,15 +250,15 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
 
                 var rowLevel = rowLevels[row.Level];
 
-                // Upsert Course - program-specific (same code can exist in different programs)
-                var courseKey = (program.Id, row.CourseCode.ToUpperInvariant());
+                // Upsert Course - globally (same code should not be duplicated across programs)
+                var courseKey = Normalize(row.CourseCode);
                 if (!allCourses.TryGetValue(courseKey, out var course))
                 {
                     course = new Course
                     {
                         Id = Guid.NewGuid(),
-                        ProgramId = program.Id,
-                        Code = row.CourseCode,
+                        ProgramId = program.Id, // The first program to import this course becomes the owner
+                        Code = row.CourseCode, // Preserves exact spacing and case from the file
                         Title = row.CourseTitle,
                         CreditUnits = row.CreditUnits,
                         LevelId = rowLevel.Id,
@@ -273,13 +273,23 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                 }
                 else
                 {
-                    course.Title = row.CourseTitle;
-                    course.CreditUnits = row.CreditUnits;
-                    course.LevelId = rowLevel.Id;
-                    course.Semester = row.Semester;
-                    course.LectureHours = row.LectureHours;
-                    course.PracticalHours = row.PracticalHours;
-                    coursesUpdated++;
+                    // Only update base course properties if the current program is the owner
+                    if (course.ProgramId == program.Id)
+                    {
+                        course.Title = row.CourseTitle;
+                        course.CreditUnits = row.CreditUnits;
+                        course.LevelId = rowLevel.Id;
+                        course.Semester = row.Semester;
+                        course.LectureHours = row.LectureHours;
+                        course.PracticalHours = row.PracticalHours;
+                        // Optionally update Code format to the latest import's format
+                        course.Code = row.CourseCode;
+                        coursesUpdated++;
+                    }
+                    else
+                    {
+                        coursesSkipped++;
+                    }
                 }
             }
 
@@ -289,7 +299,7 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             // Pass 2: link courses to curriculum
             foreach (var row in programRows)
             {
-                var courseKey = (program.Id, row.CourseCode.ToUpperInvariant());
+                var courseKey = Normalize(row.CourseCode);
                 var course = allCourses[courseKey];
                 var academicLevel = rowLevels[row.Level];
 

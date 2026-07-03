@@ -8,7 +8,7 @@ namespace LMS.Api.Services;
 public interface IStudentService
 {
     Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
-        string? search, string? programId, string? sessionId, string? status,
+        string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
         int page, int pageSize, CancellationToken ct);
 
     Task<StudentDetailDto?> GetStudentDetailAsync(Guid studentId, CancellationToken ct);
@@ -27,7 +27,7 @@ public interface IStudentService
 public class StudentService(LmsDbContext context) : IStudentService
 {
     public async Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
-        string? search, string? programId, string? sessionId, string? status,
+        string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
         int page, int pageSize, CancellationToken ct)
     {
         var query = context.Students
@@ -53,6 +53,24 @@ public class StudentService(LmsDbContext context) : IStudentService
         if (!string.IsNullOrWhiteSpace(programId) && Guid.TryParse(programId, out var progId))
         {
             query = query.Where(s => s.AcademicProgramId == progId);
+        }
+
+        // Filter by department
+        if (!string.IsNullOrWhiteSpace(departmentId) && Guid.TryParse(departmentId, out var deptId))
+        {
+            query = query.Where(s => s.AcademicProgram != null && s.AcademicProgram.DepartmentId == deptId);
+        }
+
+        // Filter by faculty
+        if (!string.IsNullOrWhiteSpace(facultyId) && Guid.TryParse(facultyId, out var facId))
+        {
+            query = query.Where(s => s.FacultyId == facId || (s.AcademicProgram != null && s.AcademicProgram.Department != null && s.AcademicProgram.Department.FacultyId == facId));
+        }
+
+        // Filter by level
+        if (!string.IsNullOrWhiteSpace(levelId) && Guid.TryParse(levelId, out var levId))
+        {
+            query = query.Where(s => s.LevelId == levId);
         }
 
         // Filter by session
@@ -88,6 +106,7 @@ public class StudentService(LmsDbContext context) : IStudentService
                 OfficialEmail = s.OfficialEmail,
                 Phone = s.Phone,
                 ProgramName = s.AcademicProgram != null ? s.AcademicProgram.Name : null,
+                DepartmentName = s.AcademicProgram != null && s.AcademicProgram.Department != null ? s.AcademicProgram.Department.Name : null,
                 FacultyName = s.Faculty != null ? s.Faculty.Name : null,
                 LevelName = s.Level != null ? s.Level.Name : null,
                 SessionName = s.AcademicSession != null ? s.AcademicSession.Name : null,

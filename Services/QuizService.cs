@@ -464,6 +464,74 @@ public class QuizService : BaseService, IQuizService
         return MapQuestionToDto(newQuestion);
     }
 
+    public Task<ErrorOr<QuestionImportTemplateDto>> GenerateQuestionImportTemplateAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult<ErrorOr<QuestionImportTemplateDto>>(
+            QuestionExcelImportHelper.GenerateTemplate("Question_Import_Template.xlsx"));
+    }
+
+    public async Task<ErrorOr<QuestionImportResultDto>> ImportQuizQuestionsAsync(Guid quizId, IFormFile excelFile, bool previewOnly = false, CancellationToken ct = default)
+    {
+        var quizExists = await _context.Quizzes.AnyAsync(q => q.Id == quizId, ct);
+        if (!quizExists) return Error.NotFound("Quiz.NotFound", "Quiz not found");
+
+        var parsed = await QuestionExcelImportHelper.ParseAsync(excelFile, ct);
+        if (parsed.IsError) return parsed.Errors;
+
+        var result = new QuestionImportResultDto
+        {
+            TotalRows = parsed.Value.Count,
+            PreviewOnly = previewOnly
+        };
+
+        var nextOrder = await _context.QuizQuestions
+            .Where(q => q.QuizId == quizId)
+            .MaxAsync(q => (int?)q.OrderIndex, ct) ?? 0;
+
+        var questions = new List<QuizQuestion>();
+        foreach (var row in parsed.Value)
+        {
+            var rowError = ValidateImportedQuestion(row);
+            if (rowError is not null)
+            {
+                result.Errors.Add(new QuestionImportRowErrorDto { RowNumber = row.RowNumber, Message = rowError });
+                continue;
+            }
+
+            nextOrder++;
+            result.Questions.Add(QuestionExcelImportHelper.ToPreview(row));
+            questions.Add(new QuizQuestion
+            {
+                QuizId = quizId,
+                QuestionText = row.QuestionText,
+                OrderIndex = nextOrder,
+                QuestionType = row.QuestionType,
+                Points = row.Points,
+                Difficulty = row.Difficulty,
+                Category = row.Category,
+                Tags = row.Tags,
+                Explanation = row.Explanation,
+                Options = row.Options.Select(option => new QuestionOption
+                {
+                    OptionText = option.Text,
+                    DisplayOrder = option.DisplayOrder,
+                    IsCorrectAnswer = option.IsCorrect
+                }).ToList()
+            });
+        }
+
+        result.ImportedCount = previewOnly ? 0 : questions.Count;
+        result.SkippedCount = result.Errors.Count;
+
+        if (!previewOnly && questions.Count > 0)
+        {
+            _context.QuizQuestions.AddRange(questions);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return result;
+    }
+
     public async Task<ErrorOr<List<QuizQuestionDto>>> AddQuestionsFromBankAsync(Guid quizId, AddQuestionsFromBankRequest request, CancellationToken ct = default)
     {
         var quiz = await _context.Quizzes.FirstOrDefaultAsync(q => q.Id == quizId, ct);
@@ -1557,5 +1625,29 @@ public class QuizService : BaseService, IQuizService
         timeExtension.Status = "Revoked";
         await _context.SaveChangesAsync(ct);
         return Result.Deleted;
+    }
+
+    private static string? ValidateImportedQuestion(QuestionImportRow row)
+    {
+        if (string.IsNullOrWhiteSpace(row.QuestionText))
+        {
+            return "Question text is required.";
+        }
+
+        var optionTypes = new[] { "MultipleChoice", "SingleChoice", "TrueFalse", "MCQ" };
+        if (optionTypes.Contains(row.QuestionType, StringComparer.OrdinalIgnoreCase))
+        {
+            if (row.Options.Count < 2)
+            {
+                return "At least two options are required for choice questions.";
+            }
+
+            if (!row.Options.Any(option => option.IsCorrect))
+            {
+                return "At least one correct option is required for choice questions.";
+            }
+        }
+
+        return null;
     }
 }

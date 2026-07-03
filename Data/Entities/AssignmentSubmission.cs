@@ -5,6 +5,7 @@ public sealed class AssignmentSubmission
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid AssignmentId { get; set; }
     public Guid SubmitterId { get; set; }
+    public Guid? GroupId { get; set; }
     public AssignmentSubmissionStatus Status { get; set; } = AssignmentSubmissionStatus.Draft;
     public DateTimeOffset? SubmittedAt { get; set; }
     public string SubmissionMetadataJson { get; set; } = "{}";
@@ -17,6 +18,7 @@ public sealed class AssignmentSubmission
     public Assignment Assignment { get; set; } = null!;
     public SubmissionGrade? Grade { get; set; }
 }
+
 
 public enum AssignmentSubmissionStatus
 {

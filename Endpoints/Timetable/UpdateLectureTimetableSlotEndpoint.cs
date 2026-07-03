@@ -18,7 +18,7 @@ public class UpdateLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Put("timetable/slots/{SlotId}");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("UpdateLectureTimetableSlot")
             .WithTags("Timetable")

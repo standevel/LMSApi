@@ -4,6 +4,7 @@ using LMS.Api.Endpoints.Admin;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
 using LMS.Api.Data.Enums;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.AcademicPrograms;
 
@@ -14,6 +15,7 @@ public sealed class UpdateAcademicProgramEndpoint(IAcademicProgramService progra
     {
         Put("admin/programs/{id}");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Summary(s =>
         {
             s.Summary = "Update an academic program";

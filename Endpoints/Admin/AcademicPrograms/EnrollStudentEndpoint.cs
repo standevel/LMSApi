@@ -3,6 +3,7 @@ using LMS.Api.Common.Extensions;
 using LMS.Api.Contracts;
 using LMS.Api.Endpoints.Admin;
 using LMS.Api.Services;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.AcademicPrograms;
 
@@ -13,6 +14,7 @@ public sealed class EnrollStudentEndpoint(ICurriculumService curriculumService)
     {
         Post("admin/programs/enroll");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Tags("Administration");
         Summary(s =>
         {

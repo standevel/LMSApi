@@ -26,13 +26,16 @@ public sealed class StudentListEndpoint : ApiEndpointWithoutRequest<StudentListR
 
         string? search = GetString(query, "search");
         string? programId = GetString(query, "programId");
+        string? departmentId = GetString(query, "departmentId");
+        string? facultyId = GetString(query, "facultyId");
+        string? levelId = GetString(query, "levelId");
         string? sessionId = GetString(query, "sessionId");
         string? status = GetString(query, "status");
         var page = GetInt(query, "page") ?? 1;
         var pageSize = GetInt(query, "pageSize") ?? 25;
 
         var (students, totalCount) = await _studentService.GetStudentsAsync(
-            search, programId, sessionId, status, page, pageSize, ct);
+            search, programId, departmentId, facultyId, levelId, sessionId, status, page, pageSize, ct);
 
         await SendSuccessAsync(new StudentListResponse
         {

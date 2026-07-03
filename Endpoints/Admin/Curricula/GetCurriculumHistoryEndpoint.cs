@@ -2,6 +2,7 @@ using FastEndpoints;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
 using Microsoft.AspNetCore.Authorization;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.Curricula;
 

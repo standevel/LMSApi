@@ -1,4 +1,8 @@
 using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using ClosedXML.Excel;
 using ErrorOr;
 using LMS.Api.Contracts;
@@ -713,6 +717,7 @@ public sealed class GradebookService : IGradebookService
         }
 
         return new GradeUploadResultDto(
+            Guid.Empty,
             totalRecords,
             successCount,
             totalRecords > 0 ? totalRecords - successCount : 0,
@@ -1593,6 +1598,7 @@ public sealed class GradebookService : IGradebookService
         Guid courseId,
         IFormFile excelFile,
         Guid userId,
+        Guid? uploadId = null,
         CancellationToken ct = default)
     {
         if (excelFile == null || excelFile.Length == 0)
@@ -1606,6 +1612,41 @@ public sealed class GradebookService : IGradebookService
         if (academicSession == null)
             return Error.NotFound("Session.NotFound", "Academic session not found");
 
+        var upload = await _dbContext.ClassterResultUploads
+            .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct);
+
+        if (upload != null)
+        {
+            upload.FileName = Path.GetFileName(excelFile.FileName) ?? excelFile.FileName;
+            upload.Status = ClassterUploadStatus.Processing;
+            upload.TotalRows = 0;
+            upload.ProcessedRows = 0;
+            upload.SuccessfulRows = 0;
+            upload.FailedRows = 0;
+            upload.UpdatedAt = DateTime.UtcNow;
+            upload.CompletedAt = null;
+        }
+        else
+        {
+            upload = new ClassterResultUpload
+            {
+                UploadId = uploadId ?? Guid.NewGuid(),
+                FileName = Path.GetFileName(excelFile.FileName) ?? excelFile.FileName,
+                AcademicSessionId = academicSessionId,
+                CourseId = courseId,
+                CreatedById = userId,
+                Status = ClassterUploadStatus.Processing,
+                TotalRows = 0,
+                ProcessedRows = 0,
+                SuccessfulRows = 0,
+                FailedRows = 0,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.ClassterResultUploads.Add(upload);
+        }
+
         var errors = new List<string>();
         var successfulRows = 0;
         var failedRows = 0;
@@ -1614,8 +1655,6 @@ public sealed class GradebookService : IGradebookService
         var provisionedUsers = 0;
         var provisionedEnrollments = 0;
 
-        // Track already-created course offerings to prevent duplicates within the same migration.
-        // Key format: "courseCode:sessionName:programId:levelId"
         var processedCourseOfferings = new Dictionary<string, CourseOffering>(StringComparer.OrdinalIgnoreCase);
 
         void AddRowError(int rowNumber, string message)
@@ -1635,14 +1674,18 @@ public sealed class GradebookService : IGradebookService
             if (worksheet == null)
             {
                 errors.Add("No worksheet found in Excel file");
-                return new GradeUploadResultDto(totalRecords, successfulRows, errors.Count, errors);
+                upload.Status = ClassterUploadStatus.Failed;
+                await _dbContext.SaveChangesAsync(ct);
+                return new GradeUploadResultDto(upload.UploadId, totalRecords, successfulRows, failedRows, errors);
             }
 
             var headerRow = FindHeaderRow(worksheet);
             if (headerRow == null)
             {
-                errors.Add("Could not find header row with required columns (identity number, first name, last name, ca1, exam)");
-                return new GradeUploadResultDto(totalRecords, successfulRows, errors.Count, errors);
+                errors.Add("Could not find header row with required columns (identity number, first name, last name)");
+                upload.Status = ClassterUploadStatus.Failed;
+                await _dbContext.SaveChangesAsync(ct);
+                return new GradeUploadResultDto(upload.UploadId, totalRecords, successfulRows, failedRows, errors);
             }
 
             var columnMap = BuildColumnMap(headerRow);
@@ -1650,6 +1693,7 @@ public sealed class GradebookService : IGradebookService
 
             foreach (var row in dataRows)
             {
+                var rowNumber = row.RowNumber();
                 try
                 {
                     var identityNumber = GetCellValue(row, columnMap, "identity number").Trim();
@@ -1659,54 +1703,133 @@ public sealed class GradebookService : IGradebookService
                         continue;
 
                     totalRecords++;
+                    upload.TotalRows++;
+
+                    var quizScore = TryGetDecimalCellValue(row, columnMap, new[] { "quiz" }, out var quiz) ? quiz : (decimal?)null;
+                    var assignmentScore = TryGetDecimalCellValue(row, columnMap, new[] { "assignment" }, out var assignment) ? assignment : (decimal?)null;
+                    var midsemesterScore = TryGetDecimalCellValue(row, columnMap, new[] { "midsemester test", "mid-semester test", "mid semester test" }, out var midsemester) ? midsemester : (decimal?)null;
+                    var examScore = TryGetDecimalCellValue(row, columnMap, new[] { "exam", "examination" }, out var exam) ? exam : (decimal?)null;
+
+                    var rowFingerprint = BuildFingerprint(upload.UploadId, identityNumber, firstName, lastName, quizScore, assignmentScore, midsemesterScore, examScore);
+                    var rawPayload = JsonSerializer.Serialize(new
+                    {
+                        IdentityNumber = identityNumber,
+                        FirstName = firstName,
+                        LastName = lastName,
+                        QuizScore = quizScore,
+                        AssignmentScore = assignmentScore,
+                        MidsemesterScore = midsemesterScore,
+                        ExamScore = examScore,
+                        RowValues = row.CellsUsed().Select(c => c.GetString()).ToArray()
+                    });
+
+                    var rowEntity = await _dbContext.ClassterResultUploadRows
+                        .FirstOrDefaultAsync(r => r.UploadId == upload.Id && r.RowNumber == rowNumber, ct);
+
+                    if (rowEntity == null)
+                    {
+                        rowEntity = new ClassterResultUploadRow
+                        {
+                            UploadId = upload.Id,
+                            RowNumber = rowNumber,
+                            CreatedAtUtc = DateTime.UtcNow
+                        };
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                    }
+
+                    rowEntity.ExternalStudentId = identityNumber;
+                    rowEntity.StudentName = string.Join(' ', new[] { firstName, lastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                    rowEntity.AssessmentType = "Classter Import";
+                    rowEntity.MarksObtained = examScore;
+                    rowEntity.AttemptNumber = null;
+                    rowEntity.Fingerprint = rowFingerprint;
+                    rowEntity.MappingStatus = "Pending";
+                    rowEntity.MappingReason = null;
+                    rowEntity.RawPayload = rawPayload;
+                    rowEntity.UpdatedAtUtc = DateTime.UtcNow;
 
                     if (string.IsNullOrWhiteSpace(identityNumber))
                     {
-                        AddRowError(row.RowNumber(), "Missing identity number");
+                        rowEntity.MappingStatus = "Failed";
+                        rowEntity.MappingReason = "Missing identity number";
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
+                        continue;
+                    }
+
+                    var existingRow = await _dbContext.ClassterResultUploadRows
+                        .FirstOrDefaultAsync(r => r.UploadId == upload.Id && r.Fingerprint == rowFingerprint && r.Id != rowEntity.Id, ct);
+                    if (existingRow != null)
+                    {
+                        rowEntity.MappingStatus = "Duplicate";
+                        rowEntity.MappingReason = "Duplicate row detected in the same upload";
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
                         continue;
                     }
 
                     var student = await FindStudentAsync(identityNumber, firstName, lastName, ct);
                     if (student == null)
                     {
-                        AddRowError(row.RowNumber(), $"Student not found (identity: {identityNumber})");
+                        rowEntity.MappingStatus = "Failed";
+                        rowEntity.MappingReason = $"Student not found (identity: {identityNumber})";
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
                         continue;
                     }
 
                     var (appUser, userCreated) = await ProvisionAppUserAsync(student, ct);
                     if (appUser == null)
                     {
-                        AddRowError(row.RowNumber(), $"Could not provision user for student (identity: {identityNumber})");
+                        rowEntity.MappingStatus = "Failed";
+                        rowEntity.MappingReason = $"Could not provision user for student (identity: {identityNumber})";
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
                         continue;
                     }
 
                     if (userCreated)
-                    {
                         provisionedUsers++;
-                    }
 
                     var courseOffering = await GetOrCreateCourseOfferingAsync(courseId, student, academicSessionId, ct, processedCourseOfferings);
                     if (courseOffering == null)
                     {
-                        AddRowError(row.RowNumber(), "Could not create course offering for student");
+                        rowEntity.MappingStatus = "Failed";
+                        rowEntity.MappingReason = "Could not create course offering for student";
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
                         continue;
                     }
 
+                    rowEntity.CourseOfferingId = courseOffering.Id;
+
                     var (enrollment, enrollmentCreated) = await ProvisionEnrollmentAsync(student, courseOffering, ct);
                     if (enrollmentCreated)
-                    {
                         provisionedEnrollments++;
-                    }
 
                     var categories = await EnsureAssessmentCategoriesAsync(courseOffering.Id, ct);
                     var assessments = await EnsureAssessmentsAsync(courseOffering.Id, categories, ct);
 
                     var gradeColumnAliases = new Dictionary<AssessmentCategoryType, string[]>
                     {
-                        { AssessmentCategoryType.CA1, ["ca1", "quiz"] },
-                        { AssessmentCategoryType.CA2, ["ca2", "assignment"] },
-                        { AssessmentCategoryType.CA3, ["ca3", "midsemester test", "mid-semester test", "mid semester test"] },
-                        { AssessmentCategoryType.Exam, ["exam", "examination"] }
+                        { AssessmentCategoryType.CA1, new[] { "quiz" } },
+                        { AssessmentCategoryType.CA2, new[] { "assignment" } },
+                        { AssessmentCategoryType.CA3, new[] { "midsemester test", "mid-semester test", "mid semester test" } },
+                        { AssessmentCategoryType.Exam, new[] { "exam", "examination" } }
                     };
 
                     var rowGradeUploads = 0;
@@ -1751,20 +1874,44 @@ public sealed class GradebookService : IGradebookService
 
                     if (rowGradeUploads == 0)
                     {
-                        AddRowError(row.RowNumber(), "No valid grade values found");
+                        rowEntity.MappingStatus = "Failed";
+                        rowEntity.MappingReason = "No valid grade values found";
+                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
+                        failedRows++;
+                        upload.FailedRows++;
+                        upload.ProcessedRows++;
+                        await _dbContext.SaveChangesAsync(ct);
                         continue;
                     }
 
+                    rowEntity.StudentId = student.Id;
+                    rowEntity.AssessmentId = null;
+                    rowEntity.MappingStatus = "Success";
+                    rowEntity.MappingReason = null;
+                    rowEntity.ProcessedAtUtc = DateTime.UtcNow;
+                    rowEntity.UpdatedAtUtc = DateTime.UtcNow;
+                    _dbContext.ClassterResultUploadRows.Add(rowEntity);
+
                     await _dbContext.SaveChangesAsync(ct);
+
                     uploadedGrades += rowGradeUploads;
                     successfulRows++;
+                    upload.SuccessfulRows++;
+                    upload.ProcessedRows++;
                 }
                 catch (Exception ex)
                 {
                     _dbContext.ChangeTracker.Clear();
-                    AddRowError(row.RowNumber(), ex.Message);
+                    AddRowError(rowNumber, ex.Message);
+                    upload.FailedRows++;
+                    upload.ProcessedRows++;
                 }
             }
+
+            upload.Status = upload.FailedRows == upload.TotalRows ? ClassterUploadStatus.Failed : ClassterUploadStatus.Completed;
+            upload.UpdatedAt = DateTime.UtcNow;
+            upload.CompletedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(ct);
 
             var auditMessage = $"Classter migration: {uploadedGrades} grades uploaded";
             if (provisionedUsers > 0)
@@ -1778,13 +1925,33 @@ public sealed class GradebookService : IGradebookService
         catch (Exception ex)
         {
             errors.Add($"Error processing file: {ex.Message}");
+            upload.Status = ClassterUploadStatus.Failed;
+            upload.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(ct);
         }
 
         return new GradeUploadResultDto(
+            upload.UploadId,
             totalRecords,
             successfulRows,
             failedRows,
             errors);
+    }
+
+    private string BuildFingerprint(Guid uploadId, string identityNumber, string firstName, string lastName, decimal? quizScore, decimal? assignmentScore, decimal? midsemesterScore, decimal? examScore)
+    {
+        var payload = string.Join("|", uploadId.ToString(), NormalizeValue(identityNumber), NormalizeValue(firstName), NormalizeValue(lastName), quizScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty, assignmentScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty, midsemesterScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty, examScore?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+        using var sha256 = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash);
+    }
+
+    private string NormalizeValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().Replace("\r", " ").Replace("\n", " ").Replace("\t", " ").ToLowerInvariant();
     }
 
     private IXLRow? FindHeaderRow(IXLWorksheet worksheet)

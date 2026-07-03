@@ -12,6 +12,7 @@ public sealed record AssignmentDto(
     string AllowedExtensions,
     int MaxFileSizeMb,
     bool IsGroupAssignment,
+    int? MaxGroupSize,
     string ReleaseConditionsJson,
     List<Guid> TargetProgramIds,
     DateTimeOffset CreatedAt,
@@ -21,6 +22,7 @@ public sealed record AssignmentSubmissionDto(
     Guid Id,
     Guid AssignmentId,
     Guid SubmitterId,
+    Guid? GroupId,
     string Status,
     DateTimeOffset? SubmittedAt,
     string SubmissionMetadataJson,
@@ -51,6 +53,7 @@ public class UpsertAssignmentRequest
     public string AllowedExtensions { get; set; } = "pdf,docx,zip";
     public int MaxFileSizeMb { get; set; } = 50;
     public bool IsGroupAssignment { get; set; }
+    public int? MaxGroupSize { get; set; }
     public string ReleaseConditionsJson { get; set; } = "{}";
     public List<Guid> TargetProgramIds { get; set; } = new();
 }
@@ -70,4 +73,37 @@ public sealed class GradeSubmissionRequest
     public string? FeedbackText { get; set; }
     public string? FeedbackMediaUrl { get; set; }
     public string RubricExecutionJson { get; set; } = "{}";
+}
+
+// ── Assignment Groups ──────────────────────────────────────────────────────────
+
+public sealed record AssignmentGroupDto(
+    Guid Id,
+    Guid AssignmentId,
+    string Name,
+    List<Guid> MemberStudentIds,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record EnrolledStudentDto(
+    Guid UserId,
+    string DisplayName,
+    string? Email,
+    string? StudentNumber);
+
+public class CreateGroupRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public List<Guid> StudentIds { get; set; } = new();
+}
+
+public class UpdateGroupRequest
+{
+    public string? Name { get; set; }
+    public List<Guid>? StudentIds { get; set; }
+}
+
+public class AutoGroupRequest
+{
+    public int MaxPerGroup { get; set; } = 4;
 }

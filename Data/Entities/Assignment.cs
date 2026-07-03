@@ -13,6 +13,7 @@ public sealed class Assignment
     public string AllowedExtensions { get; set; } = "pdf,docx,zip";
     public int MaxFileSizeMb { get; set; } = 50;
     public bool IsGroupAssignment { get; set; }
+    public int? MaxGroupSize { get; set; }
     public string ReleaseConditionsJson { get; set; } = "{}";
     public string TargetProgramIdsJson { get; set; } = "[]";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;

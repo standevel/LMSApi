@@ -28,14 +28,14 @@ public interface IAdmissionService
     // Admin Methods
     Task<AdmissionApplication?> GetApplicationByIdAsync(Guid id);
     Task<IEnumerable<AdmissionApplication>> GetApplicationsAsync(AdmissionStatus? status = null, Guid? sessionId = null);
-    Task<AdmissionApplication> UpdateApplicationStatusAsync(Guid id, AdmissionStatus status);
+    Task<AdmissionApplication> UpdateApplicationStatusAsync(Guid id, AdmissionStatus status, Guid? updatedBy = null);
     Task<AdmissionApplication> RespondToOfferAsync(Guid id, bool acceptOffer);
     Task<IEnumerable<AutoAdmitResult>> AutoAdmitAsync(Guid sessionId, bool isDryRun);
     Task<AcademicProgram> UpdateProgramCriteriaAsync(Guid programId, int minScore, int maxAdmissions, string jambSubjectsJson, string oLevelSubjectsJson);
     Task<TransferValidationResult> ValidateTransferEligibilityAsync(Guid applicationId);
 
     // Registrar Methods - Student Account Creation
-    Task<StudentAccountCreationResult> CreateStudentAccountAsync(Guid applicationId, CancellationToken ct = default);
+    Task<StudentAccountCreationResult> CreateStudentAccountAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default);
     Task<List<PendingStudentAccountDto>> GetPendingStudentAccountsAsync(CancellationToken ct = default);
     
     // Document Auto-Suggestion

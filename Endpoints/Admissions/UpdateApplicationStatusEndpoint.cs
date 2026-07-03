@@ -13,13 +13,13 @@ namespace LMS.Api.Endpoints.Admissions;
 
 public sealed record UpdateStatusRequest(Guid Id, string Status);
 
-public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionService)
+public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionService, ICurrentUserContext currentUserContext)
     : ApiEndpoint<UpdateStatusRequest, AdmissionApplicationResponse>
 {
     public override void Configure()
     {
         Patch("admissions/status/{Id}");
-        Policies(LmsPolicies.Management);
+        Policies(LmsPolicies.AdmissionsManagement);
         Tags("Admissions");
         Description(d => d
             .WithName("Update Application Status") 
@@ -37,7 +37,8 @@ public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionS
 
         try
         {
-            var app = await admissionService.UpdateApplicationStatusAsync(req.Id, status);
+            var userId = await currentUserContext.GetUserIdAsync(ct);
+            var app = await admissionService.UpdateApplicationStatusAsync(req.Id, status, userId);
 
             var response = new AdmissionApplicationResponse(
                 app.Id,

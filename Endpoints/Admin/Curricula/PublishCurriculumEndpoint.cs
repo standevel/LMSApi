@@ -2,6 +2,7 @@ using FastEndpoints;
 using LMS.Api.Endpoints.Admin;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.Curricula;
 
@@ -12,6 +13,7 @@ public sealed class PublishCurriculumEndpoint(ICurriculumService curriculumServi
     {
         Post("admin/curricula/{id}/publish");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Tags("Administration");
         Summary(s =>
         {

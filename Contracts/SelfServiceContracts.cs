@@ -44,7 +44,9 @@ public record RegistrationSummaryDto(
     string ProgramName = "",
     string LevelName = "",
     string RegistrationStrategy = "Single",
-    int MinCredits = 0);
+    int MinCredits = 0,
+    bool RegistrationVerified = false,
+    DateTime? RegistrationVerifiedAtUtc = null);
 
 public record WaitlistDto(
     Guid Id,

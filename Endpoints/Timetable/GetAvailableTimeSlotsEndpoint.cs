@@ -9,7 +9,7 @@ public class GetAvailableTimeSlotsEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Get("timetable/available-slots/{LecturerId}/{DayOfWeek}");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("GetAvailableTimeSlots")
             .WithTags("Timetable")

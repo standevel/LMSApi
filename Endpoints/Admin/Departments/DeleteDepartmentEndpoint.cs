@@ -1,5 +1,6 @@
 using FastEndpoints;
 using LMS.Api.Services;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.Departments;
 
@@ -15,6 +16,7 @@ public sealed class DeleteDepartmentEndpoint(IDepartmentService departmentServic
     {
         Delete("admin/departments/{id:guid}");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Tags("Administration");
         Summary(s =>
         {

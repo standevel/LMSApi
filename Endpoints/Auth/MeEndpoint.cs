@@ -142,9 +142,9 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
             dbUserId = parsedGuid;
         }
 
-        var data = new MeResponse(dbUserId, name, email, objectId, roles);
+        var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId);
         await Send.OkAsync(ApiResponse<MeResponse>.Ok(data), ct);
     }
 }
 
-public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles);
+public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles, Guid? DepartmentId = null, Guid? FacultyId = null);

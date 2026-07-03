@@ -14,7 +14,7 @@ public sealed class UpdateDocumentStatusEndpoint(IDocumentService documentServic
     public override void Configure()
     {
         Patch("admissions/documents/{Id}/status");
-        Policies(LMS.Api.Security.LmsPolicies.Management);
+        Policies(LMS.Api.Security.LmsPolicies.AdmissionsManagement);
         Tags("Admissions");
         Description(d => d
             .WithName("Update Document Status") 

@@ -52,7 +52,12 @@ public sealed record ManagedUserDetail(
     DateTime UpdatedUtc,
     IReadOnlyCollection<string> Roles,
     IReadOnlyCollection<ManagedUserPermissionOverride> PermissionOverrides,
-    IReadOnlyCollection<string> EffectivePermissions);
+    IReadOnlyCollection<string> EffectivePermissions,
+    Guid? DepartmentId = null,
+    Guid? FacultyId = null,
+    string? AcademicProgramName = null,
+    string? LevelName = null,
+    Guid? StudentId = null);
 
 public sealed record ListManagedUsersResult(
     bool Success,

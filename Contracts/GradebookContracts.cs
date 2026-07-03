@@ -193,6 +193,7 @@ public record GradebookExcelTemplateDto(
     string ContentType);
 
 public record GradeUploadResultDto(
+    Guid UploadId,
     int TotalRecords,
     int SuccessfulUploads,
     int FailedUploads,

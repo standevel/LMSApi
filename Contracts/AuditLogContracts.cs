@@ -10,7 +10,16 @@ public record AuditLogDto(
     string? Changes,
     Guid? UserId,
     string? PerformedBy,
-    DateTime Timestamp);
+    DateTime Timestamp,
+    string? HttpMethod = null,
+    string? Path = null,
+    string? QueryString = null,
+    int? StatusCode = null,
+    string? IpAddress = null,
+    string? UserAgent = null,
+    string? CorrelationId = null,
+    string? RequestContentType = null,
+    string? RequestBodyJson = null);
 
 public record GetAuditLogsRequest(
     string? EntityName = null,

@@ -193,6 +193,85 @@ public sealed class AddQuizQuestionEndpoint(IQuizService quizService)
     }
 }
 
+public sealed class DownloadQuizQuestionImportTemplateEndpoint(IQuizService quizService)
+    : ApiEndpointWithoutRequest<object>
+{
+    public override void Configure()
+    {
+        Get("quizzes/questions/import-template");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var result = await quizService.GenerateQuestionImportTemplateAsync(ct);
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        var template = result.Value;
+        HttpContext.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{template.FileName}\"";
+        HttpContext.Response.ContentType = template.ContentType;
+        await HttpContext.Response.Body.WriteAsync(template.FileContent, ct);
+        await HttpContext.Response.CompleteAsync();
+    }
+}
+
+public sealed class PreviewQuizQuestionsImportEndpoint(IQuizService quizService)
+    : ApiEndpointWithoutRequest<QuestionImportResultDto>
+{
+    public override void Configure()
+    {
+        Post("quizzes/{QuizId:guid}/questions/import/preview");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        AllowFileUploads();
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var quizId = Route<Guid>("QuizId");
+        var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        if (file is null)
+        {
+            await SendFailureAsync(400, "No file uploaded", "FILE_REQUIRED", "Please upload an Excel file", ct);
+            return;
+        }
+
+        var result = await quizService.ImportQuizQuestionsAsync(quizId, file, previewOnly: true, ct: ct);
+        await SendAsync(result, ct);
+    }
+}
+
+public sealed class ImportQuizQuestionsEndpoint(IQuizService quizService)
+    : ApiEndpointWithoutRequest<QuestionImportResultDto>
+{
+    public override void Configure()
+    {
+        Post("quizzes/{QuizId:guid}/questions/import");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        AllowFileUploads();
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var quizId = Route<Guid>("QuizId");
+        var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        if (file is null)
+        {
+            await SendFailureAsync(400, "No file uploaded", "FILE_REQUIRED", "Please upload an Excel file", ct);
+            return;
+        }
+
+        var result = await quizService.ImportQuizQuestionsAsync(quizId, file, previewOnly: false, ct: ct);
+        await SendAsync(result, ct);
+    }
+}
+
 public sealed class AddQuestionsFromBankEndpoint(IQuizService quizService)
     : ApiEndpoint<AddQuestionsFromBankEndpoint.AddQuestionsFromBankEndpointRequest, List<QuizQuestionDto>>
 {

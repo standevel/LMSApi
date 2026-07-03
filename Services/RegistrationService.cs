@@ -37,6 +37,9 @@ public class RegistrationService : BaseService, IRegistrationService
             if (offering is null)
                 return Error.NotFound("CourseOffering.NotFound", "Course offering not found.");
 
+            if (await IsRegistrationLockedAsync(studentId, offering.AcademicSessionId, ct))
+                return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
+
             var blockers = await GetBlockersAsync(studentId, offering, ct);
             if (blockers.Count > 0)
                 return Error.Validation(blockers[0].Code, blockers[0].Message);
@@ -88,6 +91,9 @@ public class RegistrationService : BaseService, IRegistrationService
         if (session == null || !session.IsActive || DateTime.UtcNow > session.EndDate)
             return Error.Conflict("Registration.SemesterEnded", "You cannot drop a course after the academic session has ended.");
 
+        if (await IsRegistrationLockedAsync(studentId, session.Id, ct))
+            return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
+
         var isPublished = await _context.GradePublications
             .AnyAsync(x => x.CourseOfferingId == enrollment.CourseOfferingId && x.IsVisibleToStudents, ct);
         if (isPublished)
@@ -113,6 +119,14 @@ public class RegistrationService : BaseService, IRegistrationService
         {
             return Error.Validation("InvalidInput", "Current course offering and new course offering must be different.");
         }
+
+        var currentOffering = await _context.CourseOfferings.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == currentCourseOfferingId, ct);
+        if (currentOffering is null)
+            return Error.NotFound("CourseOffering.NotFound", "Current course offering not found.");
+
+        if (await IsRegistrationLockedAsync(studentId, currentOffering.AcademicSessionId, ct))
+            return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
 
         // Verify student is enrolled in the current course offering
         var currentProgramId = await GetProgramIdFromOffering(currentCourseOfferingId, ct);
@@ -386,9 +400,10 @@ public class RegistrationService : BaseService, IRegistrationService
             var configEmpty = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
                 ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
 
+            var emptyVerification = await GetRegistrationVerificationAsync(studentId, session.Id, ct);
             return new RegistrationSummaryDto(studentId, studentName, session.Id, session.Name,
                 0, 0, new List<CourseRegistrationDto>(), emptyOptionDtos, programName, levelName,
-                configEmpty.Strategy, 0);
+                configEmpty.Strategy, 0, emptyVerification is not null, emptyVerification?.VerifiedAtUtc);
         }
 
         var levels = await _context.Levels.AsNoTracking()
@@ -484,9 +499,10 @@ public class RegistrationService : BaseService, IRegistrationService
                 .SumAsync(cc => (int?)cc.CreditUnits, ct) ?? 0;
         }
 
+        var verification = await GetRegistrationVerificationAsync(studentId, session.Id, ct);
         return new RegistrationSummaryDto(studentId, studentName, session.Id, session.Name,
             registeredDtos.Sum(x => x.CreditUnits), maxCredits, registeredDtos, optionDtos, programName, levelName,
-            config.Strategy, minCredits);
+            config.Strategy, minCredits, verification is not null, verification?.VerifiedAtUtc);
     }
 
     private async Task<List<RegistrationBlockerDto>> GetBlockersAsync(Guid studentId, CourseOffering offering, CancellationToken ct)
@@ -673,6 +689,14 @@ public class RegistrationService : BaseService, IRegistrationService
         return course?.CreditUnits ?? 0;
     }
 
+    private async Task<RegistrationVerification?> GetRegistrationVerificationAsync(Guid studentId, Guid academicSessionId, CancellationToken ct) =>
+        await _context.RegistrationVerifications.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.StudentId == studentId && x.AcademicSessionId == academicSessionId && x.Status == "Verified", ct);
+
+    private async Task<bool> IsRegistrationLockedAsync(Guid studentId, Guid academicSessionId, CancellationToken ct) =>
+        await _context.RegistrationVerifications.AsNoTracking()
+            .AnyAsync(x => x.StudentId == studentId && x.AcademicSessionId == academicSessionId && x.Status == "Verified", ct);
+
     public async Task<ErrorOr<RegistrationSummaryDto>> RegisterCoursesBulk(Guid studentId, List<Guid> courseOfferingIds, CancellationToken ct = default)
     {
         if (studentId == Guid.Empty)
@@ -692,6 +716,9 @@ public class RegistrationService : BaseService, IRegistrationService
         var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
         if (session is null)
             return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
+
+        if (await IsRegistrationLockedAsync(studentId, session.Id, ct))
+            return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
 
         // Get student program enrollment
         var programmeEnrollment = await _context.Enrollments.AsNoTracking()

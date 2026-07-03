@@ -21,7 +21,12 @@ public sealed record ManagedUserDetailResponse(
     DateTime UpdatedUtc,
     IReadOnlyCollection<string> Roles,
     IReadOnlyCollection<ManagedUserPermissionOverrideResponse> PermissionOverrides,
-    IReadOnlyCollection<string> EffectivePermissions);
+    IReadOnlyCollection<string> EffectivePermissions,
+    Guid? DepartmentId = null,
+    Guid? FacultyId = null,
+    string? AcademicProgramName = null,
+    string? LevelName = null,
+    Guid? StudentId = null);
 
 public sealed class GetManagedUserEndpoint(IAdminAuthzService adminAuthzService)
     : ApiEndpointWithoutRequest<ManagedUserDetailResponse>
@@ -66,7 +71,12 @@ public sealed class GetManagedUserEndpoint(IAdminAuthzService adminAuthzService)
                     x.ExpiresUtc,
                     x.IsActive))
                 .ToArray(),
-            result.User.EffectivePermissions);
+            result.User.EffectivePermissions,
+            result.User.DepartmentId,
+            result.User.FacultyId,
+            result.User.AcademicProgramName,
+            result.User.LevelName,
+            result.User.StudentId);
 
         await SendSuccessAsync(data, ct);
     }

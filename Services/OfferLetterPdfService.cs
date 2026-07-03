@@ -23,7 +23,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
             container.Page(page =>
             {
                  page.Size(PageSizes.A4);
-                 page.Margin(0.85f, Unit.Inch);
+                 page.Margin(0.6f, Unit.Inch);
                  page.PageColor(Colors.White);
                  page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Verdana));
 
@@ -81,7 +81,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
                 page.Footer().Column(fcol => {
                     // Decorative Bottom Bar
-                    fcol.Item().Height(8).Row(row => {
+                    fcol.Item().Height(5).Row(row => {
                         row.RelativeItem().Background("#10B981"); // Teal-ish (Wigwe Teal)
                         row.RelativeItem().Background("#059669"); // Green (Wigwe Green)
                         row.RelativeItem().Background("#0F172A"); // Dark Blue / Slate 900
@@ -126,7 +126,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                 col.Item().PaddingBottom(15).Text(dateStr).FontSize(11).Bold().FontColor("#1E293B");
                 break;
             case "subject":
-                col.Item().PaddingBottom(25).Text(rawContent).FontSize(22).Bold().FontColor("#0F172A").LineHeight(1.1f);
+                col.Item().PaddingBottom(25).Text(rawContent).FontSize(20).Bold().FontColor("#0F172A").LineHeight(1.1f);
                 break;
             case "text":
                 RenderHtmlContent(col, rawContent);
@@ -197,11 +197,6 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                         ? template.SignatoryPosition
                         : "Registrar";
                     s.Item().Text(signatoryPosition.ToUpper()).FontSize(9).Bold().FontColor("#64748B");
-                    
-                    var institution = template != null && !string.IsNullOrEmpty(template.HeaderTitle)
-                        ? template.HeaderTitle
-                        : "Wigwe University";
-                    s.Item().Text(institution).FontSize(9).Bold().FontColor("#64748B");
                 });
                 break;
         }
@@ -262,7 +257,7 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
     private void RenderStaticRecipient(ColumnDescriptor col, AdmissionApplication application)
     {
-        col.Item().PaddingBottom(30).Column(c =>
+        col.Item().PaddingBottom(10).Column(c =>
         {
             c.Item().Text("ADMISSION OFFER TO:").FontSize(8).Bold().FontColor("#94A3B8").LetterSpacing(0.1f);
             var fullName = $"{application.FirstName} {application.MiddleName} {application.LastName}".Trim();
@@ -279,18 +274,9 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
                     var state = root.TryGetProperty("state", out var s) ? s.GetString() : null;
                     var country = root.TryGetProperty("country", out var co) ? co.GetString() : "Nigeria";
 
-                    if (!string.IsNullOrEmpty(address))
-                        c.Item().PaddingTop(2).Text(address).FontSize(10).FontColor("#475569");
-                    
-                    var cityState = string.Join(", ", new[] { city, state, country }.Where(x => !string.IsNullOrEmpty(x)));
-                    if (!string.IsNullOrEmpty(cityState))
-                        c.Item().Text(cityState).FontSize(10).FontColor("#475569");
-                }
+                   }
                 catch { /* Skip address */ }
             }
-
-            c.Item().PaddingTop(5).Text($"EMAIL: {application.StudentEmail ?? "N/A"}").FontSize(9).FontColor("#64748B");
-            c.Item().Text($"APPLICATION ID: {application.ApplicationNumber ?? "N/A"}").FontSize(9).FontColor("#64748B");
         });
     }
 

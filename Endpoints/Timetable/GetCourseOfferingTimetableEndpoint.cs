@@ -10,7 +10,7 @@ public class GetCourseOfferingTimetableEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Get("timetable/course-offering/{CourseOfferingId}");
-        Roles("Admin", "Registrar", "SuperAdmin", "Lecturer");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin", "Lecturer");
         Description(d => d
             .WithName("GetCourseOfferingTimetable")
             .WithTags("Timetable")

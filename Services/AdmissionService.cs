@@ -624,7 +624,7 @@ public sealed class AdmissionService(
             .ToListAsync();
     }
 
-    public async Task<AdmissionApplication> UpdateApplicationStatusAsync(Guid id, AdmissionStatus status)
+    public async Task<AdmissionApplication> UpdateApplicationStatusAsync(Guid id, AdmissionStatus status, Guid? updatedBy = null)
     {
         var app = await dbContext.AdmissionApplications
             .Include(a => a.AcademicSession)
@@ -639,12 +639,25 @@ public sealed class AdmissionService(
         var oldStatus = app.Status;
         app.Status = status;
         app.UpdatedAt = DateTime.UtcNow;
+        
+        if (oldStatus != status)
+        {
+            dbContext.AuditLogs.Add(new AuditLog
+            {
+                Action = "Update Status",
+                EntityName = nameof(AdmissionApplication),
+                EntityId = app.Id.ToString(),
+                Changes = $"Status changed from {oldStatus} to {status}",
+                UserId = updatedBy
+            });
+        }
+        
         await dbContext.SaveChangesAsync();
 
         // Workflow Notifications
         if (oldStatus != status)
         {
-            await HandleStatusChangeNotificationsAsync(app, status);
+            await HandleStatusChangeNotificationsAsync(app, status, updatedBy);
         }
 
         return app;
@@ -681,7 +694,7 @@ public sealed class AdmissionService(
         return app;
     }
 
-    private async Task HandleStatusChangeNotificationsAsync(AdmissionApplication app, AdmissionStatus newStatus)
+    private async Task HandleStatusChangeNotificationsAsync(AdmissionApplication app, AdmissionStatus newStatus, Guid? updatedBy = null)
     {
         try
         {
@@ -711,6 +724,17 @@ public sealed class AdmissionService(
                             pdfAttachment: pdf,
                             fileName: "Admission_Letter.pdf"
                         );
+                        
+                        dbContext.AuditLogs.Add(new AuditLog
+                        {
+                            Action = "Send Offer Letter",
+                            EntityName = nameof(AdmissionApplication),
+                            EntityId = app.Id.ToString(),
+                            Changes = $"Sent offer letter for program {app.AcademicProgram?.Name}",
+                            UserId = updatedBy
+                        });
+                        await dbContext.SaveChangesAsync();
+                        
                         logger.LogInformation("[ADMITTED] Admission offer email sent to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
                     }
                     catch (Exception ex)
@@ -1139,7 +1163,7 @@ public sealed class AdmissionService(
     /// Creates a student account for an accepted admission application.
     /// This is called by the Registrar to manually trigger account creation.
     /// </summary>
-    public async Task<StudentAccountCreationResult> CreateStudentAccountAsync(Guid applicationId, CancellationToken ct = default)
+    public async Task<StudentAccountCreationResult> CreateStudentAccountAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default)
     {
         logger.LogInformation("[REGISTRAR-ACCOUNT-CREATION] Starting account creation for application {ApplicationId}", applicationId);
 
@@ -1217,6 +1241,16 @@ public sealed class AdmissionService(
             await dbContext.SaveChangesAsync(ct);
 
             app.StudentId = student.Id;
+            
+            dbContext.AuditLogs.Add(new AuditLog
+            {
+                Action = "Create Student Account",
+                EntityName = nameof(AdmissionApplication),
+                EntityId = app.Id.ToString(),
+                Changes = $"Created Entra ID account and Student record (StudentId: {student.Id})",
+                UserId = updatedBy
+            });
+            
             await dbContext.SaveChangesAsync(ct);
 
             logger.LogInformation("[REGISTRAR-STUDENT-CREATION] Student record created: StudentId={StudentId}", student.Id);

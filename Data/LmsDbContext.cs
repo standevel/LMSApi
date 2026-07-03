@@ -90,6 +90,9 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
       public DbSet<ScheduleAdjustmentRequest> ScheduleAdjustmentRequests => Set<ScheduleAdjustmentRequest>();
       public DbSet<PrerequisiteOverride> PrerequisiteOverrides => Set<PrerequisiteOverride>();
       public DbSet<ProgramSwitchRequest> ProgramSwitchRequests => Set<ProgramSwitchRequest>();
+      public DbSet<CourseAdviserAssignment> CourseAdviserAssignments => Set<CourseAdviserAssignment>();
+      public DbSet<AdvisingNote> AdvisingNotes => Set<AdvisingNote>();
+      public DbSet<RegistrationVerification> RegistrationVerifications => Set<RegistrationVerification>();
 
       // Assessment Engine (Phase 2)
       public DbSet<Quiz> Quizzes => Set<Quiz>();
@@ -109,6 +112,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
       public DbSet<QuizFeedback> QuizFeedbacks => Set<QuizFeedback>();
       public DbSet<CbtHall> CbtHalls => Set<CbtHall>();
       public DbSet<Assignment> Assignments => Set<Assignment>();
+      public DbSet<AssignmentGroup> AssignmentGroups => Set<AssignmentGroup>();
       public DbSet<AssignmentSubmission> AssignmentSubmissions => Set<AssignmentSubmission>();
       public DbSet<SubmissionGrade> SubmissionGrades => Set<SubmissionGrade>();
 
@@ -130,6 +134,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
       public DbSet<ParentGuardian> ParentGuardians => Set<ParentGuardian>();
       public DbSet<ParentStudentLink> ParentStudentLinks => Set<ParentStudentLink>();
       public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+      public DbSet<ClassterResultUpload> ClassterResultUploads => Set<ClassterResultUpload>();
+      public DbSet<ClassterResultUploadRow> ClassterResultUploadRows => Set<ClassterResultUploadRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -412,10 +418,19 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.EntityName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.EntityId).HasMaxLength(100).IsRequired();
             entity.Property(x => x.Changes).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.HttpMethod).HasMaxLength(10);
+            entity.Property(x => x.Path).HasMaxLength(1024);
+            entity.Property(x => x.QueryString).HasMaxLength(2048);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
+            entity.Property(x => x.CorrelationId).HasMaxLength(128);
+            entity.Property(x => x.RequestContentType).HasMaxLength(256);
+            entity.Property(x => x.RequestBodyJson).HasColumnType("nvarchar(max)");
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => x.Timestamp);
             entity.HasIndex(x => x.EntityName);
             entity.HasIndex(x => x.EntityId);
+            entity.HasIndex(x => x.CorrelationId);
         });
 
         modelBuilder.Entity<DocumentType>(entity =>
@@ -824,6 +839,45 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.StudentId);
         });
 
+        modelBuilder.Entity<ClassterResultUpload>(entity =>
+        {
+            entity.ToTable("ClassterResultUploads");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+            entity.Property(x => x.TotalRows).IsRequired();
+            entity.Property(x => x.ProcessedRows).IsRequired();
+            entity.Property(x => x.SuccessfulRows).IsRequired();
+            entity.Property(x => x.FailedRows).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt).IsRequired();
+            entity.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.UploadId).IsUnique();
+            entity.HasIndex(x => x.AcademicSessionId);
+            entity.HasIndex(x => x.CourseId);
+            entity.HasIndex(x => x.CreatedById);
+        });
+
+        modelBuilder.Entity<ClassterResultUploadRow>(entity =>
+        {
+            entity.ToTable("ClassterResultUploadRows");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExternalStudentId).HasMaxLength(128);
+            entity.Property(x => x.StudentName).HasMaxLength(256);
+            entity.Property(x => x.AssessmentType).HasMaxLength(100);
+            entity.Property(x => x.MarksObtained).HasPrecision(9, 4);
+            entity.Property(x => x.Fingerprint).HasMaxLength(64);
+            entity.Property(x => x.MappingStatus).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.MappingReason).HasMaxLength(512);
+            entity.Property(x => x.RawPayload).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).IsRequired();
+            entity.HasOne(x => x.Upload).WithMany(x => x.Rows).HasForeignKey(x => x.UploadId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.UploadId);
+            entity.HasIndex(x => new { x.UploadId, x.Fingerprint }).IsUnique();
+            entity.HasIndex(x => new { x.UploadId, x.RowNumber }).IsUnique();
+        });
+
         modelBuilder.Entity<GradeApproval>(entity =>
         {
             entity.ToTable("GradeApprovals");
@@ -903,6 +957,86 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.EmergencyContactName).HasFilter("[EmergencyContactName] IS NOT NULL");
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
+        });
+
+        modelBuilder.Entity<CourseAdviserAssignment>(entity =>
+        {
+            entity.ToTable("CourseAdviserAssignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Note).HasMaxLength(500);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Adviser)
+                .WithMany()
+                .HasForeignKey(x => x.AdviserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AssignedBy)
+                .WithMany()
+                .HasForeignKey(x => x.AssignedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.StudentId, x.Status })
+                .IsUnique()
+                .HasFilter("[Status] = 'Active'");
+            entity.HasIndex(x => new { x.AdviserId, x.Status });
+            entity.HasIndex(x => x.Source);
+        });
+
+        modelBuilder.Entity<AdvisingNote>(entity =>
+        {
+            entity.ToTable("AdvisingNotes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Adviser)
+                .WithMany()
+                .HasForeignKey(x => x.AdviserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.StudentId);
+            entity.HasIndex(x => x.AdviserId);
+            entity.HasIndex(x => x.FollowUpDateUtc);
+        });
+
+        modelBuilder.Entity<RegistrationVerification>(entity =>
+        {
+            entity.ToTable("RegistrationVerifications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Remarks).HasMaxLength(1000);
+            entity.Property(x => x.UnlockReason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AcademicSession)
+                .WithMany()
+                .HasForeignKey(x => x.AcademicSessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VerifiedByAdviser)
+                .WithMany()
+                .HasForeignKey(x => x.VerifiedByAdviserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.UnlockedBy)
+                .WithMany()
+                .HasForeignKey(x => x.UnlockedById)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasIndex(x => new { x.StudentId, x.AcademicSessionId, x.Status })
+                .IsUnique()
+                .HasFilter("[Status] = 'Verified'");
+            entity.HasIndex(x => x.VerifiedByAdviserId);
         });
 
 
@@ -1865,6 +1999,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.AllowedExtensions).HasMaxLength(500).IsRequired();
             entity.Property(x => x.MaxFileSizeMb).HasDefaultValue(50);
             entity.Property(x => x.IsGroupAssignment).HasDefaultValue(false);
+            entity.Property(x => x.MaxGroupSize);
             entity.Property(x => x.ReleaseConditionsJson).HasColumnType("nvarchar(max)").IsRequired();
             entity.Property(x => x.TargetProgramIdsJson).HasColumnType("nvarchar(max)").IsRequired();
             entity.Property(x => x.CreatedAt).IsRequired();
@@ -1927,6 +2062,23 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
 
             entity.HasIndex(x => x.SubmissionId).IsUnique();
             entity.HasIndex(x => x.GraderId);
+        });
+        modelBuilder.Entity<AssignmentGroup>(entity =>
+        {
+            entity.ToTable("AssignmentGroups");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.MemberStudentIdsJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt).IsRequired();
+            entity.HasQueryFilter(x => !x.Assignment.IsDeleted);
+
+            entity.HasOne(x => x.Assignment)
+                .WithMany()
+                .HasForeignKey(x => x.AssignmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.AssignmentId);
         });
     }
 }

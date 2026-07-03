@@ -168,6 +168,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IGradebookService, GradebookService>();
         services.AddScoped<IAssignmentService, AssignmentService>();
+        services.AddScoped<IAssignmentGroupService, AssignmentGroupService>();
         services.AddScoped<IAnnouncementService, AnnouncementService>();
         services.AddScoped<IBulkOperationService, BulkOperationService>();
         services.AddScoped<IDiscussionService, DiscussionService>();
@@ -184,6 +185,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<IAdmissionService, AdmissionService>();
         services.AddScoped<IRegistrationService, RegistrationService>();
+        services.AddScoped<IAdviserService, AdviserService>();
         services.AddScoped<IProgramSwitchService, ProgramSwitchService>();
         services.AddHttpClient<IEmailService, BrevoEmailService>();
         services.AddScoped<IActiveDirectoryService, EntraIdService>();

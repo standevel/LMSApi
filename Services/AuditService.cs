@@ -15,24 +15,30 @@ public sealed class AuditService(
     ICurrentUserContext currentUserContext) : IAuditService
 {
     public async Task LogAsync(
-        string action,
-        string entityName,
-        string entityId,
-        string? changes = null,
+        AuditLogEntry entry,
         CancellationToken ct = default)
     {
         try
         {
-            var userId = await currentUserContext.GetUserIdAsync(ct);
+            var resolvedUserId = entry.UserId ?? await currentUserContext.GetUserIdAsync(ct);
 
             var log = new AuditLog
             {
-                Action = action,
-                EntityName = entityName,
-                EntityId = entityId,
-                Changes = changes,
-                UserId = userId,
-                Timestamp = DateTime.UtcNow
+                Action = entry.Action,
+                EntityName = entry.EntityName,
+                EntityId = entry.EntityId,
+                Changes = entry.Changes,
+                UserId = resolvedUserId,
+                Timestamp = DateTime.UtcNow,
+                HttpMethod = entry.HttpMethod,
+                Path = entry.Path,
+                QueryString = entry.QueryString,
+                StatusCode = entry.StatusCode,
+                IpAddress = entry.IpAddress,
+                UserAgent = entry.UserAgent,
+                CorrelationId = entry.CorrelationId,
+                RequestContentType = entry.RequestContentType,
+                RequestBodyJson = entry.RequestBodyJson
             };
 
             dbContext.AuditLogs.Add(log);
@@ -41,8 +47,24 @@ public sealed class AuditService(
         catch (Exception ex)
         {
             // Audit failures must not break the calling business operation
-            Console.WriteLine($"[Audit] Failed to write audit log for {entityName}/{entityId}: {ex.Message}");
+            Console.WriteLine($"[Audit] Failed to write audit log for {entry.EntityName}/{entry.EntityId}: {ex.Message}");
         }
+    }
+
+    public async Task LogAsync(
+        string action,
+        string entityName,
+        string entityId,
+        string? changes = null,
+        CancellationToken ct = default)
+    {
+        await LogAsync(new AuditLogEntry
+        {
+            Action = action,
+            EntityName = entityName,
+            EntityId = entityId,
+            Changes = changes
+        }, ct);
     }
 
     public async Task<List<AuditLog>> GetLogsAsync(
@@ -85,4 +107,3 @@ public sealed class AuditService(
             .ToListAsync(ct);
     }
 }
-

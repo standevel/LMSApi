@@ -3,6 +3,7 @@ using LMS.Api.Common.Extensions;
 using LMS.Api.Endpoints.Admin;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Admin.AcademicPrograms;
 
@@ -13,6 +14,7 @@ public sealed class ListProgramCurriculaEndpoint(ICurriculumService curriculumSe
     {
         Get("admin/programs/{ProgramId}/curricula");
         Group<AdminGroup>();
+        Policies(LmsPolicies.AcademicManagement);
         Summary(s =>
         {
             s.Summary = "List program curricula";

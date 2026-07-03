@@ -47,7 +47,16 @@ public sealed class GetAuditLogsEndpoint(IAuditService auditService)
             x.Changes,
             x.UserId,
             x.User?.DisplayName ?? x.User?.Email ?? "System",
-            x.Timestamp)).ToList();
+            x.Timestamp,
+            x.HttpMethod,
+            x.Path,
+            x.QueryString,
+            x.StatusCode,
+            x.IpAddress,
+            x.UserAgent,
+            x.CorrelationId,
+            x.RequestContentType,
+            x.RequestBodyJson)).ToList();
 
         await SendSuccessAsync(dtos, ct);
     }

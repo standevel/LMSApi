@@ -12,6 +12,8 @@ public static class LmsPermissions
     public const string RecordsManage = "records.manage";
     public const string ReportsView = "reports.view";
     public const string EnrollmentsManage = "enrollments.manage";
+    public const string AdvisingManage = "advising.manage";
+    public const string AdvisingAccess = "advising.access";
     public const string ProfileView = "profile.view";
     public const string UsersSwitch = "users.switch";
 
@@ -27,6 +29,8 @@ public static class LmsPermissions
         RecordsManage,
         ReportsView,
         EnrollmentsManage,
+        AdvisingManage,
+        AdvisingAccess,
         ProfileView,
         UsersSwitch
     ];

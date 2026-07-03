@@ -19,7 +19,7 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
     public override void Configure()
     {
         Get("admissions/applications");
-        Policies(LmsPolicies.Management);
+        Policies(LmsPolicies.AdmissionsManagement);
         Tags("Admissions");
         Description(d => d
             .WithName("Get Applications")

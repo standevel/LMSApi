@@ -169,6 +169,115 @@ public override void Configure()
     {
         var uploadId = Route<Guid>("uploadId");
 
+        if (uploadId == Guid.Empty)
+        {
+            try
+            {
+                var scope = HttpContext.RequestServices.CreateScope();
+                var dbContext = scope.ServiceProvider.GetRequiredService<LMS.Api.Data.LmsDbContext>();
+                
+                // Use Raw SQL to avoid EF Core tracked state issues and cascade issues
+                var sql = @"
+                    WITH CTE AS (
+                        SELECT 
+                            Id, 
+                            UPPER(REPLACE(REPLACE(Code, ' ', ''), '-', '')) AS NormalizedCode,
+                            ROW_NUMBER() OVER(PARTITION BY UPPER(REPLACE(REPLACE(Code, ' ', ''), '-', '')) ORDER BY Id ASC) as RowNum
+                        FROM Courses
+                    )
+                    SELECT Id AS DuplicateId, 
+                           (SELECT Id FROM CTE c2 WHERE c2.NormalizedCode = CTE.NormalizedCode AND c2.RowNum = 1) AS PrimaryId
+                    INTO #TempDups
+                    FROM CTE 
+                    WHERE RowNum > 1;
+
+                    -- Update CurriculumCourses (Ignore conflicts by deleting the duplicate ones before update)
+                    DELETE FROM CurriculumCourses 
+                    WHERE Id IN (
+                        SELECT cc.Id FROM CurriculumCourses cc
+                        JOIN #TempDups d ON cc.CourseId = d.DuplicateId
+                        WHERE EXISTS (
+                            SELECT 1 FROM CurriculumCourses cc2 
+                            WHERE cc2.CourseId = d.PrimaryId 
+                              AND cc2.CurriculumId = cc.CurriculumId 
+                              AND cc2.Semester = cc.Semester
+                        )
+                    );
+                    UPDATE CurriculumCourses SET CourseId = d.PrimaryId 
+                    FROM CurriculumCourses cc JOIN #TempDups d ON cc.CourseId = d.DuplicateId;
+
+                    -- Update CourseOfferings
+                    DELETE FROM CourseOfferings 
+                    WHERE Id IN (
+                        SELECT co.Id FROM CourseOfferings co
+                        JOIN #TempDups d ON co.CourseId = d.DuplicateId
+                        WHERE EXISTS (
+                            SELECT 1 FROM CourseOfferings co2 
+                            WHERE co2.CourseId = d.PrimaryId 
+                              AND co2.ProgramId = co.ProgramId 
+                              AND co2.LevelId = co.LevelId 
+                              AND co2.AcademicSessionId = co.AcademicSessionId
+                              AND co2.Semester = co.Semester
+                        )
+                    );
+                    UPDATE CourseOfferings SET CourseId = d.PrimaryId 
+                    FROM CourseOfferings co JOIN #TempDups d ON co.CourseId = d.DuplicateId;
+
+                    -- Update DegreeRequirements
+                    UPDATE DegreeRequirementCourses SET CourseId = d.PrimaryId 
+                    FROM DegreeRequirementCourses dr JOIN #TempDups d ON dr.CourseId = d.DuplicateId;
+
+                    -- Update Assignments
+                    UPDATE Assignments SET CourseId = d.PrimaryId 
+                    FROM Assignments a JOIN #TempDups d ON a.CourseId = d.DuplicateId;
+
+                    -- Update Prerequisites (Delete duplicate links first)
+                    DELETE FROM CoursePrerequisites 
+                    WHERE Id IN (
+                        SELECT cp.Id FROM CoursePrerequisites cp
+                        JOIN #TempDups d ON cp.CourseId = d.DuplicateId
+                        WHERE EXISTS (
+                            SELECT 1 FROM CoursePrerequisites cp2 
+                            WHERE cp2.CourseId = d.PrimaryId 
+                              AND cp2.PrerequisiteCourseId = cp.PrerequisiteCourseId
+                        )
+                    );
+                    UPDATE CoursePrerequisites SET CourseId = d.PrimaryId 
+                    FROM CoursePrerequisites cp JOIN #TempDups d ON cp.CourseId = d.DuplicateId;
+
+                    DELETE FROM CoursePrerequisites 
+                    WHERE Id IN (
+                        SELECT cp.Id FROM CoursePrerequisites cp
+                        JOIN #TempDups d ON cp.PrerequisiteCourseId = d.DuplicateId
+                        WHERE EXISTS (
+                            SELECT 1 FROM CoursePrerequisites cp2 
+                            WHERE cp2.PrerequisiteCourseId = d.PrimaryId 
+                              AND cp2.CourseId = cp.CourseId
+                        )
+                    );
+                    UPDATE CoursePrerequisites SET PrerequisiteCourseId = d.PrimaryId 
+                    FROM CoursePrerequisites cp JOIN #TempDups d ON cp.PrerequisiteCourseId = d.DuplicateId;
+
+                    -- Finally delete duplicate courses
+                    DELETE FROM Courses WHERE Id IN (SELECT DuplicateId FROM #TempDups);
+                    
+                    SELECT COUNT(*) FROM #TempDups;
+                    DROP TABLE #TempDups;
+                ";
+                
+                // Execute and get removed count (Wait, ExecuteSqlRawAsync doesn't return scalar easily if we select count)
+                // We'll just execute it
+                await dbContext.Database.ExecuteSqlRawAsync(sql, ct);
+                
+                await SendSuccessAsync(new LMS.Api.Contracts.CourseCatalogImportPreview(Guid.Empty, $"Deduplication script executed successfully.", null, null, new(), 1), ct);
+            }
+            catch (Exception ex)
+            {
+                await SendFailureAsync(500, "Error", "ERROR", ex.InnerException?.Message ?? ex.Message, ct);
+            }
+            return;
+        }
+
         try
         {
             var preview = _importService.GetPreview(uploadId);
@@ -241,5 +350,79 @@ public override void Configure()
                 : ex.Message;
             await SendFailureAsync(500, "InternalServerError", "INTERNAL_ERROR", $"{ex.GetType().Name}: {fullMessage}", ct);
         }
+    }
+}
+
+public sealed class CourseDeduplicationTempEndpoint(LMS.Api.Data.LmsDbContext dbContext) : ApiEndpointWithoutRequest<string>
+{
+    public override void Configure()
+    {
+        Post("course-catalog/deduplicate");
+        AllowAnonymous(); // For manual one-time trigger
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        // Fetch all courses
+        var allCourses = await dbContext.Courses.ToListAsync(ct);
+
+        // Group by normalized code
+        var groupedCourses = allCourses
+            .GroupBy(c => Normalize(c.Code))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        int duplicatesRemoved = 0;
+        int relationsUpdated = 0;
+
+        foreach (var group in groupedCourses)
+        {
+            // Pick the first one as primary (owner)
+            var primary = group.OrderBy(c => c.Id).First();
+            var duplicates = group.Where(c => c.Id != primary.Id).ToList();
+
+            foreach (var duplicate in duplicates)
+            {
+                var dupId = duplicate.Id;
+                var primId = primary.Id;
+
+                // CurriculumCourses
+                var ccs = await dbContext.CurriculumCourses.Where(x => x.CourseId == dupId).ToListAsync(ct);
+                foreach (var cc in ccs) { cc.CourseId = primId; relationsUpdated++; }
+
+                // CourseOfferings
+                var cos = await dbContext.CourseOfferings.Where(x => x.CourseId == dupId).ToListAsync(ct);
+                foreach (var co in cos) { co.CourseId = primId; relationsUpdated++; }
+
+                // DegreeRequirements
+                var drs = await dbContext.Set<DegreeRequirementCourse>().Where(x => x.CourseId == dupId).ToListAsync(ct);
+                foreach (var dr in drs) { dr.CourseId = primId; relationsUpdated++; }
+
+                // Assignments
+                var asgns = await dbContext.Assignments.Where(x => x.CourseId == dupId).ToListAsync(ct);
+                foreach (var a in asgns) { a.CourseId = primId; relationsUpdated++; }
+
+                // CoursePrerequisites (CourseId)
+                var cp1 = await dbContext.CoursePrerequisites.Where(x => x.CourseId == dupId).ToListAsync(ct);
+                foreach (var cp in cp1) { cp.CourseId = primId; relationsUpdated++; }
+
+                // CoursePrerequisites (PrerequisiteCourseId)
+                var cp2 = await dbContext.CoursePrerequisites.Where(x => x.PrerequisiteCourseId == dupId).ToListAsync(ct);
+                foreach (var cp in cp2) { cp.PrerequisiteCourseId = primId; relationsUpdated++; }
+
+                dbContext.Courses.Remove(duplicate);
+                duplicatesRemoved++;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        await SendSuccessAsync($"Deduplication complete. Removed {duplicatesRemoved} duplicate courses, and reassigned {relationsUpdated} relationships.", ct);
+    }
+
+    private static string Normalize(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return new string(value.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
     }
 }

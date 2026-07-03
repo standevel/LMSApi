@@ -446,6 +446,48 @@ public class AddQuestionsFromBankRequest
     public int? Limit { get; set; }
 }
 
+public record QuestionImportTemplateDto(
+    byte[] FileContent,
+    string FileName,
+    string ContentType);
+
+public class QuestionImportResultDto
+{
+    public int TotalRows { get; set; }
+    public int ImportedCount { get; set; }
+    public int SkippedCount { get; set; }
+    public bool PreviewOnly { get; set; }
+    public List<QuestionImportPreviewItemDto> Questions { get; set; } = new();
+    public List<QuestionImportRowErrorDto> Errors { get; set; } = new();
+}
+
+public class QuestionImportRowErrorDto
+{
+    public int RowNumber { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class QuestionImportPreviewItemDto
+{
+    public int RowNumber { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string QuestionType { get; set; } = string.Empty;
+    public int Points { get; set; }
+    public string? Difficulty { get; set; }
+    public string? Category { get; set; }
+    public string? Tags { get; set; }
+    public string? Explanation { get; set; }
+    public string? Feedback { get; set; }
+    public List<QuestionImportPreviewOptionDto> Options { get; set; } = new();
+}
+
+public class QuestionImportPreviewOptionDto
+{
+    public string OptionText { get; set; } = string.Empty;
+    public int DisplayOrder { get; set; }
+    public bool IsCorrectAnswer { get; set; }
+}
+
 // Time Extension DTOs
 public class TimeExtensionDto
 {

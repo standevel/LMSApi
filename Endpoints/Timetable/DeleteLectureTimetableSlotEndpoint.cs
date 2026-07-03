@@ -11,7 +11,7 @@ public class DeleteLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Delete("timetable/slots/{SlotId}");
-        Roles("Admin", "Registrar", "SuperAdmin");
+        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
         Description(d => d
             .WithName("DeleteLectureTimetableSlot")
             .WithTags("Timetable")

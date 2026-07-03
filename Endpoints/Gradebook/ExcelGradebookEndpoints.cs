@@ -152,7 +152,14 @@ public sealed class MigrateClassterResultsEndpoint : ApiEndpointWithoutRequest<G
             return;
         }
 
-        var result = await _gradebookService.MigrateClassterGradesAsync(academicSessionId, courseId, file, userId.Value, ct);
+        Guid? uploadId = null;
+        if (HttpContext.Request.Form.TryGetValue("uploadId", out var uploadIdValues) &&
+            Guid.TryParse(uploadIdValues.FirstOrDefault(), out var parsedUploadId))
+        {
+            uploadId = parsedUploadId;
+        }
+
+        var result = await _gradebookService.MigrateClassterGradesAsync(academicSessionId, courseId, file, userId.Value, uploadId, ct);
 
         if (result.IsError)
         {

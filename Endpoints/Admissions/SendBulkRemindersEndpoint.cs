@@ -31,7 +31,7 @@ public sealed class SendBulkRemindersEndpoint(IAdmissionService admissionService
     public override void Configure()
     {
         Post("admissions/applications/reminders/bulk");
-        Policies(LmsPolicies.Management);
+        Policies(LmsPolicies.AdmissionsManagement);
         Tags("Admissions");
         Description(d => d
             .WithName("Send Bulk Reminders")

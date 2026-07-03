@@ -169,6 +169,99 @@ public sealed class AddQuestionToQuestionBankEndpoint(IQuestionBankService quest
     }
 }
 
+public sealed class DownloadQuestionBankImportTemplateEndpoint(IQuestionBankService questionBankService)
+    : ApiEndpointWithoutRequest<object>
+{
+    public override void Configure()
+    {
+        Get("question-banks/import-template");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var result = await questionBankService.GenerateQuestionImportTemplateAsync(ct);
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        var template = result.Value;
+        HttpContext.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{template.FileName}\"";
+        HttpContext.Response.ContentType = template.ContentType;
+        await HttpContext.Response.Body.WriteAsync(template.FileContent, ct);
+        await HttpContext.Response.CompleteAsync();
+    }
+}
+
+public sealed class PreviewQuestionBankImportEndpoint(IQuestionBankService questionBankService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<QuestionImportResultDto>
+{
+    public override void Configure()
+    {
+        Post("question-banks/{QuestionBankId:guid}/questions/import/preview");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        AllowFileUploads();
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var questionBankId = Route<Guid>("QuestionBankId");
+        var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        if (file is null)
+        {
+            await SendFailureAsync(400, "No file uploaded", "FILE_REQUIRED", "Please upload an Excel file", ct);
+            return;
+        }
+
+        var result = await questionBankService.ImportQuestionBankItemsAsync(questionBankId, file, userId.Value, previewOnly: true, ct: ct);
+        await SendAsync(result, ct);
+    }
+}
+
+public sealed class ImportQuestionBankQuestionsEndpoint(IQuestionBankService questionBankService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<QuestionImportResultDto>
+{
+    public override void Configure()
+    {
+        Post("question-banks/{QuestionBankId:guid}/questions/import");
+        Roles("SuperAdmin", "Admin", "Lecturer");
+        AllowFileUploads();
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var questionBankId = Route<Guid>("QuestionBankId");
+        var file = HttpContext.Request.Form.Files.FirstOrDefault();
+        if (file is null)
+        {
+            await SendFailureAsync(400, "No file uploaded", "FILE_REQUIRED", "Please upload an Excel file", ct);
+            return;
+        }
+
+        var result = await questionBankService.ImportQuestionBankItemsAsync(questionBankId, file, userId.Value, previewOnly: false, ct: ct);
+        await SendAsync(result, ct);
+    }
+}
+
 public sealed class UpdateQuestionBankItemEndpoint(IQuestionBankService questionBankService, ICurrentUserContext currentUserContext)
     : ApiEndpoint<UpdateQuestionBankItemEndpoint.UpdateQuestionBankItemEndpointRequest, QuestionBankItemDto>
 {

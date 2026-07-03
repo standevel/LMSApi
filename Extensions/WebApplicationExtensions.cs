@@ -1,4 +1,5 @@
 using FastEndpoints;
+using LMS.Api.Common.Audit;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Security;
@@ -98,6 +99,8 @@ public static class WebApplicationExtensions
             await httpContext.Response.WriteAsJsonAsync(response);
         });
 
+        app.UseWebSockets();
+        app.UseMiddleware<AuditRequestLoggingMiddleware>();
         app.UseAuthentication();
         app.UseMiddleware<ApiReplayPreventionMiddleware>();
         app.UseMiddleware<UserProvisioningMiddleware>();

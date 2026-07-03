@@ -53,5 +53,5 @@ public interface IGradebookService
      Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, CancellationToken ct = default);
      
      // Classter Migration
-     Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(Guid academicSessionId, Guid courseId, IFormFile excelFile, Guid userId, CancellationToken ct = default);
+     Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(Guid academicSessionId, Guid courseId, IFormFile excelFile, Guid userId, Guid? uploadId = null, CancellationToken ct = default);
  }
