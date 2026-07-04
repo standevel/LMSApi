@@ -18,7 +18,8 @@ public sealed class StudentFeeRecord
 
     public decimal TotalAmount { get; set; }
     public decimal AmountPaid { get; set; } = 0;
-    public decimal Balance => TotalAmount - AmountPaid;
+    public decimal ScholarshipDiscount { get; set; } = 0;
+    public decimal Balance => Math.Max(0, TotalAmount - AmountPaid - ScholarshipDiscount);
 
     // Late fee tracking
     public bool LateFeeApplied { get; set; } = false;

@@ -35,6 +35,7 @@ await SeedCountriesAsync(ct);
         await SeedRegistrationConfigurationAsync(ct);
         await SeedParentPortalConfigurationAsync(ct);
         await SeedSystemGradingConfigurationAsync(ct);
+        await SeedFeeCategoriesAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
     }
@@ -646,6 +647,42 @@ await SeedCountriesAsync(ct);
         {
             logger.LogInformation("All document types already exist. Skipping.");
         }
+    }
+
+    private async Task SeedFeeCategoriesAsync(CancellationToken ct)
+    {
+        if (await dbContext.FeeCategories.AnyAsync(c => c.Name == "Tuition" || c.Name == "Accommodation"))
+        {
+            logger.LogInformation("Core fee categories already seeded. Skipping.");
+            return;
+        }
+
+        logger.LogInformation("Seeding Core Fee Categories...");
+
+        var tuition = await dbContext.FeeCategories.FirstOrDefaultAsync(c => c.Name == "Tuition", ct);
+        if (tuition == null)
+        {
+            dbContext.FeeCategories.Add(new FeeCategory 
+            { 
+                Name = "Tuition", 
+                Description = "Standard tuition fee", 
+                IsTuition = true 
+            });
+        }
+
+        var accommodation = await dbContext.FeeCategories.FirstOrDefaultAsync(c => c.Name == "Accommodation", ct);
+        if (accommodation == null)
+        {
+            dbContext.FeeCategories.Add(new FeeCategory 
+            { 
+                Name = "Accommodation", 
+                Description = "Hostel/Accommodation fee", 
+                IsAccommodation = true 
+            });
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("Added core fee categories");
     }
 
     private async Task SeedSponsorsAsync(CancellationToken ct)

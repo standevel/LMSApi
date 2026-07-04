@@ -148,18 +148,74 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
         if (session == null)
             throw new Exception("No active academic session found.");
 
-        // Determine the programs to import (lean query — no navigation properties needed)
+        // Determine the programs to import
         var programIdList = programIds.ToList();
         var programsToImport = new List<AcademicProgram>();
+        
+        var allDbPrograms = await dbContext.Programs.ToListAsync(ct);
+        var previewProgramNames = preview.Rows.Select(r => r.ProgramName).Distinct().ToList();
+
         if (programIdList.Count > 0)
         {
-            programsToImport = await dbContext.Programs
+            programsToImport = allDbPrograms
                 .Where(p => programIdList.Contains(p.Id))
-                .ToListAsync(ct);
+                .ToList();
         }
         else
         {
-            programsToImport = await dbContext.Programs.ToListAsync(ct);
+            // Auto-create any missing programs from the document
+            Faculty? defaultFaculty = null;
+            Department? defaultDepartment = null;
+
+            foreach (var pName in previewProgramNames)
+            {
+                var existing = allDbPrograms.FirstOrDefault(p => p.Name.Equals(pName, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    programsToImport.Add(existing);
+                }
+                else
+                {
+                    if (defaultDepartment == null)
+                    {
+                        defaultDepartment = await dbContext.Departments.FirstOrDefaultAsync(ct);
+                        if (defaultDepartment == null)
+                        {
+                            defaultFaculty = await dbContext.Faculties.FirstOrDefaultAsync(ct);
+                            if (defaultFaculty == null)
+                            {
+                                defaultFaculty = new Faculty { Id = Guid.NewGuid(), Name = "Default Faculty" };
+                                dbContext.Faculties.Add(defaultFaculty);
+                            }
+                            
+                            defaultDepartment = new Department 
+                            { 
+                                Id = Guid.NewGuid(), 
+                                Name = "Default Department", 
+                                Code = "DEPT", 
+                                FacultyId = defaultFaculty.Id 
+                            };
+                            dbContext.Departments.Add(defaultDepartment);
+                            
+                            // Must flush here to ensure IDs are available
+                            await dbContext.SaveChangesAsync(ct);
+                        }
+                    }
+
+                    var newProgram = new AcademicProgram
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = pName,
+                        Code = Normalize(pName).Length >= 3 ? Normalize(pName).Substring(0, 3) : "PRG",
+                        DepartmentId = defaultDepartment.Id
+                    };
+                    dbContext.Programs.Add(newProgram);
+                    programsToImport.Add(newProgram);
+                }
+            }
+            
+            // Flush to ensure new programs have valid PKs
+            await dbContext.SaveChangesAsync(ct);
         }
 
         // Cache all existing courses globally by Code for program-agnostic lookups
@@ -175,6 +231,14 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
         // Key: (CurriculumId, CourseId, Semester)
         var existingCcKeys = (await dbContext.CurriculumCourses.ToListAsync(ct))
             .Select(cc => (cc.CurriculumId, cc.CourseId, cc.Semester))
+            .ToHashSet();
+
+        // Cache all existing CourseOfferings for the current session to avoid duplicates
+        // Key: (CourseId, ProgramId, LevelId, Semester)
+        var existingOfferingKeys = (await dbContext.CourseOfferings
+            .Where(co => co.AcademicSessionId == session.Id)
+            .ToListAsync(ct))
+            .Select(co => (co.CourseId, co.ProgramId, co.LevelId, co.Semester))
             .ToHashSet();
 
         // Process each program
@@ -336,6 +400,22 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                     existingCcKeys.Add(ccKey);
                     curriculumCoursesAdded++;
                 }
+
+                // Also ensure a CourseOffering exists for this session
+                var offeringKey = (course.Id, program.Id, academicLevel.Id, row.Semester);
+                if (!existingOfferingKeys.Contains(offeringKey))
+                {
+                    dbContext.CourseOfferings.Add(new CourseOffering
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseId = course.Id,
+                        ProgramId = program.Id,
+                        LevelId = academicLevel.Id,
+                        AcademicSessionId = session.Id,
+                        Semester = row.Semester
+                    });
+                    existingOfferingKeys.Add(offeringKey);
+                }
             }
         }
 
@@ -394,11 +474,17 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                     continue;
                 }
 
+                var programMatch = Regex.Match(text, @"^(?:(?:[A-Z]\.?\s*)?B\.?\s*(?:A|SC|S|TECH|ENG|ED)\.?|DEPARTMENT OF|PROGRAMME?[:\-])\s+(.+)$", RegexOptions.IgnoreCase);
+                if (programMatch.Success)
+                {
+                    currentProgram = text.Trim();
+                    continue;
+                }
+
                 var level = DetectLevel(text);
                 if (level.HasValue)
                 {
                     currentLevel = level.Value;
-                    continue;
                 }
 
                 if (text.Contains("FIRST SEMESTER", StringComparison.OrdinalIgnoreCase))
@@ -410,6 +496,11 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                 if (text.Contains("SECOND SEMESTER", StringComparison.OrdinalIgnoreCase))
                 {
                     currentSemester = Semester.Second;
+                    continue;
+                }
+                
+                if (level.HasValue)
+                {
                     continue;
                 }
             }
@@ -450,6 +541,13 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                 continue;
             }
 
+            var programMatch = Regex.Match(rowText, @"^(?:(?:[A-Z]\.?\s*)?B\.?\s*(?:A|SC|S|TECH|ENG|ED)\.?|DEPARTMENT OF|PROGRAMME?[:\-])\s+(.+)$", RegexOptions.IgnoreCase);
+            if (programMatch.Success)
+            {
+                currentProgram = rowText.Trim();
+                continue;
+            }
+
             var level = DetectLevel(rowText);
             if (level.HasValue)
             {
@@ -465,6 +563,11 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             if (rowText.Contains("SECOND SEMESTER", StringComparison.OrdinalIgnoreCase))
             {
                 currentSemester = Semester.Second;
+                continue;
+            }
+
+            if (level.HasValue)
+            {
                 continue;
             }
 
@@ -601,18 +704,33 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
         }
 
         var yearMatch = Regex.Match(normalized, @"\b(?:YEAR|PART)\s+(ONE|TWO|THREE|FOUR|FIVE|1|2|3|4|5)\b");
-        if (!yearMatch.Success)
-            return null;
-
-        return yearMatch.Groups[1].Value switch
+        if (yearMatch.Success)
         {
-            "ONE" or "1" => 100,
-            "TWO" or "2" => 200,
-            "THREE" or "3" => 300,
-            "FOUR" or "4" => 400,
-            "FIVE" or "5" => 500,
-            _ => null
-        };
+            return yearMatch.Groups[1].Value switch
+            {
+                "ONE" or "1" => 100,
+                "TWO" or "2" => 200,
+                "THREE" or "3" => 300,
+                "FOUR" or "4" => 400,
+                "FIVE" or "5" => 500,
+                _ => null
+            };
+        }
+
+        var usYearMatch = Regex.Match(normalized, @"\b(FRESHMAN|SOPHOMORE|JUNIOR|SENIOR)\b");
+        if (usYearMatch.Success)
+        {
+            return usYearMatch.Groups[1].Value switch
+            {
+                "FRESHMAN" => 100,
+                "SOPHOMORE" => 200,
+                "JUNIOR" => 300,
+                "SENIOR" => 400,
+                _ => null
+            };
+        }
+
+        return null;
     }
 
     private static string FormatLevelName(int level)

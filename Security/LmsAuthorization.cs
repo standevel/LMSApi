@@ -30,6 +30,7 @@ public static class LmsPolicies
     public const string CourseManagement = "CourseManagement";
     public const string AcademicManagement = "AcademicManagement";
     public const string AdmissionsManagement = "AdmissionsManagement";
+    public const string FinanceManagement = "FinanceManagement";
 }
 
 public static class LmsAuthorizationExtensions
@@ -72,6 +73,10 @@ public static class LmsAuthorizationExtensions
             options.AddPolicy(
                 LmsPolicies.AdmissionsManagement,
                 policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.Registrar, LmsRoles.AdmissionOfficer));
+                
+            options.AddPolicy(
+                LmsPolicies.FinanceManagement,
+                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.Finance));
         });
 
         return services;

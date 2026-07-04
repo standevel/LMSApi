@@ -194,6 +194,8 @@ public static class ServiceCollectionExtensions
 
 // Fee Management
          services.AddScoped<IFeeService, FeeService>();
+        services.AddScoped<IScholarshipService, ScholarshipService>();
+        services.AddScoped<ISponsorOrganizationService, SponsorOrganizationService>();
          services.AddHttpClient<PaystackService>();
          services.AddHttpClient<HydrogenService>();
 

@@ -52,6 +52,8 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<StudentFeeRecord> StudentFeeRecords => Set<StudentFeeRecord>();
     public DbSet<LateFeeApplication> LateFeeApplications => Set<LateFeeApplication>();
     public DbSet<FeePayment> FeePayments => Set<FeePayment>();
+    public DbSet<Scholarship> Scholarships => Set<Scholarship>();
+    public DbSet<StudentScholarship> StudentScholarships => Set<StudentScholarship>();
 
     // Timetable Management
     public DbSet<LectureTimetableSlot> LectureTimetableSlots => Set<LectureTimetableSlot>();
@@ -617,6 +619,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasKey(x => x.Id);
             entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
             entity.Property(x => x.AmountPaid).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.ScholarshipDiscount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.LateFeeTotal).HasColumnType("decimal(18,2)");
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
             entity.Ignore(x => x.Balance); // computed property
@@ -661,6 +664,32 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
 
             entity.HasIndex(x => x.GatewayReference);
             entity.HasIndex(x => x.Status);
+        });
+
+        modelBuilder.Entity<Scholarship>(entity =>
+        {
+            entity.ToTable("Scholarships");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Type).HasConversion<int>().IsRequired();
+            entity.Property(x => x.CoverageFlags).HasConversion<int>().IsRequired();
+            entity.Property(x => x.PercentageCovered).HasColumnType("decimal(5,2)").IsRequired();
+
+            entity.HasOne(x => x.SponsorOrganization).WithMany().HasForeignKey(x => x.SponsorOrganizationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StudentScholarship>(entity =>
+        {
+            entity.ToTable("StudentScholarships");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CalculatedAmount).HasColumnType("decimal(18,2)").IsRequired();
+
+            entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Scholarship).WithMany(x => x.StudentScholarships).HasForeignKey(x => x.ScholarshipId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.StudentId, x.ScholarshipId, x.SessionId }).IsUnique();
         });
 
         modelBuilder.Entity<LectureSession>(entity =>

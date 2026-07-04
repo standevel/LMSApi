@@ -6,7 +6,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
 
 ## Tasks
 
-- [ ] 1. Add `GetMyBillEndpoint` to the backend
+- [x] 1. Add `GetMyBillEndpoint` to the backend
   - [x] 1.1 Create `GetMyBillEndpoint` in `LMS-API/Endpoints/Fees/StudentBillEndpoints.cs`
     - Inherit `ApiEndpointWithoutRequest<StudentBillResponse>`
     - Route: `GET fees/my-bill`; restrict to `Student` role only
@@ -28,13 +28,13 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - Test: returns 200 with correct `StudentBillResponse` on happy path
     - _Requirements: 8.3, 8.4, 8.5_
 
-- [ ] 2. Add ownership guards to existing endpoints
-  - [ ] 2.1 Add ownership check to `GetStudentBillEndpoint` in `LMS-API/Endpoints/Fees/StudentBillEndpoints.cs`
+- [x] 2. Add ownership guards to existing endpoints
+  - [x] 2.1 Add ownership check to `GetStudentBillEndpoint` in `LMS-API/Endpoints/Fees/StudentBillEndpoints.cs`
     - After resolving `studentId` from route, read `callerId` from `HttpContext.Items["CurrentUserId"]`
     - If the caller has only the `Student` role (check `User.IsInRole("Student")` and not any of Admin/Finance/SuperAdmin/Registry), compare `studentId != callerId`; return 403 if mismatch
     - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ] 2.2 Add ownership check to `GetPaymentHistoryEndpoint` in `LMS-API/Endpoints/Fees/FeePaymentEndpoints.cs`
+  - [x] 2.2 Add ownership check to `GetPaymentHistoryEndpoint` in `LMS-API/Endpoints/Fees/FeePaymentEndpoints.cs`
     - Same pattern: resolve `callerId` from `HttpContext.Items["CurrentUserId"]`; if student-only caller and `studentId != callerId`, return 403
     - _Requirements: 7.4, 7.5_
 
@@ -43,11 +43,11 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 7.2, 7.5**
     - Use FsCheck: for any two distinct student GUIDs, assert both endpoints return 403 when caller ID ≠ route ID
 
-- [ ] 3. Checkpoint — Ensure all backend tests pass
+- [x] 3. Checkpoint — Ensure all backend tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Add `getMyBill()` to the frontend `FeeService`
-  - [ ] 4.1 Add `getMyBill(sessionId?: string): Observable<StudentBill>` to `LMS-UI/src/app/services/fee.service.ts`
+- [x] 4. Add `getMyBill()` to the frontend `FeeService`
+  - [x] 4.1 Add `getMyBill(sessionId?: string): Observable<StudentBill>` to `LMS-UI/src/app/services/fee.service.ts`
     - Build URL: `${this.apiUrl}/my-bill` with optional `?sessionId=` query param
     - Use `this.http.get<ApiResponse<StudentBill>>(url).pipe(map(res => res.data))`
     - _Requirements: 1.1, 8.1_
@@ -68,7 +68,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 1.2, 10.2**
     - Use fast-check: for any valid `StudentBill` record, assert session name, totalAmount, amountPaid, and balance appear in the rendered template
 
-- [ ] 6. Implement bill display logic and status states
+- [x] 6. Implement bill display logic and status states
   - [x] 6.1 Implement conditional rendering for bill status in `StudentFeePortal.component.ts`
     - `Paid` status: apply green visual state, hide payment action buttons
     - `Waived` status: show "Waived" badge, hide payment action buttons
@@ -94,7 +94,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 1.2, 10.1, 10.3**
     - Use fast-check: for any `StudentBill`, assert `bill.balance === bill.totalAmount - bill.amountPaid`
 
-- [ ] 7. Implement payment history table
+- [x] 7. Implement payment history table
   - [x] 7.1 Render payment history in `StudentFeePortal.component.ts`
     - Display each `FeePayment` row with: `paidAt` date, `paymentMethod`, `amount`, `status` badge
     - For `status === 'Rejected'`: show `rejectionReason` beneath the status badge
@@ -112,7 +112,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 2.3**
     - Use fast-check: for any payment with `status === 'Rejected'`, assert `rejectionReason` text is present in the rendered row
 
-- [ ] 8. Implement gateway callback handling
+- [x] 8. Implement gateway callback handling
   - [x] 8.1 Implement `handleCallbackParams()` in `StudentFeePortal.component.ts`
     - Inject `ActivatedRoute`; read `queryParams` snapshot
     - If `reference` or `trxref` present → Paystack callback
@@ -127,7 +127,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 6.2, 6.3**
     - Use fast-check: for params containing `reference`/`trxref` assert Paystack classification; for `tx_ref`/`transactionRef` assert Hydrogen classification; assert mutual exclusivity for non-overlapping sets
 
-- [ ] 9. Implement Paystack payment flow
+- [x] 9. Implement Paystack payment flow
   - [x] 9.1 Implement `payWithPaystack()` in `StudentFeePortal.component.ts`
     - Set `paying = true`, disable all payment controls
     - Call `feeService.initiateGatewayPayment({ gateway: 'Paystack', studentFeeRecordId: bill().id, amount: bill().balance, callbackUrl: location.origin + location.pathname, customerEmail: authStore.user().email, customerName: authStore.user().displayName })`
@@ -140,13 +140,13 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 3.3, 4.3, 5.8, 9.7**
     - Use fast-check: when `paying === true`, assert all payment buttons have `disabled` attribute
 
-- [ ] 10. Implement Hydrogen payment flow
+- [x] 1.. Implement Hydrogen payment flow
   - [x] 10.1 Implement `payWithHydrogen()` in `StudentFeePortal.component.ts`
     - Same pattern as `payWithPaystack()` but `gateway: 'Hydrogen'`
     - On error: `showToast('Failed to initiate Hydrogen payment. Please try again.', 'error')`, set `paying = false`
     - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
-- [ ] 11. Implement manual receipt upload flow
+- [x] 1.. Implement manual receipt upload flow
   - [x] 11.1 Implement `submitManualPayment()` and file selection in `StudentFeePortal.component.ts`
     - File input: `accept=".pdf,.jpg,.jpeg,.png"`, on change set `selectedFile` signal and display filename
     - Validate: if `!selectedFile()` or `!manualRef().trim()` → do nothing (no API call)
@@ -168,7 +168,7 @@ Implement the student-facing fee payment portal in two layers: thin backend addi
     - **Validates: Requirements 5.9**
     - Use fast-check: for any bill where `balance === 0`, assert manual upload section is absent from DOM
 
-- [ ] 12. Final checkpoint — Ensure all tests pass
+- [x] 1.. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

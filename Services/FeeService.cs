@@ -239,12 +239,14 @@ public sealed class FeeService(
 
         // Get all active templates
         var allTemplates = await db.FeeTemplates
+            .Include(t => t.Category)
             .Include(t => t.LineItems)
             .Where(t => t.IsActive && (t.SessionId == null || t.SessionId == sessionId))
             .ToListAsync();
 
         // Get all active assignments for this student
         var assignments = await db.FeeAssignments
+            .Include(a => a.FeeTemplate).ThenInclude(t => t.Category)
             .Include(a => a.FeeTemplate).ThenInclude(t => t.LineItems)
             .Where(a => a.IsActive &&
                 (a.SessionId == null || a.SessionId == sessionId) &&
@@ -256,23 +258,71 @@ public sealed class FeeService(
 
         // Collect applicable templates (from assignments), deduplicate by template id
         // A student-level assignment for a template overrides program overrides amount, etc.
-        var templateAmounts = new Dictionary<Guid, decimal>();
+        var templateAmounts = new Dictionary<Guid, (decimal Amount, FeeTemplate Template)>();
         foreach (var scope in new[] { FeeScope.University, FeeScope.Faculty, FeeScope.Program, FeeScope.Student })
         {
             foreach (var a in assignments.Where(a => a.Scope == scope))
             {
                 var amount = a.AmountOverride ?? a.FeeTemplate.LineItems.Sum(li => li.Amount);
-                templateAmounts[a.FeeTemplateId] = amount;
+                templateAmounts[a.FeeTemplateId] = (amount, a.FeeTemplate);
             }
         }
 
         // Also include University-scope templates with no explicit assignment
         foreach (var t in allTemplates.Where(t => t.Scope == FeeScope.University && !templateAmounts.ContainsKey(t.Id)))
         {
-            templateAmounts[t.Id] = t.LineItems.Sum(li => li.Amount);
+            templateAmounts[t.Id] = (t.LineItems.Sum(li => li.Amount), t);
         }
 
-        decimal total = templateAmounts.Values.Sum();
+        decimal total = 0;
+        decimal tuitionTotal = 0;
+        decimal accommodationTotal = 0;
+        decimal feedingTotal = 0;
+
+        foreach (var ta in templateAmounts.Values)
+        {
+            total += ta.Amount;
+            if (ta.Template.Category != null)
+            {
+                if (ta.Template.Category.IsTuition || ta.Template.Category.Name.Contains("Tuition", StringComparison.OrdinalIgnoreCase))
+                    tuitionTotal += ta.Amount;
+                else if (ta.Template.Category.IsAccommodation || ta.Template.Category.Name.Contains("Accommodation", StringComparison.OrdinalIgnoreCase))
+                    accommodationTotal += ta.Amount;
+                else if (ta.Template.Category.Name.Contains("Feeding", StringComparison.OrdinalIgnoreCase))
+                    feedingTotal += ta.Amount;
+            }
+        }
+
+        // Calculate scholarship discount
+        var studentScholarships = await db.StudentScholarships
+            .Include(ss => ss.Scholarship)
+            .Where(ss => ss.StudentId == studentId && ss.SessionId == sessionId && ss.Scholarship.IsActive)
+            .ToListAsync();
+
+        decimal scholarshipDiscount = 0;
+
+        foreach (var ss in studentScholarships)
+        {
+            var sch = ss.Scholarship;
+            decimal maxApplicable = 0;
+            
+            if (sch.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Full))
+            {
+                maxApplicable = total;
+            }
+            else
+            {
+                if (sch.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Tuition)) maxApplicable += tuitionTotal;
+                if (sch.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Accommodation)) maxApplicable += accommodationTotal;
+                if (sch.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Feeding)) maxApplicable += feedingTotal;
+            }
+
+            decimal discount = maxApplicable * (sch.PercentageCovered / 100m);
+            ss.CalculatedAmount = discount;
+            scholarshipDiscount += discount;
+        }
+
+        scholarshipDiscount = Math.Min(scholarshipDiscount, total); // Cap discount
 
         if (existing == null)
         {
@@ -281,6 +331,7 @@ public sealed class FeeService(
                 StudentId = studentId,
                 SessionId = sessionId,
                 TotalAmount = total,
+                ScholarshipDiscount = scholarshipDiscount,
                 Status = FeeRecordStatus.Outstanding
             };
             db.StudentFeeRecords.Add(existing);
@@ -289,7 +340,14 @@ public sealed class FeeService(
         {
             // Preserve paid amount, recalculate total
             existing.TotalAmount = total + existing.LateFeeTotal;
+            existing.ScholarshipDiscount = scholarshipDiscount;
             existing.UpdatedAt = DateTime.UtcNow;
+            
+            existing.Status = existing.AmountPaid >= existing.Balance
+                ? FeeRecordStatus.Paid
+                : existing.AmountPaid > 0
+                    ? FeeRecordStatus.PartiallyPaid
+                    : FeeRecordStatus.Outstanding;
         }
 
         await db.SaveChangesAsync();
