@@ -20,7 +20,6 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
         var document = Document.Create(container =>
         {
-            // ── Page 1: Admission Offer Letter ────────────────────────────────
             container.Page(page =>
             {
                  page.Size(PageSizes.A4);
@@ -70,124 +69,6 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
 
                 page.Footer().Column(fcol => {
                     fcol.Item().Height(5).Row(row => {
-                        row.RelativeItem().Background("#10B981");
-                        row.RelativeItem().Background("#059669");
-                        row.RelativeItem().Background("#0F172A");
-                        row.RelativeItem().Background("#D4AF37");
-                    });
-                    fcol.Item().PaddingVertical(10).AlignCenter().Text(x =>
-                    {
-                        x.Span("CONFIDENTIAL ADMISSION DOCUMENT | PAGE ").FontSize(8).FontColor("#94A3B8");
-                        x.CurrentPageNumber().FontSize(8).FontColor("#94A3B8");
-                    });
-                });
-            });
-
-            // ── Page 2: Advance Payment Memorandum ────────────────────────────
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.Margin(0.7f, Unit.Inch);
-                page.PageColor(Colors.White);
-                page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Verdana));
-
-                page.Content().Column(col =>
-                {
-                    // Logo / University Name header
-                    col.Item().PaddingBottom(30).Row(headerRow =>
-                    {
-                        headerRow.RelativeItem().Column(c =>
-                        {
-                            if (template != null && !string.IsNullOrEmpty(template.LogoBase64))
-                            {
-                                try
-                                {
-                                    var bytes = Convert.FromBase64String(template.LogoBase64.Contains(",") ? template.LogoBase64.Split(',')[1] : template.LogoBase64);
-                                    c.Item().Height(60).Image(bytes);
-                                }
-                                catch
-                                {
-                                    c.Item().Text("WIGWE UNIVERSITY").FontSize(22).Bold().FontColor("#0F172A");
-                                }
-                            }
-                            else
-                            {
-                                c.Item().Text("WIGWE UNIVERSITY").FontSize(22).Bold().FontColor("#0F172A");
-                            }
-                        });
-                    });
-
-                    // Divider
-                    col.Item().PaddingBottom(20).BorderBottom(1.5f).BorderColor("#D4AF37");
-
-                    // Memo Title Block
-                    col.Item().PaddingBottom(6).AlignCenter()
-                        .Text("WIGWE UNIVERSITY MEMORANDUM").FontSize(13).Bold().FontColor("#0F172A").LetterSpacing(0.05f);
-
-                    col.Item().PaddingBottom(4).AlignCenter()
-                        .Text($"DATE: {DateTime.UtcNow:dd MMMM, yyyy}".ToUpper()).FontSize(11).Bold().FontColor("#1E293B");
-
-                    col.Item().PaddingBottom(4).AlignCenter()
-                        .Text("ATTENTION:").FontSize(11).Bold().FontColor("#334155");
-
-                    col.Item().PaddingBottom(20).AlignCenter()
-                        .Text("ALL WIGWE UNIVERSITY PARENTS AND INTENDING PARENTS")
-                        .FontSize(12).Bold().FontColor("#0F172A");
-
-                    col.Item().PaddingBottom(24).AlignCenter()
-                        .Text("RE: ADVANCE PAYMENT OF TUITION FEES")
-                        .FontSize(12).Bold().Underline().FontColor("#0F172A");
-
-                    // Body Text
-                    col.Item().PaddingBottom(18).Text(
-                        "This directive is to all parents who desire to make advance payments of the tuition fees for their Children / Wards.")
-                        .FontSize(11).FontColor("#334155").LineHeight(1.6f);
-
-                    col.Item().PaddingBottom(8).Text("Please note as follows:").FontSize(11).Bold().FontColor("#1E293B");
-
-                    // Numbered list
-                    var memoPoints = new[]
-                    {
-                        "That the University account details are available on the WU website.",
-                        "The bursary unit must be notified whenever such payments are made.",
-                        "All such payments must be clearly given the narrative \"advance payment\".",
-                        "Refund of such \"advance payments\" is done with 50% of the sum retained as administrative fees."
-                    };
-
-                    for (int i = 0; i < memoPoints.Length; i++)
-                    {
-                        col.Item().PaddingBottom(10).Row(row =>
-                        {
-                            row.AutoItem().PaddingRight(10).Text($"{i + 1}.").FontSize(11).Bold().FontColor("#334155");
-                            row.RelativeItem().Text(memoPoints[i]).FontSize(11).FontColor("#334155").LineHeight(1.6f);
-                        });
-                    }
-
-                    col.Item().PaddingTop(20).PaddingBottom(16).Text(
-                        "For further information, please contact the Dean, Student Affairs, Students Welfare Officer.")
-                        .FontSize(11).FontColor("#334155").LineHeight(1.6f);
-
-                    col.Item().PaddingTop(8).Text("Bursary Unit").FontSize(11).Bold().FontColor("#1E293B");
-
-                    // Contact footer block
-                    col.Item().PaddingTop(40).BorderTop(1).BorderColor("#E2E8F0").PaddingTop(14).Row(footRow =>
-                    {
-                        footRow.RelativeItem().Column(fc =>
-                        {
-                            fc.Item().Text("Isiokpo, Rivers State").FontSize(9).FontColor("#64748B");
-                            fc.Item().Text("T: +2348032006346").FontSize(9).FontColor("#64748B");
-                            fc.Item().Text("E: contact@wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
-                            fc.Item().Text("E: bursary@wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
-                        });
-                        footRow.RelativeItem().AlignCenter().Text("www.wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
-                        footRow.RelativeItem().AlignRight().Text("RC-7258338").FontSize(9).FontColor("#64748B");
-                    });
-                });
-
-                page.Footer().Column(fcol =>
-                {
-                    fcol.Item().Height(5).Row(row =>
-                    {
                         row.RelativeItem().Background("#10B981");
                         row.RelativeItem().Background("#059669");
                         row.RelativeItem().Background("#0F172A");
