@@ -83,6 +83,10 @@ public interface IAdmissionService
     // Registry reminder methods
     Task<ReminderSendResult> SendReminderAsync(Guid applicationId, CancellationToken ct = default);
     Task<BulkReminderResult> SendBulkRemindersAsync(IEnumerable<Guid> applicationIds, CancellationToken ct = default);
+
+    // Offer letter & rejection management
+    Task<AdmissionApplication> ResendOfferLetterAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default);
+    Task<AdmissionApplication> UndoRejectionAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default);
 }
 
 public record VisaValidationResult(

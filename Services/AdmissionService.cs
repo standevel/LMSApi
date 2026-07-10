@@ -697,6 +697,91 @@ public sealed class AdmissionService(
         return app;
     }
 
+    public async Task<AdmissionApplication> ResendOfferLetterAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.Faculty)
+            .Include(a => a.AcademicProgram)
+            .Include(a => a.Documents).ThenInclude(d => d.DocumentType)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+            throw new KeyNotFoundException("Application not found.");
+
+        if (app.Status != AdmissionStatus.Admitted && app.Status != AdmissionStatus.OfferAccepted)
+            throw new InvalidOperationException($"Offer letter can only be resent for applications with status 'Admitted' or 'OfferAccepted'. Current status: {app.Status}.");
+
+        var templateType = app.AcademicProgram?.Type switch
+        {
+            LMS.Api.Data.Enums.ProgramType.Postgraduate => "Postgraduate",
+            _ => "Undergraduate"
+        };
+
+        var pdf = await pdfService.GenerateOfferLetterAsync(app, templateType);
+        var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
+
+        await emailService.SendAdmissionOfferEmailAsync(
+            toEmail: app.StudentEmail,
+            studentName: fullName,
+            programName: app.AcademicProgram?.Name ?? "Selected Program",
+            pdfAttachment: pdf,
+            fileName: "Admission_Letter.pdf"
+        );
+
+        // Refresh offer expiry to give another 14 days from resend
+        app.OfferExpiresAt = DateTime.UtcNow.AddDays(14);
+        app.UpdatedAt = DateTime.UtcNow;
+
+        dbContext.AuditLogs.Add(new AuditLog
+        {
+            Action = "Resend Offer Letter",
+            EntityName = nameof(AdmissionApplication),
+            EntityId = app.Id.ToString(),
+            Changes = $"Offer letter resent to {app.StudentEmail}. New expiry: {app.OfferExpiresAt:yyyy-MM-dd}",
+            UserId = updatedBy
+        });
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("[RESEND-OFFER] Offer letter resent to {Email} for application {Id}", app.StudentEmail, app.Id);
+
+        return app;
+    }
+
+    public async Task<AdmissionApplication> UndoRejectionAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.Faculty)
+            .Include(a => a.AcademicProgram)
+            .Include(a => a.Documents).ThenInclude(d => d.DocumentType)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+            throw new KeyNotFoundException("Application not found.");
+
+        if (app.Status != AdmissionStatus.Rejected)
+            throw new InvalidOperationException($"Only rejected applications can be restored. Current status: {app.Status}.");
+
+        var previousStatus = AdmissionStatus.UnderReview;
+        app.Status = previousStatus;
+        app.UpdatedAt = DateTime.UtcNow;
+
+        dbContext.AuditLogs.Add(new AuditLog
+        {
+            Action = "Undo Rejection",
+            EntityName = nameof(AdmissionApplication),
+            EntityId = app.Id.ToString(),
+            Changes = $"Application restored from Rejected → {previousStatus}",
+            UserId = updatedBy
+        });
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("[UNDO-REJECTION] Application {Id} restored from Rejected to {Status}", app.Id, previousStatus);
+
+        return app;
+    }
+
     private async Task HandleStatusChangeNotificationsAsync(AdmissionApplication app, AdmissionStatus newStatus, Guid? updatedBy = null)
     {
         try
