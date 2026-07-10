@@ -2,13 +2,18 @@ using ErrorOr;
 using LMS.Api.Common.Errors;
 using LMS.Api.Common.Mapping;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
+using LMS.Api.Security;
 
 namespace LMS.Api.Services;
 
 public sealed class FacultyService(
     IFacultyRepository facultyRepository,
+    IUserRoleRepository userRoleRepository,
+    IRoleRepository roleRepository,
+    LmsDbContext dbContext,
     IAuditService auditService) : BaseService(auditService), IFacultyService
 {
     public async Task<ErrorOr<FacultyDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
@@ -37,6 +42,18 @@ public sealed class FacultyService(
         await facultyRepository.AddAsync(faculty, ct);
         await facultyRepository.SaveChangesAsync(ct);
 
+        if (faculty.DeanId.HasValue)
+        {
+            await AssignRoleAsync(faculty.DeanId.Value, LmsRoles.Dean, ct);
+            await AssignRoleAsync(faculty.DeanId.Value, LmsRoles.Lecturer, ct);
+            
+            var user = await dbContext.Users.FindAsync([faculty.DeanId.Value], ct);
+            if (user != null)
+            {
+                user.FacultyId = faculty.Id;
+            }
+        }
+
         await LogActionAsync("Create", "Faculty", faculty.Id.ToString(), $"Created faculty: {faculty.Name} ({faculty.Label})", ct);
 
         return faculty.ToDto();
@@ -47,12 +64,34 @@ public sealed class FacultyService(
         var faculty = await facultyRepository.GetByIdAsync(id, ct);
         if (faculty is null) return DomainErrors.Faculty.NotFound;
 
+        var oldDeanId = faculty.DeanId;
+
         faculty.Name = request.Name;
         faculty.Label = request.Label;
         faculty.DeanId = request.DeanId;
 
         await facultyRepository.UpdateAsync(faculty, ct);
         await facultyRepository.SaveChangesAsync(ct);
+
+        if (oldDeanId != request.DeanId)
+        {
+            if (oldDeanId.HasValue)
+            {
+                await RevokeRoleAsync(oldDeanId.Value, LmsRoles.Dean, ct);
+            }
+
+            if (request.DeanId.HasValue)
+            {
+                await AssignRoleAsync(request.DeanId.Value, LmsRoles.Dean, ct);
+                await AssignRoleAsync(request.DeanId.Value, LmsRoles.Lecturer, ct);
+                
+                var user = await dbContext.Users.FindAsync([request.DeanId.Value], ct);
+                if (user != null)
+                {
+                    user.FacultyId = faculty.Id;
+                }
+            }
+        }
 
         await LogActionAsync("Update", "Faculty", id.ToString(), $"Updated faculty: {faculty.Name}", ct);
 
@@ -75,5 +114,33 @@ public sealed class FacultyService(
         await LogActionAsync("Delete", "Faculty", id.ToString(), $"Deleted faculty: {faculty.Name}", ct);
 
         return Result.Deleted;
+    }
+
+    private async Task AssignRoleAsync(Guid userId, string roleName, CancellationToken ct)
+    {
+        var role = await roleRepository.GetByNameAsync(roleName, ct);
+        if (role is not null)
+        {
+            var exists = await userRoleRepository.AssignmentExistsAsync(userId, role.Id, ct);
+            if (!exists)
+            {
+                await userRoleRepository.AssignAsync(userId, role.Id, DateTime.UtcNow, ct);
+                await userRoleRepository.SaveChangesAsync(ct);
+            }
+        }
+    }
+
+    private async Task RevokeRoleAsync(Guid userId, string roleName, CancellationToken ct)
+    {
+        var role = await roleRepository.GetByNameAsync(roleName, ct);
+        if (role is not null)
+        {
+            var exists = await userRoleRepository.AssignmentExistsAsync(userId, role.Id, ct);
+            if (exists)
+            {
+                await userRoleRepository.RevokeAsync(userId, role.Id, ct);
+                await userRoleRepository.SaveChangesAsync(ct);
+            }
+        }
     }
 }

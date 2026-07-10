@@ -24,6 +24,7 @@ public sealed partial class DbInitializer(LmsDbContext dbContext, ILogger<DbInit
         await SeedDepartmentsAsync(ct);
         await SeedProgramsAsync(ct);
         await SeedLecturersAsync(ct);
+        await SeedStudentsAsync(ct);
         await SeedDocumentTypesAsync(ct);
         await SeedSponsorsAsync(ct);
         await SeedSubjectsAsync(ct);
@@ -35,6 +36,7 @@ await SeedCountriesAsync(ct);
         await SeedRegistrationConfigurationAsync(ct);
         await SeedParentPortalConfigurationAsync(ct);
         await SeedSystemGradingConfigurationAsync(ct);
+        await SeedSystemTranscriptConfigurationAsync(ct);
         await SeedFeeCategoriesAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
@@ -198,7 +200,8 @@ await SeedCountriesAsync(ct);
                 StartDate = new DateTime(2024, 9, 1),
                 EndDate = new DateTime(2025, 8, 31),
                 IsActive = true,
-                IsAdmissionOpen = true
+                IsAdmissionOpen = true,
+                ActiveSemester = Semester.First
             },
             new AcademicSession
             {
@@ -206,7 +209,8 @@ await SeedCountriesAsync(ct);
                 StartDate = new DateTime(2025, 9, 1),
                 EndDate = new DateTime(2026, 8, 31),
                 IsActive = false,
-                IsAdmissionOpen = true
+                IsAdmissionOpen = true,
+                ActiveSemester = Semester.First
             }
         );
         await dbContext.SaveChangesAsync(ct);
@@ -763,33 +767,71 @@ await SeedCountriesAsync(ct);
 
         logger.LogInformation("Seeding Course Offerings from active curricula for session {SessionName}...", activeSession.Name);
 
-        var existingOfferings = await dbContext.CourseOfferings
+        // Key: (CourseId, Semester) — one offering per course/session/semester
+        var existingOfferingKeys = await dbContext.CourseOfferings
             .Where(co => co.AcademicSessionId == activeSession.Id)
-            .Select(co => new { co.CourseId, co.ProgramId, co.LevelId, co.Semester })
+            .Select(co => new { co.CourseId, co.Semester })
             .ToListAsync(ct);
 
-        var existingSet = existingOfferings.ToHashSet();
+        var existingSet = existingOfferingKeys.ToHashSet();
+
+        // Also pre-load existing CourseOfferingProgram rows to avoid duplicate joins
+        var existingOfferingIds = await dbContext.CourseOfferings
+            .Where(co => co.AcademicSessionId == activeSession.Id)
+            .Select(co => co.Id)
+            .ToListAsync(ct);
+
+        var existingProgramLinks = await dbContext.CourseOfferingPrograms
+            .Where(p => existingOfferingIds.Contains(p.CourseOfferingId))
+            .Select(p => new { p.CourseOfferingId, p.ProgramId, p.LevelId })
+            .ToListAsync(ct);
+
+        var existingLinkSet = existingProgramLinks.ToHashSet();
+
         var addedCount = 0;
 
         foreach (var cc in curriculumCourses)
         {
-            var key = new { cc.CourseId, ProgramId = cc.Curriculum.ProgramId, cc.LevelId, cc.Semester };
-            if (existingSet.Contains(key))
+            var offeringKey = new { cc.CourseId, cc.Semester };
+
+            CourseOffering? offering;
+            if (existingSet.Contains(offeringKey))
             {
-                continue;
+                // Offering exists — just make sure this program/level is linked
+                offering = await dbContext.CourseOfferings
+                    .FirstOrDefaultAsync(co =>
+                        co.CourseId == cc.CourseId &&
+                        co.AcademicSessionId == activeSession.Id &&
+                        co.Semester == cc.Semester, ct);
+            }
+            else
+            {
+                offering = new CourseOffering
+                {
+                    CourseId          = cc.CourseId,
+                    AcademicSessionId = activeSession.Id,
+                    Semester          = cc.Semester,
+                    CurriculumId      = cc.CurriculumId
+                };
+                dbContext.CourseOfferings.Add(offering);
+                await dbContext.SaveChangesAsync(ct); // flush so offering.Id is set
+                existingSet.Add(offeringKey);
+                addedCount++;
             }
 
-            dbContext.CourseOfferings.Add(new CourseOffering
+            if (offering is null) continue;
+
+            var linkKey = new { CourseOfferingId = offering.Id, ProgramId = cc.Curriculum.ProgramId, cc.LevelId };
+            if (!existingLinkSet.Contains(linkKey))
             {
-                CourseId = cc.CourseId,
-                ProgramId = cc.Curriculum.ProgramId,
-                LevelId = cc.LevelId,
-                AcademicSessionId = activeSession.Id,
-                Semester = cc.Semester,
-                CurriculumId = cc.CurriculumId,
-                LecturerId = null // Assigned later
-            });
-            addedCount++;
+                dbContext.CourseOfferingPrograms.Add(new CourseOfferingProgram
+                {
+                    CourseOfferingId = offering.Id,
+                    ProgramId        = cc.Curriculum.ProgramId,
+                    LevelId          = cc.LevelId
+                });
+                existingLinkSet.Add(linkKey);
+            }
         }
 
             if (addedCount > 0)
@@ -891,5 +933,23 @@ await SeedCountriesAsync(ct);
             {
                 logger.LogInformation("System grading configuration already has letter grade mappings. Skipping.");
             }
+        }
+
+        private async Task SeedSystemTranscriptConfigurationAsync(CancellationToken ct)
+        {
+            if (await dbContext.SystemTranscriptConfigurations.AnyAsync(ct))
+            {
+                return;
+            }
+
+            logger.LogInformation("Seeding default global System Transcript Configuration...");
+
+            dbContext.SystemTranscriptConfigurations.Add(new SystemTranscriptConfiguration
+            {
+                ChargeForTranscripts = true,
+                OfficialTranscriptFee = 5000m
+            });
+            await dbContext.SaveChangesAsync(ct);
+            logger.LogInformation("Seeded default system transcript configuration.");
         }
     }

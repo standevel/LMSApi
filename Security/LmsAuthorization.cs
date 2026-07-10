@@ -68,7 +68,7 @@ public static class LmsAuthorizationExtensions
 
             options.AddPolicy(
                 LmsPolicies.AcademicManagement,
-                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.AcademicAdmin));
+                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.AcademicAdmin, LmsRoles.HOD));
 
             options.AddPolicy(
                 LmsPolicies.AdmissionsManagement,

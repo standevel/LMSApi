@@ -44,7 +44,7 @@ public class ScheduleService : BaseService, IScheduleService
             .Where(e => e.StudentId == studentId && e.Status == "Registered" &&
                         e.CourseOffering.AcademicSessionId == academicSessionId)
             .Include(e => e.CourseOffering).ThenInclude(co => co.Course)
-            .Include(e => e.CourseOffering).ThenInclude(co => co.Lecturer)
+            .Include(e => e.CourseOffering).ThenInclude(co => co.Lecturers).ThenInclude(l => l.Lecturer)
             .ToListAsync(ct);
 
         if (enrollments.Count == 0)
@@ -63,9 +63,17 @@ public class ScheduleService : BaseService, IScheduleService
             .Where(slot => offeringIds.Contains(slot.CourseOfferingId))
             .ToListAsync(ct);
 
-        // Get all active/upcoming online lecture sessions for these offerings
+        // Get all sibling offering IDs (sharing same course code and academic session)
+        var registeredCourseCodes = enrollments.Select(e => e.CourseOffering.Course.Code).Distinct().ToList();
+        var siblingOfferingIds = await _context.CourseOfferings
+            .Where(co => co.AcademicSessionId == academicSessionId && registeredCourseCodes.Contains(co.Course.Code))
+            .Select(co => co.Id)
+            .ToListAsync(ct);
+
+        // Get all active/upcoming online lecture sessions for these sibling offerings
         var sessions = await _context.LectureSessions
-            .Where(s => offeringIds.Contains(s.CourseOfferingId) && s.OnlineMeetingJoinUrl != null && !s.IsCompleted)
+            .Include(s => s.TimetableSlot)
+            .Where(s => siblingOfferingIds.Contains(s.CourseOfferingId) && s.OnlineMeetingJoinUrl != null && !s.IsCompleted)
             .ToListAsync(ct);
 
         var scheduleDtos = new List<ScheduleDto>();
@@ -74,17 +82,30 @@ public class ScheduleService : BaseService, IScheduleService
         {
             var offering = enrollment.CourseOffering;
                 var offeringSlots = slots.Where(slot => slot.CourseOfferingId == offering.Id).ToList();
-                
+                // Resolve main lecturer once, used in both branches
+                var mainLecturerId = offering.Lecturers
+                    .FirstOrDefault(l => l.Role == LMS.Api.Data.Enums.CourseLecturerRole.Main)
+                    ?.LecturerId;
+                var mainLecturerName = offering.Lecturers
+                    .FirstOrDefault(l => l.Role == LMS.Api.Data.Enums.CourseLecturerRole.Main)
+                    ?.Lecturer?.DisplayName ?? "Unknown Lecturer";
+
                 if (offeringSlots.Count > 0)
                 {
                     foreach (var slot in offeringSlots)
                     {
-                        var lecturerName = slot.Lecturer?.DisplayName 
-                            ?? offering.Lecturer?.DisplayName 
-                            ?? "Unknown Lecturer";
+                        var lecturerName = slot.Lecturer?.DisplayName
+                        ?? mainLecturerName
+                        ?? "Unknown Lecturer";
 
                         var session = sessions.FirstOrDefault(s => s.TimetableSlotId == slot.Id)
-                                      ?? sessions.FirstOrDefault(s => s.CourseOfferingId == offering.Id);
+                                      ?? sessions.FirstOrDefault(s => s.CourseOfferingId == offering.Id)
+                                      ?? sessions.FirstOrDefault(s => 
+                                          s.TimetableSlot != null && 
+                                          s.TimetableSlot.DayOfWeek == slot.DayOfWeek && 
+                                          s.TimetableSlot.StartTime == slot.StartTime && 
+                                          s.TimetableSlot.EndTime == slot.EndTime && 
+                                          s.TimetableSlot.VenueId == slot.VenueId);
                         var isOnline = session?.OnlineMeetingJoinUrl != null;
                         var joinUrl = session?.OnlineMeetingJoinUrl;
 
@@ -99,7 +120,7 @@ public class ScheduleService : BaseService, IScheduleService
                             slot.StartTime.ToString("HH:mm:ss"),
                             slot.EndTime.ToString("HH:mm:ss"),
                             isOnline ? "Online" : (slot.Venue?.Name ?? "TBD"),
-                            slot.LecturerId ?? offering.LecturerId,
+                            slot.LecturerId ?? mainLecturerId,
                             lecturerName,
                             isOnline,
                             joinUrl
@@ -109,8 +130,6 @@ public class ScheduleService : BaseService, IScheduleService
                 else
                 {
                     // No slot scheduled yet, return placeholder slot details
-                    var lecturerName = offering.Lecturer?.DisplayName ?? "Unknown Lecturer";
-
                     var session = sessions.FirstOrDefault(s => s.CourseOfferingId == offering.Id);
                     var isOnline = session?.OnlineMeetingJoinUrl != null;
                     var joinUrl = session?.OnlineMeetingJoinUrl;
@@ -126,8 +145,8 @@ public class ScheduleService : BaseService, IScheduleService
                         null,
                         null,
                         isOnline ? "Online" : null,
-                        offering.LecturerId,
-                        lecturerName,
+                        mainLecturerId,
+                        mainLecturerName,
                         isOnline,
                         joinUrl
                     ));

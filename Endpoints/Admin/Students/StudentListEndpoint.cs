@@ -29,7 +29,8 @@ public sealed class StudentListEndpoint : ApiEndpointWithoutRequest<StudentListR
         string? departmentId = GetString(query, "departmentId");
         string? facultyId = GetString(query, "facultyId");
         string? levelId = GetString(query, "levelId");
-        string? sessionId = GetString(query, "sessionId");
+        // Accept both 'sessionId' and 'academicSessionId' (sent by the frontend interceptor)
+        string? sessionId = GetString(query, "sessionId") ?? GetString(query, "academicSessionId");
         string? status = GetString(query, "status");
         var page = GetInt(query, "page") ?? 1;
         var pageSize = GetInt(query, "pageSize") ?? 25;

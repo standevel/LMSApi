@@ -292,4 +292,32 @@ public sealed class BrevoEmailService(
 
         return SendEmailAsync(toEmail, subject, content);
     }
+
+    public Task SendCourseAssignmentEmailAsync(string toEmail, string lecturerName, string courseCode, string courseTitle, string sessionName)
+    {
+        var subject = $"Course Assignment: {courseCode} - Wigwe University";
+        var content = $@"
+            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>
+                <h2 style='color:#006B62;'>New Course Assignment</h2>
+                <p>Dear {lecturerName},</p>
+                <p>You have been assigned to teach the following course for the <strong>{sessionName}</strong> academic session:</p>
+                <div style='background:#f9f9f9; padding:15px; border-radius:8px; margin:20px 0;'>
+                    <p><strong>Course Code:</strong> {courseCode}</p>
+                    <p><strong>Course Title:</strong> {courseTitle}</p>
+                </div>
+                <p>You can view your course details and manage materials via the LMS portal.</p>
+                <p>
+                    <a href='https://lms.wigweuniversity.edu.ng/lecturer/courses'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Go to My Courses
+                    </a>
+                </p>
+                <hr style='border:0; border-top:1px solid #eee; margin:20px 0;'>
+                <p style='font-size:12px; color:#666;'>
+                    Wigwe University Academic Registry
+                </p>
+            </div>";
+
+        return SendEmailAsync(toEmail, subject, content);
+    }
 }

@@ -17,7 +17,7 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
         _dbContext = dbContext;
     }
 
-    public async Task<ErrorOr<GpaDto>> GetStudentGpaAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<ErrorOr<GpaDto>> GetStudentGpaAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
     {
         var student = await _dbContext.Students
             .Include(x => x.AcademicProgram)
@@ -27,6 +27,8 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
+        // Force academicSessionId to null so we always get the GLOBAL cumulative GPA
+        // If callers want a specific session's GPA, they can call GetStudentSessionGpasAsync or CalculateGpaForStudentAsync directly
         var result = await CalculateGpaForStudentAsync(studentId, null, ct);
         return result;
     }

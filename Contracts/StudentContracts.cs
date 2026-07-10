@@ -22,6 +22,7 @@ public sealed class StudentSummaryDto
     public DateTime? EnrollmentDate { get; set; }
     public DateTime? GraduationDate { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public string? JambRegistrationNumber { get; set; }
 }
 
 public sealed class StudentListResponse

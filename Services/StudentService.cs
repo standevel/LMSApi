@@ -37,7 +37,7 @@ public class StudentService(LmsDbContext context) : IStudentService
             .Include(s => s.AcademicSession)
             .AsQueryable();
 
-        // Filter by search (name or matric number)
+        // Filter by search (name or matric number or emails or IDs)
         if (!string.IsNullOrWhiteSpace(search))
         {
             var lower = search.ToLower();
@@ -46,7 +46,10 @@ public class StudentService(LmsDbContext context) : IStudentService
                 s.LastName.ToLower().Contains(lower) ||
                 s.MiddleName != null && s.MiddleName.ToLower().Contains(lower) ||
                 s.StudentNumber != null && s.StudentNumber.ToLower().Contains(lower) ||
-                s.PersonalEmail.ToLower().Contains(lower));
+                s.PersonalEmail.ToLower().Contains(lower) ||
+                s.OfficialEmail.ToLower().Contains(lower) ||
+                s.EntraObjectId.ToLower().Contains(lower) ||
+                s.JambRegistrationNumber != null && s.JambRegistrationNumber.ToLower().Contains(lower));
         }
 
         // Filter by program
@@ -113,7 +116,8 @@ public class StudentService(LmsDbContext context) : IStudentService
                 Status = s.Status.ToString(),
                 EnrollmentDate = s.EnrollmentDate,
                 GraduationDate = s.GraduationDate,
-                UpdatedAt = s.UpdatedAt
+                UpdatedAt = s.UpdatedAt,
+                JambRegistrationNumber = s.JambRegistrationNumber
             })
             .ToListAsync(ct);
 
@@ -232,7 +236,7 @@ public class StudentService(LmsDbContext context) : IStudentService
                 CourseTitle = offering.Course?.Title ?? string.Empty,
                 CreditUnits = offering.Course?.CreditUnits ?? 0,
                 Semester = offering.Semester.ToString(),
-                Level = offering.LevelId != Guid.Empty ? 0 : 0, // Would need level lookup
+                Level = 0, // Level is now per-program via CourseOfferingPrograms join table
                 TotalCA = (decimal)caScore,
                 TotalExam = examScore,
                 TotalMarks = totalMarks,

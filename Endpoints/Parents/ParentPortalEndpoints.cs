@@ -89,7 +89,11 @@ public sealed class GetStudentProgressEndpoint(
             return;
         }
 
-        var result = await parentPortalService.GetStudentProgressAsync(req.StudentId, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var academicSessionId = sessionId == Guid.Empty ? (Guid?)null : sessionId;
+
+        var result = await parentPortalService.GetStudentProgressAsync(req.StudentId, academicSessionId, ct);
         await SendAsync(result, ct);
     }
 }
@@ -127,7 +131,11 @@ public sealed class GetStudentGradesEndpoint(
             return;
         }
 
-        var result = await parentPortalService.GetStudentGradesAsync(req.StudentId, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var academicSessionId = sessionId == Guid.Empty ? (Guid?)null : sessionId;
+
+        var result = await parentPortalService.GetStudentGradesAsync(req.StudentId, academicSessionId, ct);
         await SendAsync(result, ct);
     }
 }

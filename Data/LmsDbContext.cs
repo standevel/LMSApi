@@ -20,6 +20,8 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<CourseEnrollment> CourseEnrollments => Set<CourseEnrollment>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<CourseOffering> CourseOfferings => Set<CourseOffering>();
+    public DbSet<CourseOfferingProgram> CourseOfferingPrograms => Set<CourseOfferingProgram>();
+    public DbSet<CourseOfferingLecturer> CourseOfferingLecturers => Set<CourseOfferingLecturer>();
     public DbSet<Curriculum> Curricula => Set<Curriculum>();
     public DbSet<CurriculumCourse> CurriculumCourses => Set<CurriculumCourse>();
     public DbSet<LevelSemesterConfig> LevelSemesterConfigs => Set<LevelSemesterConfig>();
@@ -125,6 +127,9 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
      public DbSet<DegreeRequirement> DegreeRequirements => Set<DegreeRequirement>();
      public DbSet<DegreeRequirementCourse> DegreeRequirementCourses => Set<DegreeRequirementCourse>();
 public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
+      public DbSet<SystemTranscriptConfiguration> SystemTranscriptConfigurations => Set<SystemTranscriptConfiguration>();
+      public DbSet<CertificateRequest> CertificateRequests => Set<CertificateRequest>();
+      public DbSet<SystemCertificateConfiguration> SystemCertificateConfigurations => Set<SystemCertificateConfiguration>();
       public DbSet<ReportCache> ReportCaches => Set<ReportCache>();
 
       // ===== Phase 5: Advanced Features =====
@@ -343,6 +348,29 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .HasForeignKey(x => x.CourseId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(x => x.AcademicSession)
+                .WithMany()
+                .HasForeignKey(x => x.AcademicSessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Curriculum)
+                .WithMany()
+                .HasForeignKey(x => x.CurriculumId);
+
+            // One offering per course/session/semester — programs link via CourseOfferingPrograms
+            entity.HasIndex(x => new { x.CourseId, x.AcademicSessionId, x.Semester }).IsUnique();
+        });
+
+        modelBuilder.Entity<CourseOfferingProgram>(entity =>
+        {
+            entity.ToTable("CourseOfferingPrograms");
+            entity.HasKey(x => x.Id);
+
+            entity.HasOne(x => x.CourseOffering)
+                .WithMany(x => x.Programs)
+                .HasForeignKey(x => x.CourseOfferingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasOne(x => x.Program)
                 .WithMany()
                 .HasForeignKey(x => x.ProgramId)
@@ -353,22 +381,28 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .HasForeignKey(x => x.LevelId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(x => x.AcademicSession)
-                .WithMany()
-                .HasForeignKey(x => x.AcademicSessionId)
-                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CourseOfferingId, x.ProgramId, x.LevelId }).IsUnique();
+        });
 
-            entity.HasOne(x => x.Curriculum)
-                .WithMany()
-                .HasForeignKey(x => x.CurriculumId);
+        modelBuilder.Entity<CourseOfferingLecturer>(entity =>
+        {
+            entity.ToTable("CourseOfferingLecturers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasConversion<int>().IsRequired();
+
+            entity.HasOne(x => x.CourseOffering)
+                .WithMany(x => x.Lecturers)
+                .HasForeignKey(x => x.CourseOfferingId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(x => x.Lecturer)
                 .WithMany()
                 .HasForeignKey(x => x.LecturerId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => new { x.CourseId, x.ProgramId, x.LevelId, x.AcademicSessionId, x.Semester }).IsUnique();
+            entity.HasIndex(x => new { x.CourseOfferingId, x.LecturerId }).IsUnique();
         });
+
 
         modelBuilder.Entity<Curriculum>(entity =>
         {
@@ -823,6 +857,26 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.AutoCreateGuardianAccountsOnStudentCreation).IsRequired();
             entity.Property(x => x.SendGuardianInvitationEmail).IsRequired();
             entity.Property(x => x.DefaultRelationship).HasMaxLength(100).IsRequired();
+        });
+
+        modelBuilder.Entity<SystemTranscriptConfiguration>(entity =>
+        {
+            entity.ToTable("SystemTranscriptConfigurations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ChargeForTranscripts).IsRequired();
+            entity.Property(x => x.OfficialTranscriptFee).HasPrecision(18, 2).IsRequired();
+        });
+
+        modelBuilder.Entity<SystemCertificateConfiguration>(entity =>
+        {
+            entity.ToTable("SystemCertificateConfigurations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ChargeForCertificates).IsRequired();
+            entity.Property(x => x.OfficialCertificateFee).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.SignatoryName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.SignatoryPosition).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.RegistrarName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RegistrarPosition).HasMaxLength(100).IsRequired();
         });
 
         modelBuilder.Entity<AssessmentCategory>(entity =>
@@ -1373,6 +1427,41 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<CertificateRequest>(entity =>
+        {
+            entity.ToTable("CertificateRequests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CertificateType).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.DeliveryEmail).HasMaxLength(500);
+            entity.Property(x => x.DeliveryMethod).HasMaxLength(50);
+            entity.Property(x => x.Remarks).HasMaxLength(1000);
+            entity.Property(x => x.FeeAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FeePaid).IsRequired();
+            entity.Property(x => x.CompletedAt);
+            entity.Property(x => x.DocumentUrl).HasMaxLength(2000);
+            entity.Property(x => x.CredentialId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Creator)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedById)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Processor)
+                .WithMany()
+                .HasForeignKey(x => x.ProcessedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CredentialId).IsUnique();
             entity.HasIndex(x => x.CreatedAt);
         });
 

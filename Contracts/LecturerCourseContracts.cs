@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Http;
+using LMS.Api.Data.Enums;
 
 namespace LMS.Api.Contracts;
+
+// ─── Lecturer My-Courses ──────────────────────────────────────────────────────
 
 public record LecturerCourseOfferingDto(
     Guid Id,
@@ -8,13 +11,14 @@ public record LecturerCourseOfferingDto(
     string CourseCode,
     string CourseTitle,
     int CreditUnits,
-    Guid ProgramId,
-    string ProgramName,
-    Guid LevelId,
-    string LevelName,
+    /// <summary>Combined comma-separated program names for display.</summary>
+    string ProgramNames,
+    /// <summary>Combined comma-separated level names for display.</summary>
+    string LevelNames,
     Guid AcademicSessionId,
     string AcademicSessionName,
     int Semester,
+    CourseLecturerRole Role,
     int EnrolledStudentCount,
     int UpcomingSessionsCount);
 
@@ -23,7 +27,8 @@ public record LecturerCoursesResponse(
     int TotalCourses,
     int TotalStudents);
 
-// Course Detail Contracts
+// ─── Course Detail (Lecturer-facing) ─────────────────────────────────────────
+
 public record CourseMaterialDto(
     Guid Id,
     string Title,
@@ -48,13 +53,12 @@ public record CourseDetailResponse(
     string CourseTitle,
     string? Description,
     int CreditUnits,
-    Guid ProgramId,
-    string ProgramName,
-    Guid LevelId,
-    string LevelName,
+    /// <summary>All programs + levels attached to this offering.</summary>
+    List<OfferingProgramDto> Programs,
     Guid AcademicSessionId,
     string AcademicSessionName,
     int Semester,
+    List<OfferingLecturerDto> Lecturers,
     List<CourseMaterialDto> Materials,
     List<CourseStudentDto> Students,
     int MaterialsCount,

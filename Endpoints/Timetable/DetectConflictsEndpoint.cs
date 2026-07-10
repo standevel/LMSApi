@@ -9,6 +9,9 @@ public class DetectConflictsRequest
     public int DayOfWeek { get; set; }
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
+    public Guid? AcademicSessionId { get; set; }
+    public Guid? VenueId { get; set; }
+    public Guid? CourseOfferingId { get; set; }
 }
 
 public class DetectConflictsEndpoint(ITimetableService timetableService)
@@ -26,7 +29,14 @@ public class DetectConflictsEndpoint(ITimetableService timetableService)
 
     public override async Task HandleAsync(DetectConflictsRequest req, CancellationToken ct)
     {
-        var result = await timetableService.DetectConflictsAsync(req.LecturerId, req.DayOfWeek, req.StartTime, req.EndTime);
+        var result = await timetableService.DetectConflictsAsync(
+            req.LecturerId, 
+            req.DayOfWeek, 
+            req.StartTime, 
+            req.EndTime, 
+            req.AcademicSessionId, 
+            req.VenueId, 
+            req.CourseOfferingId);
         await SendSuccessAsync(result, ct, "Conflict detection complete");
     }
 }

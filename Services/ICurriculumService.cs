@@ -8,6 +8,7 @@ public interface ICurriculumService
     Task<ErrorOr<CurriculumDto>> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<ErrorOr<List<CurriculumSummaryDto>>> GetByProgramIdAsync(Guid programId, CancellationToken ct = default);
     Task<ErrorOr<CurriculumDto>> CreateCurriculumAsync(Guid programId, CreateCurriculumRequest request, CancellationToken ct = default);
+    Task<ErrorOr<CurriculumDto>> UpdateCurriculumAsync(Guid curriculumId, UpdateCurriculumRequest request, CancellationToken ct = default);
     Task<ErrorOr<CurriculumDto>> AddCourseAsync(Guid curriculumId, AddCurriculumCourseRequest request, CancellationToken ct = default);
     Task<ErrorOr<CurriculumDto>> UpdateCourseAsync(Guid curriculumId, Guid id, UpdateCurriculumCourseRequest request, CancellationToken ct = default);
     Task<ErrorOr<CurriculumDto>> AddCoursesBulkAsync(Guid curriculumId, BulkAddCurriculumCourseRequest request, CancellationToken ct = default);
@@ -17,4 +18,6 @@ public interface ICurriculumService
     Task<ErrorOr<bool>> ValidatePrerequisitesAsync(Guid curriculumId, CancellationToken ct = default);
     Task<ErrorOr<bool>> AddPrerequisiteAsync(Guid courseId, AddCoursePrerequisiteRequest request, CancellationToken ct = default);
     Task<ErrorOr<List<CurriculumHistoryDto>>> GetHistoryAsync(Guid curriculumId, CancellationToken ct = default);
+    Task<ErrorOr<CurriculumDto>> RemoveLevelAsync(Guid curriculumId, Guid levelId, CancellationToken ct = default);
+    Task<ErrorOr<Deleted>> DeleteCurriculumAsync(Guid curriculumId, CancellationToken ct = default);
 }

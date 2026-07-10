@@ -24,6 +24,8 @@ public sealed class UserRepository(LmsDbContext dbContext) : IUserRepository
                 .ThenInclude(x => x.Role)
             .Include(x => x.UserPermissions)
                 .ThenInclude(x => x.Permission)
+            .Include(x => x.Department)
+            .Include(x => x.Faculty)
             .FirstOrDefaultAsync(x => x.EntraObjectId == entraObjectId, ct);
 
     public Task<AppUser?> GetActiveByUsernameAsync(string username, CancellationToken ct = default) =>

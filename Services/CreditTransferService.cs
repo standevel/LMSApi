@@ -18,7 +18,6 @@ public sealed class CreditTransferService(LmsDbContext dbContext) : ICreditTrans
         {
             return new TransferCreditResult(0, 0, 0, 0, false, "No credit transfer rule found for the selected program and country.");
         }
-
         // Check minimum CGPA requirement
         if (previousCGPA < rule.MinCGPA)
         {

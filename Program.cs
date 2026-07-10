@@ -30,7 +30,7 @@ app.UseApplicationMiddleware()
 
 app.Run();
 
-// Triggering seeder run
+// Trigger full watch rebuild to scan new endpoints
 public partial class Program
 {
 }

@@ -5,6 +5,7 @@ using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
+using LMS.Api.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
@@ -12,6 +13,8 @@ namespace LMS.Api.Services;
 public sealed class DepartmentService(
     IDepartmentRepository departmentRepository,
     IFacultyRepository facultyRepository,
+    IUserRoleRepository userRoleRepository,
+    IRoleRepository roleRepository,
     LmsDbContext dbContext,
     IAuditService auditService) : BaseService(auditService), IDepartmentService
 {
@@ -57,6 +60,18 @@ public sealed class DepartmentService(
         await departmentRepository.AddAsync(department, ct);
         await departmentRepository.SaveChangesAsync(ct);
 
+        if (department.HeadId.HasValue)
+        {
+            await AssignRoleAsync(department.HeadId.Value, LmsRoles.HOD, ct);
+            await AssignRoleAsync(department.HeadId.Value, LmsRoles.Lecturer, ct);
+            
+            var user = await dbContext.Users.FindAsync([department.HeadId.Value], ct);
+            if (user != null)
+            {
+                user.DepartmentId = department.Id;
+            }
+        }
+
         await LogActionAsync("Create", "Department", department.Id.ToString(), $"Created department: {department.Name} ({department.Code})", ct);
 
         return department.ToDto();
@@ -70,6 +85,8 @@ public sealed class DepartmentService(
         var faculty = await facultyRepository.GetByIdAsync(request.FacultyId, ct);
         if (faculty is null) return DomainErrors.Faculty.NotFound;
 
+        var oldHeadId = department.HeadId;
+
         department.Name = request.Name;
         department.Code = request.Code;
         department.FacultyId = request.FacultyId;
@@ -78,6 +95,26 @@ public sealed class DepartmentService(
 
         await departmentRepository.UpdateAsync(department, ct);
         await departmentRepository.SaveChangesAsync(ct);
+
+        if (oldHeadId != request.HeadId)
+        {
+            if (oldHeadId.HasValue)
+            {
+                await RevokeRoleAsync(oldHeadId.Value, LmsRoles.HOD, ct);
+            }
+            
+            if (request.HeadId.HasValue)
+            {
+                await AssignRoleAsync(request.HeadId.Value, LmsRoles.HOD, ct);
+                await AssignRoleAsync(request.HeadId.Value, LmsRoles.Lecturer, ct);
+                
+                var user = await dbContext.Users.FindAsync([request.HeadId.Value], ct);
+                if (user != null)
+                {
+                    user.DepartmentId = department.Id;
+                }
+            }
+        }
 
         await LogActionAsync("Update", "Department", id.ToString(), $"Updated department: {department.Name}", ct);
 
@@ -95,5 +132,33 @@ public sealed class DepartmentService(
         await LogActionAsync("Delete", "Department", id.ToString(), $"Deleted department: {department.Name}", ct);
 
         return Result.Deleted;
+    }
+
+    private async Task AssignRoleAsync(Guid userId, string roleName, CancellationToken ct)
+    {
+        var role = await roleRepository.GetByNameAsync(roleName, ct);
+        if (role is not null)
+        {
+            var exists = await userRoleRepository.AssignmentExistsAsync(userId, role.Id, ct);
+            if (!exists)
+            {
+                await userRoleRepository.AssignAsync(userId, role.Id, DateTime.UtcNow, ct);
+                await userRoleRepository.SaveChangesAsync(ct);
+            }
+        }
+    }
+
+    private async Task RevokeRoleAsync(Guid userId, string roleName, CancellationToken ct)
+    {
+        var role = await roleRepository.GetByNameAsync(roleName, ct);
+        if (role is not null)
+        {
+            var exists = await userRoleRepository.AssignmentExistsAsync(userId, role.Id, ct);
+            if (exists)
+            {
+                await userRoleRepository.RevokeAsync(userId, role.Id, ct);
+                await userRoleRepository.SaveChangesAsync(ct);
+            }
+        }
     }
 }

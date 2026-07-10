@@ -41,6 +41,24 @@ public class LectureSessionService : ILectureSessionService
             .Where(s => timetableSlotIds.Contains(s.Id))
             .ToListAsync();
 
+        // Deduplicate slots that are concurrent combined classes
+        var uniqueSlots = new List<LectureTimetableSlot>();
+        foreach (var slot in slots)
+        {
+            var isDuplicate = uniqueSlots.Any(us =>
+                us.DayOfWeek == slot.DayOfWeek &&
+                us.StartTime == slot.StartTime &&
+                us.EndTime == slot.EndTime &&
+                us.VenueId == slot.VenueId &&
+                us.CourseOffering.Course.Code == slot.CourseOffering.Course.Code);
+
+            if (!isDuplicate)
+            {
+                uniqueSlots.Add(slot);
+            }
+        }
+        slots = uniqueSlots;
+
         foreach (var slot in slots)
         {
             var sessionDates = CalculateSessionDates(
@@ -139,6 +157,24 @@ public class LectureSessionService : ILectureSessionService
                 .ThenInclude(co => co.AcademicSession)
             .Where(s => s.CourseOffering.AcademicSessionId == academicSessionId)
             .ToListAsync();
+
+        // Deduplicate slots that are concurrent combined classes
+        var uniqueSlots = new List<LectureTimetableSlot>();
+        foreach (var slot in slots)
+        {
+            var isDuplicate = uniqueSlots.Any(us =>
+                us.DayOfWeek == slot.DayOfWeek &&
+                us.StartTime == slot.StartTime &&
+                us.EndTime == slot.EndTime &&
+                us.VenueId == slot.VenueId &&
+                us.CourseOffering.Course.Code == slot.CourseOffering.Course.Code);
+
+            if (!isDuplicate)
+            {
+                uniqueSlots.Add(slot);
+            }
+        }
+        slots = uniqueSlots;
 
         // Group by course offering
         var slotsByCourse = slots.GroupBy(s => s.CourseOfferingId);

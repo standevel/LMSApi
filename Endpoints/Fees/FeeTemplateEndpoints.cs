@@ -10,7 +10,8 @@ public sealed class CreateFeeTemplateEndpoint(IFeeService feeService)
     public override void Configure()
     {
         Post("fees/templates");
-        Roles("SuperAdmin", "Admin", "Finance");
+        AllowAnonymous();
+        //Roles("SuperAdmin", "Admin", "Finance");
         Tags("Fees");
     }
 

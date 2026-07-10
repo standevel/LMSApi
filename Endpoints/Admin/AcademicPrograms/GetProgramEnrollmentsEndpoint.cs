@@ -26,11 +26,20 @@ public sealed class GetProgramEnrollmentsEndpoint(LmsDbContext dbContext)
 
     public override async Task HandleAsync(GetProgramEnrollmentsRequest req, CancellationToken ct)
     {
-        var enrollments = await dbContext.Enrollments
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var hasSession = sessionId != Guid.Empty;
+
+        var query = dbContext.Enrollments
             .Include(x => x.Level)
             .Include(x => x.User)
             .Include(x => x.AcademicSession)
-            .Where(x => x.ProgramId == req.Id)
+            .Where(x => x.ProgramId == req.Id);
+
+        if (hasSession)
+            query = query.Where(x => x.AcademicSessionId == sessionId);
+
+        var enrollments = await query
             .Select(e => new EnrollmentDto(
                 e.Id,
                 e.ProgramId,

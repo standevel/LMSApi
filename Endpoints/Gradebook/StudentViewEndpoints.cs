@@ -93,7 +93,9 @@ public sealed class GetAllMyGradesEndpoint : ApiEndpointWithoutRequest<List<Stud
             return;
         }
 
-        var result = await _gradebookService.GetStudentAllGradesAsync(userId.Value, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var result = await _gradebookService.GetStudentAllGradesAsync(userId.Value, sessionId == Guid.Empty ? null : sessionId, ct);
 
         if (result.IsError)
         {

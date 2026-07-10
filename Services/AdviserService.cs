@@ -270,7 +270,7 @@ public sealed class AdviserService(
             return Error.NotFound("Advising.AssignmentNotFound", "No active adviser assignment found for this student.");
 
         var summary = (await MapStudentSummariesAsync([assignment], ct)).Single();
-        var registration = await registrationService.GetRegistrationSummaryAsync(studentId, ct);
+        var registration = await registrationService.GetRegistrationSummaryAsync(studentId, null, ct);
         if (registration.IsError)
             return registration.Errors;
         var swaps = await registrationService.GetSwapRequestsAsync(studentId, ct);

@@ -94,28 +94,6 @@ namespace LMS.Api.Data.Migrations
                 nullable: true);
 
             migrationBuilder.CreateTable(
-                name: "SponsorOrganizations",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Code = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    Phone = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false, defaultValue: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_SponsorOrganizations", x => x.Id);
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_SponsorOrganizations_Code",
-                table: "SponsorOrganizations",
-                column: "Code",
-                unique: true);
-
-            migrationBuilder.CreateTable(
                 name: "Scholarships",
                 columns: table => new
                 {

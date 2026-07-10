@@ -14,7 +14,6 @@ public sealed class ListAcademicSessionsEndpoint(IAcademicSessionService session
     {
         Get("admin/sessions");
         Group<AdminGroup>();
-        Policies(LmsPolicies.AcademicManagement);
         Tags("Administration");
         Summary(s =>
         {

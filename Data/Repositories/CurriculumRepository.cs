@@ -10,6 +10,8 @@ public sealed class CurriculumRepository(LmsDbContext dbContext)
     {
         return DbSet
             .Include(x => x.Program)
+                .ThenInclude(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
             .Include(x => x.AdmissionSession)
             .Include(x => x.Courses).ThenInclude(c => c.Course)
             .Include(x => x.Courses).ThenInclude(c => c.Level)
@@ -19,6 +21,9 @@ public sealed class CurriculumRepository(LmsDbContext dbContext)
     public Task<List<Curriculum>> GetByProgramIdAsync(Guid programId, CancellationToken ct = default)
     {
         return DbSet
+            .Include(x => x.Program)
+                .ThenInclude(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
             .Include(x => x.AdmissionSession)
             .Where(x => x.ProgramId == programId)
             .ToListAsync(ct);

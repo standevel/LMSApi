@@ -88,7 +88,9 @@ public sealed class GetRegistrationSummaryEndpoint(IRegistrationService registra
             await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
             return;
         }
-        await SendAsync(await registrationService.GetRegistrationSummaryAsync(userId.Value, ct), ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        await SendAsync(await registrationService.GetRegistrationSummaryAsync(userId.Value, sessionId == Guid.Empty ? null : sessionId, ct), ct);
     }
 }
 

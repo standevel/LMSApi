@@ -2,13 +2,19 @@ using ErrorOr;
 using LMS.Api.Common.Errors;
 using LMS.Api.Common.Mapping;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
+using LMS.Api.Security;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
 
 public sealed class AcademicProgramService(
+    LmsDbContext dbContext,
     IAcademicProgramRepository programRepository,
+    ICurrentUserContext currentUserContext,
+    IUserRoleRepository userRoleRepository,
     IAuditService auditService) : BaseService(auditService), IAcademicProgramService
 {
     public async Task<ErrorOr<AcademicProgramDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
@@ -19,9 +25,57 @@ public sealed class AcademicProgramService(
         return program.ToDto();
     }
 
+    private async Task<bool> IsUserAdminAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.SuperAdmin) || roles.Contains(LmsRoles.Admin) || roles.Contains(LmsRoles.AcademicAdmin) || roles.Contains(LmsRoles.ViceChancellor);
+    }
+
+    private async Task<bool> IsUserDeanAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.Dean);
+    }
+
+    private async Task<bool> IsUserHodAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.HOD);
+    }
+
     public async Task<ErrorOr<List<AcademicProgramDto>>> GetAllAsync(CancellationToken ct = default)
     {
         var programs = await programRepository.GetAllAsync(ct);
+
+        var userId = await currentUserContext.GetUserIdAsync(ct) ?? Guid.Empty;
+        if (userId != Guid.Empty && !await IsUserAdminAsync(userId, ct))
+        {
+            bool isDean = await IsUserDeanAsync(userId, ct);
+            bool isHod = await IsUserHodAsync(userId, ct);
+
+            if (isDean && isHod)
+            {
+                programs = programs.Where(p => 
+                    (p.Department?.Faculty?.DeanId == userId) || 
+                    (p.Department?.HeadId == userId)).ToList();
+            }
+            else if (isDean)
+            {
+                programs = programs.Where(p => p.Department?.Faculty?.DeanId == userId).ToList();
+            }
+            else if (isHod)
+            {
+                programs = programs.Where(p => p.Department?.HeadId == userId).ToList();
+            }
+            // If they are not Admin, Dean, or HOD but have access, we return empty list or let it be?
+            // Usually endpoints have [Authorize(Roles = ...)] so they won't reach here if not authorized,
+            // but if they do (e.g. Lecturer), maybe they shouldn't see all programs unless they are Dean/HOD.
+            else
+            {
+                programs = new List<AcademicProgram>();
+            }
+        }
+
         return programs.Select(p => p.ToDto()).ToList();
     }
 
@@ -121,5 +175,46 @@ public sealed class AcademicProgramService(
         // Fetch again to ensure all navigation properties (like Faculty) are loaded
         var updatedProduct = await programRepository.GetByIdAsync(id, ct);
         return updatedProduct!.ToDto();
+    }
+
+    public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var program = await programRepository.GetByIdAsync(id, ct);
+        if (program is null) return DomainErrors.AcademicProgram.NotFound;
+
+        var hasCourses = await dbContext.Courses.AnyAsync(c => c.ProgramId == id, ct);
+        if (hasCourses)
+            return Error.Validation("AcademicProgram.HasCourses", "Cannot delete a program that has courses attached.");
+
+        var hasCurricula = await dbContext.Curricula.AnyAsync(c => c.ProgramId == id, ct);
+        if (hasCurricula)
+            return Error.Validation("AcademicProgram.HasCurricula", "Cannot delete a program that has curricula attached.");
+
+        var hasEnrollments = await dbContext.Enrollments.AnyAsync(e => e.ProgramId == id, ct);
+        if (hasEnrollments)
+            return Error.Validation("AcademicProgram.HasEnrollments", "Cannot delete a program with enrolled students.");
+
+        var hasFeeTemplates = await dbContext.FeeTemplates.AnyAsync(f => f.ProgramId == id, ct);
+        if (hasFeeTemplates)
+            return Error.Validation("AcademicProgram.HasFeeTemplates", "Cannot delete a program that has fee templates attached.");
+
+        var hasFeeAssignments = await dbContext.FeeAssignments.AnyAsync(f => f.ProgramId == id, ct);
+        if (hasFeeAssignments)
+            return Error.Validation("AcademicProgram.HasFeeAssignments", "Cannot delete a program that has fee assignments attached.");
+
+        var hasCourseOfferings = await dbContext.CourseOfferingPrograms.AnyAsync(cop => cop.ProgramId == id, ct);
+        if (hasCourseOfferings)
+            return Error.Validation("AcademicProgram.HasCourseOfferings", "Cannot delete a program that has course offerings attached.");
+
+        var hasAdmissionApplications = await dbContext.AdmissionApplications.AnyAsync(a => a.AcademicProgramId == id, ct);
+        if (hasAdmissionApplications)
+            return Error.Validation("AcademicProgram.HasAdmissionApplications", "Cannot delete a program that has admission applications attached.");
+
+        await programRepository.DeleteAsync(program, ct);
+        await programRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("Delete", "AcademicProgram", id.ToString(), $"Deleted program: {program.Name}", ct);
+
+        return Result.Deleted;
     }
 }

@@ -74,10 +74,11 @@ public sealed class SendCourseLecturerMessageEndpoint(
             return;
         }
 
-        var lecturerId = await dbContext.CourseOfferings
+        var lecturerId = await dbContext.CourseOfferingLecturers
             .AsNoTracking()
-            .Where(o => o.Id == req.CourseOfferingId)
-            .Select(o => o.LecturerId)
+            .Where(l => l.CourseOfferingId == req.CourseOfferingId &&
+                        l.Role == LMS.Api.Data.Enums.CourseLecturerRole.Main)
+            .Select(l => (Guid?)l.LecturerId)
             .FirstOrDefaultAsync(ct);
 
         if (!lecturerId.HasValue)
@@ -307,9 +308,10 @@ public sealed class GetAllowedRecipientsEndpoint(LmsDbContext dbContext)
                 .Select(e => e.CourseOfferingId)
                 .ToListAsync(ct);
 
-            var lecturerIds = await dbContext.CourseOfferings
-                .Where(o => enrolledOfferingIds.Contains(o.Id) && o.LecturerId != null)
-                .Select(o => o.LecturerId!.Value)
+            var lecturerIds = await dbContext.CourseOfferingLecturers
+                .Where(l => enrolledOfferingIds.Contains(l.CourseOfferingId) &&
+                            l.Role == LMS.Api.Data.Enums.CourseLecturerRole.Main)
+                .Select(l => l.LecturerId)
                 .ToListAsync(ct);
 
             query = query.Where(u => 

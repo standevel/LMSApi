@@ -57,7 +57,9 @@ public sealed record ManagedUserDetail(
     Guid? FacultyId = null,
     string? AcademicProgramName = null,
     string? LevelName = null,
-    Guid? StudentId = null);
+    Guid? StudentId = null,
+    string? DepartmentName = null,
+    string? FacultyName = null);
 
 public sealed record ListManagedUsersResult(
     bool Success,

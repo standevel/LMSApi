@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Security;
@@ -13,10 +14,11 @@ namespace LMS.Api.Services;
 public interface ITimetableService
 {
     Task<LectureTimetableSlot> CreateLectureTimetableSlotAsync(Guid courseOfferingId, int dayOfWeek, TimeOnly startTime, TimeOnly endTime, Guid? lecturerId, List<Guid>? coLecturerIds, Guid? venueId);
+    Task<List<LectureTimetableSlot>> CreateLectureTimetableSlotsBulkAsync(List<Guid> courseOfferingIds, int dayOfWeek, TimeOnly startTime, TimeOnly endTime, Guid? lecturerId, List<Guid>? coLecturerIds, Guid? venueId);
     Task<LectureTimetableSlot> UpdateLectureTimetableSlotAsync(Guid slotId, Guid? lecturerId, List<Guid>? coLecturerIds, TimeOnly? startTime, TimeOnly? endTime, Guid? venueId);
     Task DeleteLectureTimetableSlotAsync(Guid slotId);
-    Task<IEnumerable<TimeSlot>> GetAvailableTimeSlotsAsync(Guid lecturerId, int dayOfWeek);
-    Task<ConflictDetectionResult> DetectConflictsAsync(Guid lecturerId, int dayOfWeek, TimeOnly startTime, TimeOnly endTime);
+    Task<IEnumerable<TimeSlot>> GetAvailableTimeSlotsAsync(Guid lecturerId, int dayOfWeek, Guid? academicSessionId = null);
+    Task<ConflictDetectionResult> DetectConflictsAsync(Guid lecturerId, int dayOfWeek, TimeOnly startTime, TimeOnly endTime, Guid? academicSessionId = null, Guid? venueId = null, Guid? courseOfferingId = null);
     Task<LectureTimetableSlot> AutoResolveConflictAsync(Guid conflictingSlotId, Guid replacementLecturerId);
     Task<IEnumerable<LectureTimetableSlot>> GetLecturerTimetableAsync(Guid lecturerId);
     Task<IEnumerable<LectureTimetableSlot>> GetWeekViewAsync(DateOnly weekStart);
@@ -49,12 +51,21 @@ public class TimetableService : ITimetableService
     private readonly LmsDbContext _context;
     private readonly ILogger<TimetableService> _logger;
     private readonly ICurrentUserContext _currentUserContext;
+    private readonly INotificationService _notificationService;
+    private readonly IEmailService _emailService;
 
-    public TimetableService(LmsDbContext context, ILogger<TimetableService> logger, ICurrentUserContext currentUserContext)
+    public TimetableService(
+        LmsDbContext context, 
+        ILogger<TimetableService> logger, 
+        ICurrentUserContext currentUserContext,
+        INotificationService notificationService,
+        IEmailService emailService)
     {
         _context = context;
         _logger = logger;
         _currentUserContext = currentUserContext;
+        _notificationService = notificationService;
+        _emailService = emailService;
     }
 
     public async Task<LectureTimetableSlot> CreateLectureTimetableSlotAsync(
@@ -70,9 +81,9 @@ public class TimetableService : ITimetableService
         if (!Enum.IsDefined(typeof(DayOfWeek), dayOfWeek))
             throw new InvalidOperationException("Invalid day of week.");
 
-        var courseOfferingExists = await _context.Set<CourseOffering>()
-            .AnyAsync(co => co.Id == courseOfferingId);
-        if (!courseOfferingExists)
+        var courseOffering = await _context.Set<CourseOffering>()
+            .FirstOrDefaultAsync(co => co.Id == courseOfferingId);
+        if (courseOffering == null)
             throw new InvalidOperationException("Course offering not found.");
 
         if (lecturerId.HasValue && lecturerId.Value == Guid.Empty)
@@ -97,7 +108,7 @@ public class TimetableService : ITimetableService
         // Check for conflicts if lecturer is assigned
         if (lecturerId.HasValue)
         {
-            var conflicts = await DetectConflictsAsync(lecturerId.Value, dayOfWeek, startTime, endTime);
+            var conflicts = await DetectConflictsAsync(lecturerId.Value, dayOfWeek, startTime, endTime, courseOffering.AcademicSessionId, venueId, courseOfferingId);
             if (conflicts.HasConflicts)
             {
                 _logger.LogWarning("Conflicts detected for lecturer {LecturerId}", lecturerId);
@@ -134,11 +145,213 @@ public class TimetableService : ITimetableService
             UpdatedDate = DateOnly.FromDateTime(DateTime.UtcNow)
         };
 
+        if (lecturerId.HasValue)
+        {
+            var exists = await _context.Set<CourseOfferingLecturer>()
+                .AnyAsync(col => col.CourseOfferingId == courseOfferingId && col.LecturerId == lecturerId.Value);
+            
+            if (!exists)
+            {
+                _context.Set<CourseOfferingLecturer>().Add(new CourseOfferingLecturer
+                {
+                    CourseOfferingId = courseOfferingId,
+                    LecturerId = lecturerId.Value,
+                    Role = LMS.Api.Data.Enums.CourseLecturerRole.Main
+                });
+            }
+        }
+
+        if (coLecturerIds != null && coLecturerIds.Any())
+        {
+            foreach (var coLecturerId in coLecturerIds)
+            {
+                var exists = await _context.Set<CourseOfferingLecturer>()
+                    .AnyAsync(col => col.CourseOfferingId == courseOfferingId && col.LecturerId == coLecturerId);
+                
+                if (!exists)
+                {
+                    _context.Set<CourseOfferingLecturer>().Add(new CourseOfferingLecturer
+                    {
+                        CourseOfferingId = courseOfferingId,
+                        LecturerId = coLecturerId,
+                        Role = LMS.Api.Data.Enums.CourseLecturerRole.CoLecturer
+                    });
+                }
+            }
+        }
+
         _context.Set<LectureTimetableSlot>().Add(slot);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Created timetable slot {SlotId}", slot.Id);
+
+        var assignedLecturers = new List<Guid>();
+        if (lecturerId.HasValue) assignedLecturers.Add(lecturerId.Value);
+        if (coLecturerIds != null) assignedLecturers.AddRange(coLecturerIds);
+        
+        if (assignedLecturers.Any())
+        {
+            await NotifyLecturersAsync(courseOfferingId, assignedLecturers.Distinct().ToList());
+        }
+
         return slot;
+    }
+
+    public async Task<List<LectureTimetableSlot>> CreateLectureTimetableSlotsBulkAsync(
+        List<Guid> courseOfferingIds, int dayOfWeek, TimeOnly startTime, TimeOnly endTime,
+        Guid? lecturerId, List<Guid>? coLecturerIds, Guid? venueId)
+    {
+        _logger.LogInformation("Creating bulk timetable slots for {Count} offerings", courseOfferingIds.Count);
+
+        if (courseOfferingIds == null || courseOfferingIds.Count == 0)
+            throw new InvalidOperationException("At least one course offering identifier is required.");
+
+        if (startTime >= endTime)
+            throw new InvalidOperationException("Start time must be before end time.");
+
+        if (!Enum.IsDefined(typeof(DayOfWeek), dayOfWeek))
+            throw new InvalidOperationException("Invalid day of week.");
+
+        var callerUserId = await _currentUserContext.GetUserIdAsync();
+        if (!callerUserId.HasValue || callerUserId == Guid.Empty)
+            throw new InvalidOperationException("The current user is not identified. Ensure authentication is present.");
+
+        var callerExists = await _context.Set<AppUser>().AnyAsync(u => u.Id == callerUserId.Value);
+        if (!callerExists)
+            throw new InvalidOperationException("Authenticated user not found. Ensure user account exists in the system.");
+
+        if (lecturerId.HasValue && lecturerId.Value == Guid.Empty)
+            throw new InvalidOperationException("Invalid lecturer identifier.");
+
+        if (lecturerId.HasValue)
+        {
+            var lecturerExists = await _context.Set<AppUser>()
+                .AnyAsync(u => u.Id == lecturerId.Value);
+            if (!lecturerExists)
+                throw new InvalidOperationException("Lecturer not found.");
+        }
+
+        if (venueId.HasValue && venueId.Value != Guid.Empty)
+        {
+            var venueExists = await _context.Set<Subject>()
+                .AnyAsync(v => v.Id == venueId.Value);
+            if (!venueExists)
+                throw new InvalidOperationException("Venue not found.");
+        }
+
+        var courseOfferings = await _context.Set<CourseOffering>()
+            .Include(co => co.Course)
+            .Where(co => courseOfferingIds.Contains(co.Id))
+            .ToListAsync();
+
+        if (courseOfferings.Count == 0)
+            throw new InvalidOperationException("No valid course offerings found.");
+
+        if (lecturerId.HasValue)
+        {
+            var primaryOffering = courseOfferings.First();
+            var conflicts = await DetectConflictsAsync(
+                lecturerId.Value, 
+                dayOfWeek, 
+                startTime, 
+                endTime, 
+                primaryOffering.AcademicSessionId, 
+                venueId, 
+                primaryOffering.Id);
+
+            if (conflicts.HasConflicts)
+            {
+                _logger.LogWarning("Conflicts detected for lecturer {LecturerId} during bulk creation", lecturerId);
+                throw new InvalidOperationException("Scheduling conflicts detected. Resolve conflicts or choose alternative times.");
+            }
+        }
+
+        var slotsCreated = new List<LectureTimetableSlot>();
+
+        foreach (var offering in courseOfferings)
+        {
+            var slot = new LectureTimetableSlot
+            {
+                Id = Guid.NewGuid(),
+                CourseOfferingId = offering.Id,
+                LecturerId = lecturerId,
+                CoLecturersJson = coLecturerIds is { Count: > 0 }
+                    ? System.Text.Json.JsonSerializer.Serialize(coLecturerIds)
+                    : null,
+                VenueId = venueId,
+                DayOfWeek = (DayOfWeek)dayOfWeek,
+                StartTime = startTime,
+                EndTime = endTime,
+                DurationMinutes = (int)(endTime - startTime).TotalMinutes,
+                CreatedBy = callerUserId.Value,
+                UpdatedBy = callerUserId.Value,
+                CreatedByUserId = callerUserId.Value,
+                UpdatedByUserId = callerUserId.Value,
+                CreatedDate = DateOnly.FromDateTime(DateTime.UtcNow),
+                UpdatedDate = DateOnly.FromDateTime(DateTime.UtcNow)
+            };
+
+            if (lecturerId.HasValue)
+            {
+                var exists = await _context.Set<CourseOfferingLecturer>()
+                    .AnyAsync(col => col.CourseOfferingId == offering.Id && col.LecturerId == lecturerId.Value);
+                
+                if (!exists)
+                {
+                    _context.Set<CourseOfferingLecturer>().Add(new CourseOfferingLecturer
+                    {
+                        CourseOfferingId = offering.Id,
+                        LecturerId = lecturerId.Value,
+                        Role = LMS.Api.Data.Enums.CourseLecturerRole.Main
+                    });
+                }
+            }
+
+            if (coLecturerIds != null && coLecturerIds.Any())
+            {
+                foreach (var coLecturerId in coLecturerIds)
+                {
+                    var exists = await _context.Set<CourseOfferingLecturer>()
+                        .AnyAsync(col => col.CourseOfferingId == offering.Id && col.LecturerId == coLecturerId);
+                    
+                    if (!exists)
+                    {
+                        _context.Set<CourseOfferingLecturer>().Add(new CourseOfferingLecturer
+                        {
+                            CourseOfferingId = offering.Id,
+                            LecturerId = coLecturerId,
+                            Role = LMS.Api.Data.Enums.CourseLecturerRole.CoLecturer
+                        });
+                    }
+                }
+            }
+
+            _context.Set<LectureTimetableSlot>().Add(slot);
+            slotsCreated.Add(slot);
+        }
+
+        await _context.SaveChangesAsync();
+
+        foreach (var offering in courseOfferings)
+        {
+            var assignedLecturers = new List<Guid>();
+            if (lecturerId.HasValue) assignedLecturers.Add(lecturerId.Value);
+            if (coLecturerIds != null) assignedLecturers.AddRange(coLecturerIds);
+
+            if (assignedLecturers.Any())
+            {
+                try
+                {
+                    await NotifyLecturersAsync(offering.Id, assignedLecturers.Distinct().ToList());
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send notifications for course offering {OfferingId}", offering.Id);
+                }
+            }
+        }
+
+        return slotsCreated;
     }
 
     public async Task<LectureTimetableSlot> UpdateLectureTimetableSlotAsync(
@@ -147,20 +360,24 @@ public class TimetableService : ITimetableService
         _logger.LogInformation("Updating timetable slot {SlotId}", slotId);
 
         var slot = await _context.Set<LectureTimetableSlot>()
+            .Include(s => s.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == slotId)
             ?? throw new InvalidOperationException($"Timetable slot not found");
+
+        var newAssignedLecturers = new List<Guid>();
 
         // Update fields if provided
         if (lecturerId.HasValue && lecturerId != slot.LecturerId)
         {
             // Check conflicts with new lecturer
             var conflicts = await DetectConflictsAsync(lecturerId.Value, (int)slot.DayOfWeek,
-                startTime ?? slot.StartTime, endTime ?? slot.EndTime);
+                startTime ?? slot.StartTime, endTime ?? slot.EndTime, slot.CourseOffering.AcademicSessionId, venueId ?? slot.VenueId, slot.CourseOfferingId);
 
             if (conflicts.HasConflicts)
                 throw new InvalidOperationException("Scheduling conflicts detected with new lecturer");
 
             slot.LecturerId = lecturerId.Value;
+            newAssignedLecturers.Add(lecturerId.Value);
         }
 
         if (startTime.HasValue) slot.StartTime = startTime.Value;
@@ -168,9 +385,18 @@ public class TimetableService : ITimetableService
         if (venueId.HasValue) slot.VenueId = venueId;
 
         if (coLecturerIds != null)
+        {
+            var oldCoLecturers = string.IsNullOrEmpty(slot.CoLecturersJson) 
+                ? new List<Guid>() 
+                : System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(slot.CoLecturersJson) ?? new List<Guid>();
+
+            var addedCoLecturers = coLecturerIds.Except(oldCoLecturers);
+            newAssignedLecturers.AddRange(addedCoLecturers);
+
             slot.CoLecturersJson = coLecturerIds.Count > 0
                 ? System.Text.Json.JsonSerializer.Serialize(coLecturerIds)
                 : null;
+        }
 
         if (startTime.HasValue || endTime.HasValue)
         {
@@ -187,6 +413,11 @@ public class TimetableService : ITimetableService
 
         await _context.SaveChangesAsync();
         _logger.LogInformation("Updated timetable slot {SlotId}", slotId);
+
+        if (newAssignedLecturers.Any())
+        {
+            await NotifyLecturersAsync(slot.CourseOfferingId, newAssignedLecturers.Distinct().ToList());
+        }
 
         return slot;
     }
@@ -206,13 +437,20 @@ public class TimetableService : ITimetableService
         }
     }
 
-    public async Task<IEnumerable<TimeSlot>> GetAvailableTimeSlotsAsync(Guid lecturerId, int dayOfWeek)
+    public async Task<IEnumerable<TimeSlot>> GetAvailableTimeSlotsAsync(Guid lecturerId, int dayOfWeek, Guid? academicSessionId = null)
     {
         _logger.LogInformation("Getting available time slots for lecturer {LecturerId}", lecturerId);
 
-        // Get existing slots for this lecturer on this day
-        var existingSlots = await _context.Set<LectureTimetableSlot>()
-            .Where(s => s.LecturerId == lecturerId && s.DayOfWeek == (DayOfWeek)dayOfWeek)
+        var query = _context.Set<LectureTimetableSlot>()
+            .Include(s => s.CourseOffering)
+            .Where(s => s.LecturerId == lecturerId && s.DayOfWeek == (DayOfWeek)dayOfWeek);
+
+        if (academicSessionId.HasValue)
+        {
+            query = query.Where(s => s.CourseOffering.AcademicSessionId == academicSessionId.Value);
+        }
+
+        var existingSlots = await query
             .OrderBy(s => s.StartTime)
             .ToListAsync();
 
@@ -245,16 +483,32 @@ public class TimetableService : ITimetableService
     }
 
     public async Task<ConflictDetectionResult> DetectConflictsAsync(
-        Guid lecturerId, int dayOfWeek, TimeOnly startTime, TimeOnly endTime)
+        Guid lecturerId, int dayOfWeek, TimeOnly startTime, TimeOnly endTime, Guid? academicSessionId = null, Guid? venueId = null, Guid? courseOfferingId = null)
     {
         _logger.LogInformation("Detecting conflicts for lecturer {LecturerId} on day {DayOfWeek}", lecturerId, dayOfWeek);
 
         var result = new ConflictDetectionResult();
 
-        // Find all slots for this lecturer on this day
-        var existingSlots = await _context.Set<LectureTimetableSlot>()
-            .Where(s => s.LecturerId == lecturerId && s.DayOfWeek == (DayOfWeek)dayOfWeek)
-            .ToListAsync();
+        string? targetCourseCode = null;
+        if (courseOfferingId.HasValue)
+        {
+            var offering = await _context.Set<CourseOffering>()
+                .Include(co => co.Course)
+                .FirstOrDefaultAsync(co => co.Id == courseOfferingId.Value);
+            targetCourseCode = offering?.Course?.Code;
+        }
+
+        var query = _context.Set<LectureTimetableSlot>()
+            .Include(s => s.CourseOffering)
+                .ThenInclude(co => co.Course)
+            .Where(s => s.LecturerId == lecturerId && s.DayOfWeek == (DayOfWeek)dayOfWeek);
+
+        if (academicSessionId.HasValue)
+        {
+            query = query.Where(s => s.CourseOffering.AcademicSessionId == academicSessionId.Value);
+        }
+
+        var existingSlots = await query.ToListAsync();
 
         // Check for time overlaps
         foreach (var slot in existingSlots)
@@ -263,6 +517,14 @@ public class TimetableService : ITimetableService
                 (endTime > slot.StartTime && endTime <= slot.EndTime) ||
                 (startTime <= slot.StartTime && endTime >= slot.EndTime))
             {
+                // Ignore conflict if it's the exact same course code and same venue
+                if (targetCourseCode != null &&
+                    slot.CourseOffering?.Course?.Code == targetCourseCode &&
+                    slot.VenueId == venueId)
+                {
+                    continue;
+                }
+
                 result.HasConflicts = true;
                 result.ConflictingSlots.Add($"Conflicts with {slot.CourseOfferingId} from {slot.StartTime} to {slot.EndTime}");
             }
@@ -282,6 +544,7 @@ public class TimetableService : ITimetableService
         _logger.LogInformation("Auto-resolving conflict for slot {SlotId} with lecturer {LecturerId}", conflictingSlotId, replacementLecturerId);
 
         var slot = await _context.Set<LectureTimetableSlot>()
+            .Include(s => s.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == conflictingSlotId)
             ?? throw new InvalidOperationException("Slot not found");
 
@@ -297,7 +560,10 @@ public class TimetableService : ITimetableService
             replacementLecturerId,
             (int)slot.DayOfWeek,
             slot.StartTime,
-            slot.EndTime);
+            slot.EndTime,
+            slot.CourseOffering.AcademicSessionId,
+            slot.VenueId,
+            slot.CourseOfferingId);
 
         if (conflicts.HasConflicts)
             throw new InvalidOperationException("Replacement lecturer has a scheduling conflict for this slot.");
@@ -352,6 +618,8 @@ public class TimetableService : ITimetableService
             .AsNoTracking()
             .Include(s => s.CourseOffering)
                 .ThenInclude(co => co.Course)
+                    .ThenInclude(c => c.Program)
+                        .ThenInclude(p => p.Department)
             .Include(s => s.Lecturer)
             .Where(s => s.CourseOffering.AcademicSessionId == sessionId);
 
@@ -416,5 +684,45 @@ public class TimetableService : ITimetableService
         }
 
         return alternatives;
+    }
+
+    private async Task NotifyLecturersAsync(Guid courseOfferingId, List<Guid> lecturerIds)
+    {
+        if (!lecturerIds.Any()) return;
+
+        var offering = await _context.Set<CourseOffering>()
+            .Include(co => co.Course)
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == courseOfferingId);
+
+        if (offering == null) return;
+
+        string sessionName = offering.AcademicSession?.Name ?? "the academic session";
+
+        var lecturers = await _context.Set<AppUser>()
+            .Where(u => lecturerIds.Contains(u.Id))
+            .ToListAsync();
+
+        foreach (var lecturer in lecturers)
+        {
+            await _notificationService.CreateAsync(new CreateNotificationRequest(
+                lecturer.Id,
+                null,
+                "New Timetable Slot Assignment",
+                $"You have been scheduled for a class in {offering.Course.Code}.",
+                "System",
+                $"/dashboard/lecturer/courses"
+            ));
+
+            if (!string.IsNullOrEmpty(lecturer.Email))
+            {
+                await _emailService.SendCourseAssignmentEmailAsync(
+                    lecturer.Email, 
+                    lecturer.DisplayName ?? "Lecturer", 
+                    offering.Course.Code, 
+                    offering.Course.Title, 
+                    sessionName);
+            }
+        }
     }
 }

@@ -139,7 +139,10 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         var applicable = jambScholarships.Where(s => 
             (!s.MinJambScore.HasValue || score >= s.MinJambScore.Value) &&
             (!s.MaxJambScore.HasValue || score <= s.MaxJambScore.Value)
-        ).ToList();
+        )
+        .OrderByDescending(s => s.PercentageCovered)
+        .Take(1)
+        .ToList();
 
         // Get current assignments for JAMB
         var existingAssignments = await db.StudentScholarships

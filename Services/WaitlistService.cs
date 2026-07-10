@@ -66,11 +66,17 @@ public class WaitlistService : BaseService, IWaitlistService
         return Result.Deleted;
     }
 
-    public async Task<ErrorOr<List<WaitlistDto>>> GetStudentWaitlistsAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<ErrorOr<List<WaitlistDto>>> GetStudentWaitlistsAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
     {
-        var waitlists = await _context.Set<Waitlist>()
-            .Where(w => w.StudentId == studentId && w.Status != "Left")
-            .ToListAsync(ct);
+        var waitlistsQuery = _context.Set<Waitlist>()
+            .Include(w => w.CourseOffering!).ThenInclude(co => co.Course)
+            .Include(w => w.Student)
+            .Where(w => w.StudentId == studentId && w.Status != "Left");
+
+        if (academicSessionId.HasValue)
+            waitlistsQuery = waitlistsQuery.Where(w => w.CourseOffering != null && w.CourseOffering.AcademicSessionId == academicSessionId.Value);
+
+        var waitlists = await waitlistsQuery.ToListAsync(ct);
 
         return waitlists.Select(w => new WaitlistDto(
             w.Id,

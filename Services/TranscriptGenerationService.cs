@@ -45,12 +45,11 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
             : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
 
-        var offerings = await _dbContext.CourseEnrollments
-            .Where(e => e.StudentId == studentId && e.Status == "Registered")
-            .Select(e => e.CourseOffering)
-            .Distinct()
+        var offerings = await _dbContext.CourseOfferings
             .Include(co => co.Course)
             .Include(co => co.AcademicSession)
+            .Where(co => _dbContext.CourseEnrollments.Any(e => e.StudentId == studentId && e.CourseOfferingId == co.Id && e.Status == "Registered"))
+            .Distinct()
             .ToListAsync(ct);
 
         var courseRecords = new List<TranscriptCourseRecord>();
@@ -83,7 +82,7 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
                 continue;
             }
 
-            var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: isOfficial);
+            var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig!, finalizedOnly: isOfficial);
             if (!totalScore.HasValue)
             {
                 courseRecords.Add(new TranscriptCourseRecord(
@@ -169,6 +168,21 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
+        var config = await _dbContext.SystemTranscriptConfigurations
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (config == null)
+        {
+            config = new SystemTranscriptConfiguration
+            {
+                ChargeForTranscripts = true,
+                OfficialTranscriptFee = 5000m
+            };
+            _dbContext.SystemTranscriptConfigurations.Add(config);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
         var transcriptRequest = new TranscriptRequest
         {
             StudentId = studentId,
@@ -177,7 +191,7 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
             DeliveryEmail = request.DeliveryEmail,
             DeliveryMethod = request.DeliveryMethod ?? "Email",
             Remarks = request.Remarks,
-            FeeAmount = request.IsOfficial ? 5000m : 0m, // Default fee for official transcript
+            FeeAmount = config.ChargeForTranscripts && request.IsOfficial ? config.OfficialTranscriptFee : 0m,
             FeePaid = false,
             CreatedById = requestedBy,
             CreatedAt = DateTime.UtcNow
@@ -522,5 +536,67 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
             !string.IsNullOrWhiteSpace(request.Processor?.DisplayName) ? request.Processor.DisplayName : null,
             request.CreatedAt,
             request.CompletedAt);
+    }
+
+    public async Task<ErrorOr<SystemTranscriptConfigurationDto>> GetConfigurationAsync(CancellationToken ct = default)
+    {
+        var config = await _dbContext.SystemTranscriptConfigurations
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (config == null)
+        {
+            config = new SystemTranscriptConfiguration
+            {
+                ChargeForTranscripts = true,
+                OfficialTranscriptFee = 5000m
+            };
+            _dbContext.SystemTranscriptConfigurations.Add(config);
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        return MapToSystemTranscriptConfigurationDto(config);
+    }
+
+    public async Task<ErrorOr<SystemTranscriptConfigurationDto>> UpdateConfigurationAsync(UpdateSystemTranscriptConfigurationRequest request, Guid userId, CancellationToken ct = default)
+    {
+        var config = await _dbContext.SystemTranscriptConfigurations
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (config == null)
+        {
+            config = new SystemTranscriptConfiguration();
+            _dbContext.SystemTranscriptConfigurations.Add(config);
+        }
+
+        if (request.ChargeForTranscripts.HasValue)
+        {
+            config.ChargeForTranscripts = request.ChargeForTranscripts.Value;
+        }
+
+        if (request.OfficialTranscriptFee.HasValue)
+        {
+            config.OfficialTranscriptFee = request.OfficialTranscriptFee.Value;
+        }
+
+        config.UpdatedAt = DateTime.UtcNow;
+        config.UpdatedById = userId;
+
+        await _dbContext.SaveChangesAsync(ct);
+
+        await LogActionAsync("UpdateTranscriptConfiguration", "SystemTranscriptConfiguration", config.Id.ToString(),
+            "Updated system transcript configuration settings", ct);
+
+        return MapToSystemTranscriptConfigurationDto(config);
+    }
+
+    private static SystemTranscriptConfigurationDto MapToSystemTranscriptConfigurationDto(SystemTranscriptConfiguration config)
+    {
+        return new SystemTranscriptConfigurationDto(
+            config.Id,
+            config.ChargeForTranscripts,
+            config.OfficialTranscriptFee,
+            config.UpdatedAt);
     }
 }

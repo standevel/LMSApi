@@ -6,6 +6,7 @@ namespace LMS.Api.Endpoints.Timetable;
 public class CreateLectureTimetableSlotRequest
 {
     public Guid CourseOfferingId { get; set; }
+    public List<Guid>? CourseOfferingIds { get; set; }
     public int DayOfWeek { get; set; }
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
@@ -31,10 +32,20 @@ public class CreateLectureTimetableSlotEndpoint(ITimetableService timetableServi
     {
         try
         {
-            var result = await timetableService.CreateLectureTimetableSlotAsync(
-                req.CourseOfferingId, req.DayOfWeek, req.StartTime, req.EndTime,
-                req.LecturerId, req.CoLecturerIds, req.VenueId);
-            await SendSuccessAsync(result, ct, "Timetable slot created successfully");
+            if (req.CourseOfferingIds != null && req.CourseOfferingIds.Count > 0)
+            {
+                var result = await timetableService.CreateLectureTimetableSlotsBulkAsync(
+                    req.CourseOfferingIds, req.DayOfWeek, req.StartTime, req.EndTime,
+                    req.LecturerId, req.CoLecturerIds, req.VenueId);
+                await SendSuccessAsync(result, ct, "Timetable slots created successfully");
+            }
+            else
+            {
+                var result = await timetableService.CreateLectureTimetableSlotAsync(
+                    req.CourseOfferingId, req.DayOfWeek, req.StartTime, req.EndTime,
+                    req.LecturerId, req.CoLecturerIds, req.VenueId);
+                await SendSuccessAsync(result, ct, "Timetable slot created successfully");
+            }
         }
         catch (InvalidOperationException ex)
         {

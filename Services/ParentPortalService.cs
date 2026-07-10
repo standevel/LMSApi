@@ -73,7 +73,7 @@ public class ParentPortalService : BaseService, IParentPortalService
         return match?.LetterGrade ?? "F";
     }
 
-    public async Task<ErrorOr<StudentProgressDto>> GetStudentProgressAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<ErrorOr<StudentProgressDto>> GetStudentProgressAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
     {
         var student = await _context.Students
             .Include(s => s.AcademicProgram)
@@ -88,7 +88,7 @@ public class ParentPortalService : BaseService, IParentPortalService
         int creditsEarned = 0;
         int creditsRequired = student.AcademicProgram != null ? student.AcademicProgram.DurationYears * 40 : 120;
 
-        var gpaResult = await _gpaService.GetStudentGpaAsync(studentId, ct);
+        var gpaResult = await _gpaService.GetStudentGpaAsync(studentId, null, ct);
         if (!gpaResult.IsError)
         {
             gpa = gpaResult.Value.CumulativeGpa;
@@ -106,16 +106,25 @@ public class ParentPortalService : BaseService, IParentPortalService
             }
         }
 
-        var courseOfferings = await _context.CourseEnrollments
-            .Where(e => e.StudentId == studentId && e.Status == "Registered")
-            .Select(e => e.CourseOffering)
-            .Include(co => co.Course)
-            .ToListAsync(ct);
+        var enrollmentsQuery = _context.CourseEnrollments
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.Course)
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.AcademicSession)
+            .Where(e => e.StudentId == studentId && e.Status == "Registered");
+
+        if (academicSessionId.HasValue)
+            enrollmentsQuery = enrollmentsQuery.Where(e => e.CourseOffering.AcademicSessionId == academicSessionId.Value);
+
+        var enrollments = await enrollmentsQuery.ToListAsync(ct);
 
         var courseProgress = new List<CourseProgressDto>();
 
-        foreach (var offering in courseOfferings)
+        foreach (var enrollment in enrollments)
         {
+            var offering = enrollment.CourseOffering;
+            if (offering == null) continue;
+
             var totalMarks = await _context.Grades
                 .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
                 .SumAsync(g => g.MarksObtained, ct);
@@ -140,7 +149,9 @@ public class ParentPortalService : BaseService, IParentPortalService
                 offering.Course?.Title ?? string.Empty,
                 attendancePercentage,
                 currentGrade,
-                isCompleted));
+                isCompleted,
+                offering.AcademicSession?.Name,
+                offering.AcademicSessionId));
         }
 
         var fullName = !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) 
@@ -150,13 +161,14 @@ public class ParentPortalService : BaseService, IParentPortalService
         return new StudentProgressDto(
             student.Id,
             fullName,
+            student.StudentNumber ?? string.Empty,
             gpa,
             creditsEarned,
             creditsRequired,
             courseProgress);
     }
 
-    public async Task<ErrorOr<StudentGradesDto>> GetStudentGradesAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<ErrorOr<StudentGradesDto>> GetStudentGradesAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
     {
         var student = await _context.Students
             .FirstOrDefaultAsync(s => s.Id == studentId, ct);
@@ -176,16 +188,25 @@ public class ParentPortalService : BaseService, IParentPortalService
             : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
 
-        var courseOfferings = await _context.CourseEnrollments
-            .Where(e => e.StudentId == studentId && e.Status == "Registered")
-            .Select(e => e.CourseOffering)
-            .Include(co => co.Course)
-            .ToListAsync(ct);
+        var enrollmentsQuery = _context.CourseEnrollments
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.Course)
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.AcademicSession)
+            .Where(e => e.StudentId == studentId && e.Status == "Registered");
+
+        if (academicSessionId.HasValue)
+            enrollmentsQuery = enrollmentsQuery.Where(e => e.CourseOffering.AcademicSessionId == academicSessionId.Value);
+
+        var enrollments = await enrollmentsQuery.ToListAsync(ct);
 
         var grades = new List<StudentGradeDto>();
 
-        foreach (var offering in courseOfferings)
+        foreach (var enrollment in enrollments)
         {
+            var offering = enrollment.CourseOffering;
+            if (offering == null) continue;
+
             var totalMarks = await _context.Grades
                 .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
                 .SumAsync(g => g.MarksObtained, ct);
@@ -197,7 +218,9 @@ public class ParentPortalService : BaseService, IParentPortalService
                 offering.Id,
                 offering.Course?.Code ?? string.Empty,
                 offering.Course?.Title ?? string.Empty,
-                gradeLetter));
+                gradeLetter,
+                offering.AcademicSession?.Name,
+                offering.AcademicSessionId));
         }
 
         var fullName = !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) 
@@ -207,6 +230,7 @@ public class ParentPortalService : BaseService, IParentPortalService
         return new StudentGradesDto(
             student.Id,
             fullName,
+            student.StudentNumber ?? string.Empty,
             grades);
     }
 

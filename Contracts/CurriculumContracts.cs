@@ -64,6 +64,11 @@ public record CurriculumSummaryDto(
 
 public record CloneCurriculumRequest(string NewName);
 
+public record UpdateCurriculumRequest(
+    Guid AdmissionSessionId,
+    string Name,
+    int MinCreditUnitsForGraduation);
+
 public record AddCoursePrerequisiteRequest(Guid PrerequisiteCourseId, PrerequisiteType Type);
 
 public record CurriculumHistoryDto(

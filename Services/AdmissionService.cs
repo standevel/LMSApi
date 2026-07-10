@@ -464,7 +464,7 @@ public sealed class AdmissionService(
     {
         return await dbContext.AcademicSessions
             .AsNoTracking()
-            .Where(s => s.IsActive || s.IsAdmissionOpen)
+            .Where(s => s.IsAdmissionOpen)
             .OrderByDescending(s => s.StartDate)
             .ToListAsync();
     }
@@ -472,6 +472,9 @@ public sealed class AdmissionService(
     public async Task<AcademicSession?> GetActiveAdmissionSessionAsync()
     {
         return await dbContext.AcademicSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.IsAdmissionActive)
+            ?? await dbContext.AcademicSessions
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.IsActive);
     }

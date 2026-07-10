@@ -11,4 +11,6 @@ public interface ITranscriptGenerationService
     Task<ErrorOr<List<TranscriptRequestDto>>> GetStudentTranscriptRequestsAsync(Guid studentId, CancellationToken ct = default);
     Task<ErrorOr<List<TranscriptRequestDto>>> GetAllTranscriptRequestsAsync(int pageNumber = 1, int pageSize = 20, CancellationToken ct = default);
     Task<ErrorOr<TranscriptRequestDto>> ProcessTranscriptRequestAsync(Guid requestId, Guid processedBy, CancellationToken ct = default);
+    Task<ErrorOr<SystemTranscriptConfigurationDto>> GetConfigurationAsync(CancellationToken ct = default);
+    Task<ErrorOr<SystemTranscriptConfigurationDto>> UpdateConfigurationAsync(UpdateSystemTranscriptConfigurationRequest request, Guid userId, CancellationToken ct = default);
 }

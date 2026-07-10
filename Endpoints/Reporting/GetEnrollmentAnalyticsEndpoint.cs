@@ -28,7 +28,9 @@ public override void Configure()
             return;
         }
 
-        var result = await _analyticsService.GetEnrollmentAnalyticsAsync(ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var result = await _analyticsService.GetEnrollmentAnalyticsAsync(sessionId == Guid.Empty ? null : sessionId, ct);
 
         if (result.IsError)
         {

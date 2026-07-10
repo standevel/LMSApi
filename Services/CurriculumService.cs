@@ -4,18 +4,61 @@ using LMS.Api.Common.Mapping;
 using LMS.Api.Contracts;
 using LMS.Api.Data.Enums;
 using LMS.Api.Data.Entities;
+using LMS.Api.Data;
 using LMS.Api.Data.Repositories;
+using LMS.Api.Security;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
 
 public sealed class CurriculumService(
+    LmsDbContext dbContext,
     ICurriculumRepository curriculumRepository,
+    ICurrentUserContext currentUserContext,
+    IUserRoleRepository userRoleRepository,
     IAuditService auditService) : BaseService(auditService), ICurriculumService
 {
+    private async Task<bool> IsUserAdminAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.SuperAdmin) || roles.Contains(LmsRoles.Admin) || roles.Contains(LmsRoles.AcademicAdmin) || roles.Contains(LmsRoles.ViceChancellor);
+    }
+
+    private async Task<bool> IsUserDeanAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.Dean);
+    }
+
+    private async Task<bool> IsUserHodAsync(Guid userId, CancellationToken ct)
+    {
+        var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
+        return roles.Contains(LmsRoles.HOD);
+    }
+
+    private async Task<bool> CanUserAccessCurriculumAsync(Curriculum curriculum, CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct) ?? Guid.Empty;
+        if (userId == Guid.Empty) return false;
+        
+        if (await IsUserAdminAsync(userId, ct)) return true;
+
+        bool isDean = await IsUserDeanAsync(userId, ct);
+        bool isHod = await IsUserHodAsync(userId, ct);
+
+        if (isDean && curriculum.Program?.Department?.Faculty?.DeanId == userId) return true;
+        if (isHod && curriculum.Program?.Department?.HeadId == userId) return true;
+
+        return false;
+    }
+
     public async Task<ErrorOr<CurriculumDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var curriculum = await curriculumRepository.GetByIdAsync(id, ct);
         if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        if (!await CanUserAccessCurriculumAsync(curriculum, ct))
+            return Error.Forbidden("Curriculum.AccessDenied", "You do not have permission to access this curriculum.");
 
         return curriculum.ToDto();
     }
@@ -23,7 +66,17 @@ public sealed class CurriculumService(
     public async Task<ErrorOr<List<CurriculumSummaryDto>>> GetByProgramIdAsync(Guid programId, CancellationToken ct = default)
     {
         var curricula = await curriculumRepository.GetByProgramIdAsync(programId, ct);
-        return curricula.Select(x => x.ToSummaryDto()).ToList();
+        
+        var filteredCurricula = new List<Curriculum>();
+        foreach (var curriculum in curricula)
+        {
+            if (await CanUserAccessCurriculumAsync(curriculum, ct))
+            {
+                filteredCurricula.Add(curriculum);
+            }
+        }
+
+        return filteredCurricula.Select(x => x.ToSummaryDto()).ToList();
     }
 
     public async Task<ErrorOr<CurriculumDto>> CreateCurriculumAsync(Guid programId, CreateCurriculumRequest request, CancellationToken ct = default)
@@ -43,6 +96,23 @@ public sealed class CurriculumService(
         await LogActionAsync("Create", "Curriculum", curriculum.Id.ToString(), $"Created curriculum: {curriculum.Name}", ct);
 
         var result = await curriculumRepository.GetByIdAsync(curriculum.Id, ct);
+        return result!.ToDto();
+    }
+
+    public async Task<ErrorOr<CurriculumDto>> UpdateCurriculumAsync(Guid curriculumId, UpdateCurriculumRequest request, CancellationToken ct = default)
+    {
+        var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        var oldName = curriculum.Name;
+        curriculum.Name = request.Name;
+        curriculum.MinCreditUnitsForGraduation = request.MinCreditUnitsForGraduation;
+        curriculum.AdmissionSessionId = request.AdmissionSessionId;
+
+        await curriculumRepository.SaveChangesAsync(ct);
+        await LogActionAsync("Update", "Curriculum", curriculum.Id.ToString(), $"Updated curriculum name from '{oldName}' to '{request.Name}'", ct);
+
+        var result = await curriculumRepository.GetByIdAsync(curriculumId, ct);
         return result!.ToDto();
     }
 
@@ -232,6 +302,26 @@ public sealed class CurriculumService(
         return curriculum.ToDto();
     }
 
+    public async Task<ErrorOr<Deleted>> DeleteCurriculumAsync(Guid curriculumId, CancellationToken ct = default)
+    {
+        var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        if (curriculum.Status == CurriculumStatus.Published)
+            return Error.Validation("Curriculum.IsPublished", "Cannot delete a published curriculum.");
+
+        var hasEnrollments = await dbContext.Enrollments.AnyAsync(e => e.CurriculumId == curriculumId, ct);
+        if (hasEnrollments)
+            return Error.Validation("Curriculum.HasEnrollments", "Cannot delete a curriculum with enrolled students.");
+
+        await curriculumRepository.DeleteAsync(curriculum, ct);
+        await curriculumRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("Delete", "Curriculum", curriculumId.ToString(), $"Deleted curriculum: {curriculum.Name}", ct);
+
+        return Result.Deleted;
+    }
+
     public async Task<ErrorOr<bool>> ValidatePrerequisitesAsync(Guid curriculumId, CancellationToken ct = default)
     {
         var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
@@ -311,5 +401,27 @@ public sealed class CurriculumService(
             x.Changes,
             x.User?.DisplayName ?? "System",
             x.Timestamp)).ToList();
+    }
+
+    public async Task<ErrorOr<CurriculumDto>> RemoveLevelAsync(Guid curriculumId, Guid levelId, CancellationToken ct = default)
+    {
+        var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        var coursesToRemove = curriculum.Courses.Where(x => x.LevelId == levelId).ToList();
+        if (coursesToRemove.Count > 0)
+        {
+            foreach (var cc in coursesToRemove)
+            {
+                await curriculumRepository.DeleteCourseAsync(cc, ct);
+            }
+            await curriculumRepository.SaveChangesAsync(ct);
+
+            var levelName = coursesToRemove.First().Level?.Name ?? levelId.ToString();
+            await LogActionAsync("DeleteLevel", "Curriculum", curriculum.Id.ToString(), $"Removed level {levelName} and all its mapped courses from curriculum", ct);
+        }
+
+        var result = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        return result!.ToDto();
     }
 }

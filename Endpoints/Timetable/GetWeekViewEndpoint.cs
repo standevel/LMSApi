@@ -17,7 +17,11 @@ public sealed record TimetableSlotDto(
     string StartTime,
     string EndTime,
     int DurationMinutes,
-    string? Notes
+    string? Notes,
+    Guid? DepartmentId = null,
+    Guid? FacultyId = null,
+    string? DepartmentName = null,
+    string? FacultyName = null
 );
 
 public class GetWeekViewEndpoint(ITimetableService timetableService)
@@ -61,7 +65,11 @@ public class GetWeekViewEndpoint(ITimetableService timetableService)
             s.StartTime.ToString("HH:mm"),
             s.EndTime.ToString("HH:mm"),
             s.DurationMinutes,
-            s.Notes
+            s.Notes,
+            s.CourseOffering?.Course?.Program?.DepartmentId,
+            s.CourseOffering?.Course?.Program?.Department?.FacultyId,
+            s.CourseOffering?.Course?.Program?.Department?.Name,
+            s.CourseOffering?.Course?.Program?.Department?.Faculty?.Name
         )).ToList(); // Force evaluation before serialization
 
         await SendSuccessAsync(result, ct, "Week view timetable retrieved");

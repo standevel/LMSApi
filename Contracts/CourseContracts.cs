@@ -6,17 +6,35 @@ namespace LMS.Api.Contracts;
 
 public record SimpleUserDto(Guid Id, string? Name, string? Email, Guid? DepartmentId = null, string? DepartmentName = null);
 
-public record CourseOfferingDto(
-    Guid Id,
+// ─── Offering sub-DTOs ───────────────────────────────────────────────────────
+
+/// <summary>One program+level pair attached to a CourseOffering.</summary>
+public record OfferingProgramDto(
     Guid ProgramId,
     string ProgramName,
     Guid LevelId,
-    string LevelName,
+    string LevelName);
+
+/// <summary>One lecturer assigned to a CourseOffering with their role.</summary>
+public record OfferingLecturerDto(
+    Guid LecturerId,
+    string? LecturerName,
+    CourseLecturerRole Role);
+
+// ─── CourseOffering ───────────────────────────────────────────────────────────
+
+public record CourseOfferingDto(
+    Guid Id,
+    Guid CourseId,
+    string CourseCode,
+    string CourseTitle,
     Guid AcademicSessionId,
     string AcademicSessionName,
-    Guid? LecturerId,
-    string? LecturerName,
-    int Semester);
+    int Semester,
+    List<OfferingProgramDto> Programs,
+    List<OfferingLecturerDto> Lecturers);
+
+// ─── Course ───────────────────────────────────────────────────────────────────
 
 public record CourseDto(
     Guid Id,
@@ -31,11 +49,12 @@ public record CourseDto(
     bool IsActive,
     List<CourseOfferingDto> Offerings);
 
+// ─── Create / Update requests ─────────────────────────────────────────────────
+
+/// <summary>Creates a bare offering: course + session + semester only.
+/// Programs and lecturers are attached via separate endpoints afterwards.</summary>
 public record CreateCourseOfferingRequest(
-    Guid ProgramId,
-    Guid LevelId,
     Guid AcademicSessionId,
-    Guid? LecturerId,
     int Semester);
 
 public record CreateCourseRequest(
@@ -58,3 +77,28 @@ public record UpdateCourseRequest(
     List<CreateCourseOfferingRequest> Offerings);
 
 public record ToggleCourseStatusRequest(Guid Id);
+
+// ─── Program attachment ───────────────────────────────────────────────────────
+
+public record AttachOfferingProgramRequest(Guid ProgramId, Guid LevelId);
+
+public record DetachOfferingProgramRequest(Guid ProgramId, Guid LevelId);
+
+// ─── Lecturer assignment ──────────────────────────────────────────────────────
+
+/// <summary>Assigns a single lecturer with a role to an offering.</summary>
+public record AssignOfferingLecturerRequest(Guid LecturerId, CourseLecturerRole Role);
+
+/// <summary>Removes a lecturer from an offering.</summary>
+public record RemoveOfferingLecturerRequest(Guid LecturerId);
+
+/// <summary>One offering → lecturer assignment pair. Used in bulk assign.</summary>
+public record OfferingAssignment(Guid OfferingId, Guid? LecturerId, List<Guid>? CoLecturerIds = null);
+
+/// <summary>Assigns (or clears) lecturers for multiple offerings in one call.</summary>
+public record BulkAssignLecturersRequest(List<OfferingAssignment> Assignments);
+
+/// <summary>Result per offering after a bulk assign.</summary>
+public record BulkAssignLecturersResult(
+    List<CourseOfferingDto> Updated,
+    List<string> Errors);

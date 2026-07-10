@@ -23,15 +23,30 @@ public sealed class GetRegistryStatsEndpoint(LmsDbContext dbContext)
 
     public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)
     {
-        var totalStudents = await dbContext.Enrollments.CountAsync(ct);
+        // Read optional session filter from interceptor or explicit query param
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var hasSession = sessionId != Guid.Empty;
+
+        var totalStudents = hasSession
+            ? await dbContext.Enrollments.CountAsync(e => e.AcademicSessionId == sessionId, ct)
+            : await dbContext.Enrollments.CountAsync(ct);
         
-        var undergraduateStudents = await dbContext.Enrollments
-            .Include(e => e.Program)
-            .CountAsync(e => e.Program.Type == ProgramType.Undergraduate, ct);
+        var undergraduateStudents = hasSession
+            ? await dbContext.Enrollments
+                .Include(e => e.Program)
+                .CountAsync(e => e.AcademicSessionId == sessionId && e.Program.Type == ProgramType.Undergraduate, ct)
+            : await dbContext.Enrollments
+                .Include(e => e.Program)
+                .CountAsync(e => e.Program.Type == ProgramType.Undergraduate, ct);
             
-        var postgraduateStudents = await dbContext.Enrollments
-            .Include(e => e.Program)
-            .CountAsync(e => e.Program.Type == ProgramType.Postgraduate, ct);
+        var postgraduateStudents = hasSession
+            ? await dbContext.Enrollments
+                .Include(e => e.Program)
+                .CountAsync(e => e.AcademicSessionId == sessionId && e.Program.Type == ProgramType.Postgraduate, ct)
+            : await dbContext.Enrollments
+                .Include(e => e.Program)
+                .CountAsync(e => e.Program.Type == ProgramType.Postgraduate, ct);
         
         var newAdmissions = await dbContext.AdmissionApplications
             .CountAsync(a => a.Status == AdmissionStatus.Submitted, ct);

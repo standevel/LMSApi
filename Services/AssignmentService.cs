@@ -33,7 +33,9 @@ public sealed class AssignmentService(
                 .Where(e =>
                     e.CourseOffering.CourseId == request.CourseId &&
                     e.Status == "Registered" &&
-                    (targetProgramIds.Count == 0 || targetProgramIds.Contains(e.CourseOffering.ProgramId)))
+                    (targetProgramIds.Count == 0 || context.CourseOfferingPrograms.Any(p =>
+                        p.CourseOfferingId == e.CourseOfferingId &&
+                        targetProgramIds.Contains(p.ProgramId))))
                 .Select(e => e.StudentId)
                 .Distinct()
                 .ToListAsync(ct);
@@ -123,7 +125,10 @@ public sealed class AssignmentService(
                 .Select(e => new
                 {
                     e.CourseOffering.CourseId,
-                    e.CourseOffering.ProgramId
+                    ProgramId = context.CourseOfferingPrograms
+                        .Where(p => p.CourseOfferingId == e.CourseOfferingId)
+                        .Select(p => p.ProgramId)
+                        .FirstOrDefault()
                 })
                 .ToListAsync(ct);
 
@@ -161,7 +166,10 @@ public sealed class AssignmentService(
             .Select(enrollment => new
             {
                 enrollment.CourseOffering.CourseId,
-                enrollment.CourseOffering.ProgramId
+                ProgramId = context.CourseOfferingPrograms
+                    .Where(p => p.CourseOfferingId == enrollment.CourseOfferingId)
+                    .Select(p => p.ProgramId)
+                    .FirstOrDefault()
             })
             .ToListAsync(ct);
 
@@ -305,10 +313,12 @@ public sealed class AssignmentService(
         var ids = NormalizeTargetProgramIds(programIds);
         if (ids.Count == 0) return null;
 
-        var validProgramIds = await context.CourseOfferings
+        var validProgramIds = await context.CourseOfferingPrograms
             .AsNoTracking()
-            .Where(offering => offering.CourseId == courseId && ids.Contains(offering.ProgramId))
-            .Select(offering => offering.ProgramId)
+            .Where(p => context.CourseOfferings.Any(co =>
+                co.Id == p.CourseOfferingId && co.CourseId == courseId) &&
+                ids.Contains(p.ProgramId))
+            .Select(p => p.ProgramId)
             .Distinct()
             .ToListAsync(ct);
 

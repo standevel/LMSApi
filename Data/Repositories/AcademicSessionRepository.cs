@@ -10,4 +10,9 @@ public sealed class AcademicSessionRepository(LmsDbContext dbContext)
     {
         return DbSet.FirstOrDefaultAsync(x => x.IsActive, ct);
     }
+
+    public Task<AcademicSession?> GetActiveAdmissionAsync(CancellationToken ct = default)
+    {
+        return DbSet.FirstOrDefaultAsync(x => x.IsAdmissionActive, ct);
+    }
 }

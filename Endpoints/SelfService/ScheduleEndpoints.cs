@@ -54,10 +54,14 @@ public sealed class GetStudentScheduleEndpoint(IScheduleService scheduleService,
             return;
         }
 
-        // For simplicity, we're using the current academic session
-        // In a real implementation, you might want to determine this dynamically
-        Guid currentAcademicSessionId = Guid.Empty; // This would need to be determined properly
-        
+        // Read academicSessionId injected by the frontend interceptor
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        if (!Guid.TryParse(sessionIdStr, out var currentAcademicSessionId) || currentAcademicSessionId == Guid.Empty)
+        {
+            await SendFailureAsync(400, "Bad Request", "MISSING_SESSION", "A valid academicSessionId query parameter is required.", ct);
+            return;
+        }
+
         var result = await scheduleService.GetStudentScheduleAsync(userId.Value, currentAcademicSessionId, ct);
         await SendAsync(result, ct);
     }
@@ -82,7 +86,9 @@ public sealed class GetRegistrationHistoryEndpoint(IRegistrationService registra
             return;
         }
 
-        var result = await registrationService.GetRegistrationHistoryAsync(userId.Value, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var result = await registrationService.GetRegistrationHistoryAsync(userId.Value, sessionId == Guid.Empty ? null : sessionId, ct);
         await SendAsync(result, ct);
     }
 }
@@ -166,6 +172,12 @@ public sealed class GetStudentExamsEndpoint(IScheduleService scheduleService, IC
         }
 
         Guid currentAcademicSessionId = Guid.Empty;
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        if (!Guid.TryParse(sessionIdStr, out currentAcademicSessionId) || currentAcademicSessionId == Guid.Empty)
+        {
+            await SendFailureAsync(400, "Bad Request", "MISSING_SESSION", "A valid academicSessionId query parameter is required.", ct);
+            return;
+        }
 
         var result = await scheduleService.GetStudentExamsAsync(userId.Value, currentAcademicSessionId, ct);
         if (result.IsError)

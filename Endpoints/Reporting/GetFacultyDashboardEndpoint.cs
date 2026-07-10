@@ -29,7 +29,12 @@ public override void Configure()
         }
 
         var facultyId = Route<Guid>("facultyId");
-        var result = await _analyticsService.GetFacultyDashboardAsync(facultyId, ct);
+        
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var academicSessionId = sessionId == Guid.Empty ? (Guid?)null : sessionId;
+
+        var result = await _analyticsService.GetFacultyDashboardAsync(facultyId, academicSessionId, ct);
 
         if (result.IsError)
         {

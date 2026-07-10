@@ -50,7 +50,7 @@ public interface IGradebookService
     
 // Student View
      Task<ErrorOr<StudentGradeViewDto>> GetStudentGradesAsync(Guid courseOfferingId, Guid studentId, CancellationToken ct = default);
-     Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, CancellationToken ct = default);
+     Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default);
      
      // Classter Migration
      Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(Guid academicSessionId, Guid courseId, IFormFile excelFile, Guid userId, Guid? uploadId = null, CancellationToken ct = default);

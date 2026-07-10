@@ -1,6 +1,5 @@
 using LMS.Api.Contracts;
 using LMS.Api.Data.Entities;
-using System.Linq;
 
 namespace LMS.Api.Common.Mapping;
 
@@ -60,7 +59,10 @@ public static class MappingExtensions
         s.Name,
         s.StartDate,
         s.EndDate,
-        s.IsActive);
+        s.IsActive,
+        s.ActiveSemester,
+        s.IsAdmissionOpen,
+        s.IsAdmissionActive);
 
     public static CourseDto ToDto(this Course course) => new(
         course.Id,
@@ -75,17 +77,24 @@ public static class MappingExtensions
         course.IsActive,
         course.Offerings.Select(o => o.ToDto()).ToList());
 
-    public static CourseOfferingDto ToDto(this CourseOffering o) => new(
-        o.Id,
-        o.ProgramId,
-        o.Program?.Name ?? "N/A",
-        o.LevelId,
-        o.Level?.Name ?? "N/A",
-        o.AcademicSessionId,
-        o.AcademicSession?.Name ?? "N/A",
-        o.LecturerId,
-        o.Lecturer?.DisplayName,
-        (int)o.Semester);
+    public static CourseOfferingDto ToDto(this CourseOffering o) =>
+        new(
+            o.Id,
+            o.CourseId,
+            o.Course?.Code ?? string.Empty,
+            o.Course?.Title ?? string.Empty,
+            o.AcademicSessionId,
+            o.AcademicSession?.Name ?? "N/A",
+            (int)o.Semester,
+            o.Programs.Select(p => new OfferingProgramDto(
+                p.ProgramId,
+                p.Program?.Name ?? "N/A",
+                p.LevelId,
+                p.Level?.Name ?? "N/A")).ToList(),
+            o.Lecturers.Select(l => new OfferingLecturerDto(
+                l.LecturerId,
+                l.Lecturer?.DisplayName,
+                l.Role)).ToList());
 
     public static CurriculumDto ToDto(this Curriculum c) => new(
         c.Id,

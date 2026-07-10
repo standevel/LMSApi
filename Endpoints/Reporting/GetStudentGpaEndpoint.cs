@@ -32,7 +32,12 @@ public override void Configure()
         }
 
         var studentId = Route<Guid>("studentId");
-        var result = await _gpaService.GetStudentGpaAsync(studentId, ct);
+        
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var academicSessionId = sessionId == Guid.Empty ? (Guid?)null : sessionId;
+
+        var result = await _gpaService.GetStudentGpaAsync(studentId, academicSessionId, ct);
 
         if (result.IsError)
         {

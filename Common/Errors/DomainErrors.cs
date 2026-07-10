@@ -130,5 +130,13 @@ public static class DomainErrors
         public static Error ReportCacheExpired => Error.NotFound(
             "Reporting.ReportCacheExpired",
             "Report cache has expired");
+
+        public static Error CertificateNotFound => Error.NotFound(
+            "Reporting.CertificateNotFound",
+            "Certificate request not found");
+
+        public static Error GraduationCheckFailed => Error.Validation(
+            "Reporting.GraduationCheckFailed",
+            "Student has not completed all degree requirements for graduation");
     }
 }

@@ -126,10 +126,12 @@ public sealed class DocumentService(LmsDbContext dbContext) : IDocumentService
             return studentFacultyId;
         }
 
-        var lecturerProgramFacultyId = await dbContext.CourseOfferings
+        var lecturerProgramFacultyId = await dbContext.CourseOfferingLecturers
             .AsNoTracking()
-            .Where(co => co.LecturerId == userId)
-            .Select(co => (Guid?)co.Program.Department.FacultyId)
+            .Where(col => col.LecturerId == userId)
+            .SelectMany(col => dbContext.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == col.CourseOfferingId)
+                .Select(p => (Guid?)p.Program.Department.FacultyId))
             .FirstOrDefaultAsync();
 
         return lecturerProgramFacultyId;

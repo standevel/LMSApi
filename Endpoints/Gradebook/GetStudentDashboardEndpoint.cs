@@ -74,7 +74,7 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
         }
 
         // Get all published grades for the student
-        var allGrades = await _gradebookService.GetStudentAllGradesAsync(userId.Value, ct);
+        var allGrades = await _gradebookService.GetStudentAllGradesAsync(userId.Value, null, ct);
         if (allGrades.IsError)
         {
             await SendFailureAsync(400, "Bad request", "ERROR", allGrades.FirstError.Description, ct);

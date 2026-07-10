@@ -162,6 +162,8 @@ public sealed record StudentBillResponse(
     string StudentName,
     Guid SessionId,
     string SessionName,
+    decimal Subtotal,
+    decimal ScholarshipDiscount,
     decimal TotalAmount,
     decimal AmountPaid,
     decimal Balance,

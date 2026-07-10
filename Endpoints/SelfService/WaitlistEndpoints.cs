@@ -73,7 +73,11 @@ public sealed class GetStudentWaitlistsEndpoint(IWaitlistService waitlistService
             return;
         }
 
-        var result = await waitlistService.GetStudentWaitlistsAsync(userId.Value, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var academicSessionId = sessionId == Guid.Empty ? (Guid?)null : sessionId;
+
+        var result = await waitlistService.GetStudentWaitlistsAsync(userId.Value, academicSessionId, ct);
         await SendAsync(result, ct);
     }
 }

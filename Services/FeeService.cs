@@ -230,12 +230,11 @@ public sealed class FeeService(
             .FirstOrDefaultAsync(r => r.StudentId == studentId && r.SessionId == sessionId);
 
         // Load student's program/faculty for assignment matching
-        var enrollment = await db.Enrollments
-            .Include(e => e.Program).ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
-            .FirstOrDefaultAsync(e => e.UserId == studentId && e.AcademicSessionId == sessionId);
+        var student = await db.Students
+            .FirstOrDefaultAsync(s => s.Id == studentId);
 
-        Guid? facultyId = enrollment?.Program?.Department?.FacultyId;
-        Guid? programId = enrollment?.ProgramId;
+        Guid? facultyId = student?.FacultyId;
+        Guid? programId = student?.AcademicProgramId;
 
         // Get all active templates
         var allTemplates = await db.FeeTemplates
@@ -268,10 +267,15 @@ public sealed class FeeService(
             }
         }
 
-        // Also include University-scope templates with no explicit assignment
-        foreach (var t in allTemplates.Where(t => t.Scope == FeeScope.University && !templateAmounts.ContainsKey(t.Id)))
+        // Also include inherent scope templates (University, matching Faculty, matching Program) with no explicit assignment
+        foreach (var t in allTemplates.Where(t => !templateAmounts.ContainsKey(t.Id)))
         {
-            templateAmounts[t.Id] = (t.LineItems.Sum(li => li.Amount), t);
+            if (t.Scope == FeeScope.University ||
+               (t.Scope == FeeScope.Faculty && t.FacultyId == facultyId) ||
+               (t.Scope == FeeScope.Program && t.ProgramId == programId))
+            {
+                templateAmounts[t.Id] = (t.LineItems.Sum(li => li.Amount), t);
+            }
         }
 
         decimal total = 0;

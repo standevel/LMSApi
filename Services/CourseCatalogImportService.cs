@@ -169,7 +169,9 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
 
             foreach (var pName in previewProgramNames)
             {
-                var existing = allDbPrograms.FirstOrDefault(p => p.Name.Equals(pName, StringComparison.OrdinalIgnoreCase));
+                var existing = allDbPrograms.FirstOrDefault(p => 
+                    p.Name.Equals(pName, StringComparison.OrdinalIgnoreCase) ||
+                    Normalize(p.Name) == Normalize(pName));
                 if (existing != null)
                 {
                     programsToImport.Add(existing);
@@ -233,12 +235,23 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             .Select(cc => (cc.CurriculumId, cc.CourseId, cc.Semester))
             .ToHashSet();
 
-        // Cache all existing CourseOfferings for the current session to avoid duplicates
-        // Key: (CourseId, ProgramId, LevelId, Semester)
+        // Cache existing offerings key: (CourseId, Semester) — one per course/session/semester
         var existingOfferingKeys = (await dbContext.CourseOfferings
             .Where(co => co.AcademicSessionId == session.Id)
             .ToListAsync(ct))
-            .Select(co => (co.CourseId, co.ProgramId, co.LevelId, co.Semester))
+            .Select(co => (co.CourseId, co.Semester))
+            .ToHashSet();
+
+        // Also cache existing program links to avoid duplicates
+        var existingOfferingIdMap = (await dbContext.CourseOfferings
+            .Where(co => co.AcademicSessionId == session.Id)
+            .ToListAsync(ct))
+            .ToDictionary(co => (co.CourseId, co.Semester), co => co.Id);
+
+        var existingProgramLinks = (await dbContext.CourseOfferingPrograms
+            .Where(p => existingOfferingIdMap.Values.Contains(p.CourseOfferingId))
+            .ToListAsync(ct))
+            .Select(p => (p.CourseOfferingId, p.ProgramId, p.LevelId))
             .ToHashSet();
 
         // Process each program
@@ -260,14 +273,22 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             }
             else
             {
+                var searchName = curriculumName ?? $"{program.Name} Curriculum";
                 var existing = await dbContext.Curricula
                     .FirstOrDefaultAsync(c => c.ProgramId == program.Id
-                        && c.AdmissionSessionId == session.Id
-                        && c.IsActive, ct);
+                        && (c.AdmissionSessionId == session.Id || c.Name == searchName), ct);
 
                 if (existing != null)
                 {
                     targetCurriculum = existing;
+                    if (!targetCurriculum.IsActive)
+                    {
+                        targetCurriculum.IsActive = true;
+                    }
+                    if (targetCurriculum.AdmissionSessionId == null)
+                    {
+                        targetCurriculum.AdmissionSessionId = session.Id;
+                    }
                 }
                 else
                 {
@@ -276,7 +297,7 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                         Id = Guid.NewGuid(),
                         ProgramId = program.Id,
                         AdmissionSessionId = session.Id,
-                        Name = curriculumName ?? $"{program.Name} Curriculum",
+                        Name = searchName,
                         Status = CurriculumStatus.Published,
                         IsActive = true
                     };
@@ -401,20 +422,35 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
                     curriculumCoursesAdded++;
                 }
 
-                // Also ensure a CourseOffering exists for this session
-                var offeringKey = (course.Id, program.Id, academicLevel.Id, row.Semester);
+                // Ensure a CourseOffering exists for this session (one per course/semester)
+                var offeringKey = (course.Id, row.Semester);
                 if (!existingOfferingKeys.Contains(offeringKey))
                 {
-                    dbContext.CourseOfferings.Add(new CourseOffering
+                    var newOffering = new CourseOffering
                     {
-                        Id = Guid.NewGuid(),
-                        CourseId = course.Id,
-                        ProgramId = program.Id,
-                        LevelId = academicLevel.Id,
+                        Id                = Guid.NewGuid(),
+                        CourseId          = course.Id,
                         AcademicSessionId = session.Id,
-                        Semester = row.Semester
-                    });
+                        Semester          = row.Semester
+                    };
+                    dbContext.CourseOfferings.Add(newOffering);
+                    await dbContext.SaveChangesAsync(ct); // flush to get the Id
                     existingOfferingKeys.Add(offeringKey);
+                    existingOfferingIdMap[offeringKey] = newOffering.Id;
+                }
+
+                // Attach the program+level to the offering if not already linked
+                var offeringId = existingOfferingIdMap[offeringKey];
+                var linkKey = (offeringId, program.Id, academicLevel.Id);
+                if (!existingProgramLinks.Contains(linkKey))
+                {
+                    dbContext.CourseOfferingPrograms.Add(new CourseOfferingProgram
+                    {
+                        CourseOfferingId = offeringId,
+                        ProgramId        = program.Id,
+                        LevelId          = academicLevel.Id
+                    });
+                    existingProgramLinks.Add(linkKey);
                 }
             }
         }

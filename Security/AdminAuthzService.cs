@@ -101,6 +101,8 @@ public sealed class AdminAuthzService(
 
         Guid? deptId = user.DepartmentId;
         Guid? facId = user.FacultyId;
+        string? deptName = user.Department?.Name;
+        string? facName = user.Faculty?.Name;
         string? academicProgramName = null;
         string? levelName = null;
         Guid? studentId = null;
@@ -110,7 +112,9 @@ public sealed class AdminAuthzService(
             var student = await dbContext.Students
                 .AsNoTracking()
                 .Include(s => s.AcademicProgram)
-                .ThenInclude(p => p.Department)
+                    .ThenInclude(p => p!.Department)
+                        .ThenInclude(d => d!.Faculty)
+                .Include(s => s.Faculty)
                 .Include(s => s.Level)
                 .FirstOrDefaultAsync(s => s.EntraObjectId == entraObjectId || (!string.IsNullOrEmpty(user.Email) && s.OfficialEmail == user.Email), ct);
                 
@@ -118,6 +122,8 @@ public sealed class AdminAuthzService(
             {
                 deptId = student.AcademicProgram?.DepartmentId ?? student.AcademicProgramId; // Fallback if no department
                 facId = student.FacultyId ?? student.AcademicProgram?.Department?.FacultyId;
+                deptName = student.AcademicProgram?.Department?.Name;
+                facName = student.Faculty?.Name ?? student.AcademicProgram?.Department?.Faculty?.Name;
                 academicProgramName = student.AcademicProgram?.Name;
                 levelName = student.Level?.Name;
                 studentId = student.Id;
@@ -155,7 +161,9 @@ public sealed class AdminAuthzService(
             facId,
             academicProgramName,
             levelName,
-            studentId);
+            studentId,
+            deptName,
+            facName);
 
         return new GetManagedUserResult(true, detail, StatusCode: StatusCodes.Status200OK);
     }

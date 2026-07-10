@@ -5,6 +5,7 @@ using LMS.Api.Contracts;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
 
+// Trigger watch rebuild
 namespace LMS.Api.Services;
 
 public sealed class AcademicSessionService(
@@ -32,7 +33,10 @@ public sealed class AcademicSessionService(
             Name = request.Name,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
-            IsActive = false
+            IsActive = false,
+            IsAdmissionActive = false,
+            IsAdmissionOpen = request.IsAdmissionOpen,
+            ActiveSemester = request.ActiveSemester
         };
 
         await sessionRepository.AddAsync(session, ct);
@@ -48,9 +52,33 @@ public sealed class AcademicSessionService(
         var session = await sessionRepository.GetByIdAsync(id, ct);
         if (session is null) return DomainErrors.AcademicSession.NotFound;
 
+        if (request.IsActive && !session.IsActive)
+        {
+            var active = await sessionRepository.GetActiveAsync(ct);
+            if (active != null && active.Id != session.Id)
+            {
+                active.IsActive = false;
+                await sessionRepository.UpdateAsync(active, ct);
+            }
+        }
+
+        if (request.IsAdmissionActive && !session.IsAdmissionActive)
+        {
+            var activeAdmission = await sessionRepository.GetActiveAdmissionAsync(ct);
+            if (activeAdmission != null && activeAdmission.Id != session.Id)
+            {
+                activeAdmission.IsAdmissionActive = false;
+                await sessionRepository.UpdateAsync(activeAdmission, ct);
+            }
+        }
+
         session.Name = request.Name;
         session.StartDate = request.StartDate;
         session.EndDate = request.EndDate;
+        session.ActiveSemester = request.ActiveSemester;
+        session.IsActive = request.IsActive;
+        session.IsAdmissionActive = request.IsAdmissionActive;
+        session.IsAdmissionOpen = request.IsAdmissionOpen;
 
         await sessionRepository.UpdateAsync(session, ct);
         await sessionRepository.SaveChangesAsync(ct);
@@ -82,6 +110,47 @@ public sealed class AcademicSessionService(
         await sessionRepository.SaveChangesAsync(ct);
 
         await LogActionAsync("ToggleStatus", "AcademicSession", id.ToString(), $"Session {session.Name} {(session.IsActive ? "activated" : "deactivated")}", ct);
+
+        return session.ToDto();
+    }
+
+    public async Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionStatusAsync(Guid id, CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(id, ct);
+        if (session is null) return DomainErrors.AcademicSession.NotFound;
+
+        if (!session.IsAdmissionActive)
+        {
+            // Deactivate current active admission session if any
+            var active = await sessionRepository.GetActiveAdmissionAsync(ct);
+            if (active != null)
+            {
+                active.IsAdmissionActive = false;
+                await sessionRepository.UpdateAsync(active, ct);
+            }
+        }
+
+        session.IsAdmissionActive = !session.IsAdmissionActive;
+
+        await sessionRepository.UpdateAsync(session, ct);
+        await sessionRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("ToggleAdmissionStatus", "AcademicSession", id.ToString(), $"Admission Session {session.Name} {(session.IsAdmissionActive ? "activated" : "deactivated")}", ct);
+
+        return session.ToDto();
+    }
+
+    public async Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionOpenStatusAsync(Guid id, CancellationToken ct = default)
+    {
+        var session = await sessionRepository.GetByIdAsync(id, ct);
+        if (session is null) return DomainErrors.AcademicSession.NotFound;
+
+        session.IsAdmissionOpen = !session.IsAdmissionOpen;
+
+        await sessionRepository.UpdateAsync(session, ct);
+        await sessionRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("ToggleAdmissionOpenStatus", "AcademicSession", id.ToString(), $"Session {session.Name} admission {(session.IsAdmissionOpen ? "opened" : "closed")}", ct);
 
         return session.ToDto();
     }

@@ -75,7 +75,7 @@ public class NotificationBackgroundService : BackgroundService
             {
                 await notificationService.CreateAsync(new CreateNotificationRequest(
                     studentId,
-                    Guid.Empty, // System
+                    null, // System
                     $"Upcoming Assignment: {assignment.Title}",
                     $"Reminder: Assignment '{assignment.Title}' is due on {assignment.DueDate:f}.",
                     "System",

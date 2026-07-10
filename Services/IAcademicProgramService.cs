@@ -10,4 +10,5 @@ public interface IAcademicProgramService
     Task<ErrorOr<AcademicProgramDto>> CreateAsync(CreateAcademicProgramRequest request, CancellationToken ct = default);
     Task<ErrorOr<AcademicProgramDto>> UpdateAsync(Guid id, UpdateAcademicProgramRequest request, CancellationToken ct = default);
     Task<ErrorOr<AcademicProgramDto>> ToggleStatusAsync(Guid id, CancellationToken ct = default);
+    Task<ErrorOr<Deleted>> DeleteAsync(Guid id, CancellationToken ct = default);
 }

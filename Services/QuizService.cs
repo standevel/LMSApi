@@ -272,14 +272,14 @@ public class QuizService : BaseService, IQuizService
 
         if (isLecturer)
         {
-            var userIdStr = actualUserId.ToString();
-            var userCourseOfferingIds = await _context.CourseOfferings
-                .Where(co => co.LecturerId == actualUserId ||
-                             _context.LectureTimetableSlots.Any(slot =>
-                                 slot.CourseOfferingId == co.Id &&
-                                 (slot.LecturerId == actualUserId ||
-                                  (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr)))))
-                .Select(co => co.Id)
+            var userCourseOfferingIds = await _context.CourseOfferingLecturers
+                .Where(col => col.LecturerId == actualUserId)
+                .Select(col => col.CourseOfferingId)
+                .Union(
+                    _context.LectureTimetableSlots
+                        .Where(slot => slot.LecturerId == actualUserId ||
+                               (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(actualUserId.ToString())))
+                        .Select(slot => slot.CourseOfferingId))
                 .ToListAsync(ct);
 
             var lecturerQuery = _context.Quizzes
@@ -947,7 +947,9 @@ public class QuizService : BaseService, IQuizService
 
         var userIdStr = userId.Value.ToString();
         return quiz.CreatedBy == userId.Value ||
-               await _context.CourseOfferings.AnyAsync(co => co.Id == quiz.CourseOfferingId && co.LecturerId == userId.Value, ct) ||
+               await _context.CourseOfferingLecturers.AnyAsync(col =>
+                   col.CourseOfferingId == quiz.CourseOfferingId &&
+                   col.LecturerId == userId.Value, ct) ||
                await _context.LectureTimetableSlots.AnyAsync(slot =>
                    slot.CourseOfferingId == quiz.CourseOfferingId &&
                    (slot.LecturerId == userId.Value ||
@@ -985,9 +987,10 @@ public class QuizService : BaseService, IQuizService
             return Error.NotFound("Quiz.CourseOfferingNotFound", "Course offering not found.");
         }
 
-        var validProgramIds = await _context.CourseOfferings
-            .Where(offering => offering.CourseId == courseId && ids.Contains(offering.ProgramId))
-            .Select(offering => offering.ProgramId)
+        var validProgramIds = await _context.CourseOfferingPrograms
+            .Where(p => _context.CourseOfferings.Any(co => co.Id == p.CourseOfferingId && co.CourseId == courseId) &&
+                        ids.Contains(p.ProgramId))
+            .Select(p => p.ProgramId)
             .Distinct()
             .ToListAsync(ct);
 
@@ -1024,7 +1027,9 @@ public class QuizService : BaseService, IQuizService
             enrollment.StudentId == studentId &&
             enrollment.Status == "Registered" &&
             enrollment.CourseOffering.CourseId == courseId &&
-            targetProgramIds.Contains(enrollment.CourseOffering.ProgramId), ct);
+            _context.CourseOfferingPrograms.Any(p =>
+                p.CourseOfferingId == enrollment.CourseOfferingId &&
+                targetProgramIds.Contains(p.ProgramId)), ct);
     }
 
     private async Task<int> GetActiveTimeExtensionMinutesAsync(Guid quizId, Guid studentId, DateTime now, CancellationToken ct)

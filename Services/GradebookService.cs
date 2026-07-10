@@ -498,8 +498,6 @@ public sealed class GradebookService : IGradebookService
     {
         var offering = await _dbContext.CourseOfferings
             .Include(x => x.Course)
-            .Include(x => x.Program)
-            .Include(x => x.Level)
             .Include(x => x.AcademicSession)
             .FirstOrDefaultAsync(x => x.Id == courseOfferingId, ct);
 
@@ -735,9 +733,9 @@ public sealed class GradebookService : IGradebookService
     {
         var offering = await _dbContext.CourseOfferings
             .Include(x => x.Course)
-            .Include(x => x.Program)
-            .Include(x => x.Level)
             .Include(x => x.AcademicSession)
+            .Include(x => x.Programs).ThenInclude(p => p.Program)
+            .Include(x => x.Programs).ThenInclude(p => p.Level)
             .FirstOrDefaultAsync(x => x.Id == courseOfferingId, ct);
 
         if (offering == null)
@@ -769,11 +767,9 @@ public sealed class GradebookService : IGradebookService
 
         // Check if user has access
         var userIdStr = userId?.ToString() ?? string.Empty;
-        var isLecturer = userId.HasValue && (offering.LecturerId == userId.Value ||
-                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
-                             slot.CourseOfferingId == offering.Id && 
-                             (slot.LecturerId == userId.Value || 
-                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct));
+        var isLecturer = userId.HasValue &&
+                         await _dbContext.CourseOfferingLecturers.AnyAsync(col =>
+                             col.CourseOfferingId == offering.Id && col.LecturerId == userId.Value, ct);
 
         if (userId.HasValue && !isLecturer)
         {
@@ -791,8 +787,8 @@ public sealed class GradebookService : IGradebookService
             offering.Id,
             offering.Course.Code,
             offering.Course.Title,
-            offering.Program.Name,
-            offering.Level.Name,
+            offering.Programs.FirstOrDefault()?.Program?.Name ?? "N/A",
+            offering.Programs.FirstOrDefault()?.Level?.Name ?? "N/A",
             offering.AcademicSession.Name,
             (int)offering.Semester,
             categories.Select(MapToCategoryDto).ToList(),
@@ -857,11 +853,8 @@ public sealed class GradebookService : IGradebookService
 
         // Verify user is the lecturer
         var userIdStr = userId.ToString();
-        var isLecturer = offering.LecturerId == userId ||
-                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
-                             slot.CourseOfferingId == offering.Id && 
-                             (slot.LecturerId == userId || 
-                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
+        var isLecturer = await _dbContext.CourseOfferingLecturers.AnyAsync(col =>
+                             col.CourseOfferingId == offering.Id && col.LecturerId == userId, ct);
 
         if (!isLecturer)
             return Error.Forbidden("Access.Denied", "Only the assigned lecturer can submit for approval");
@@ -1030,9 +1023,13 @@ public sealed class GradebookService : IGradebookService
 
         if (requestedLevel == ApprovalLevel.Department)
         {
-            var program = await _dbContext.Programs
+            var firstProgramId = (await _dbContext.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == offering.Id)
+                .Select(p => (Guid?)p.ProgramId)
+                .FirstOrDefaultAsync(ct));
+            var program = firstProgramId.HasValue ? await _dbContext.Programs
                 .Include(p => p.Department)
-                .FirstOrDefaultAsync(p => p.Id == offering.ProgramId, ct);
+                .FirstOrDefaultAsync(p => p.Id == firstProgramId.Value, ct) : null;
             
             if (program?.Department?.HeadId != userId)
                 return Error.Forbidden("Approval.AccessDenied", "You are not the Head of Department for this course.");
@@ -1041,10 +1038,14 @@ public sealed class GradebookService : IGradebookService
         }
         else if (requestedLevel == ApprovalLevel.College)
         {
-            var program = await _dbContext.Programs
+            var firstProgramId2 = (await _dbContext.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == offering.Id)
+                .Select(p => (Guid?)p.ProgramId)
+                .FirstOrDefaultAsync(ct));
+            var program = firstProgramId2.HasValue ? await _dbContext.Programs
                 .Include(p => p.Department)
                     .ThenInclude(d => d.Faculty)
-                .FirstOrDefaultAsync(p => p.Id == offering.ProgramId, ct);
+                .FirstOrDefaultAsync(p => p.Id == firstProgramId2.Value, ct) : null;
                 
             if (program?.Department?.Faculty?.DeanId != userId)
                 return Error.Forbidden("Approval.AccessDenied", "You are not the Dean of the Faculty for this course.");
@@ -1053,11 +1054,8 @@ public sealed class GradebookService : IGradebookService
         }
 
         var userIdStr = userId.ToString();
-        var isLecturer = offering.LecturerId == userId ||
-                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
-                             slot.CourseOfferingId == offering.Id && 
-                             (slot.LecturerId == userId || 
-                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
+        var isLecturer = await _dbContext.CourseOfferingLecturers.AnyAsync(col =>
+                             col.CourseOfferingId == offering.Id && col.LecturerId == userId, ct);
 
         if (!isLecturer)
             return Error.Forbidden("Approval.AccessDenied", "You are not authorized to approve or reject grades for this course");
@@ -1216,11 +1214,8 @@ public sealed class GradebookService : IGradebookService
 
         var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin" || r == "HOD" || r == "Dean");
         var userIdStr = userId.ToString();
-        var isLecturer = offering.LecturerId == userId ||
-                         await _dbContext.LectureTimetableSlots.AnyAsync(slot => 
-                             slot.CourseOfferingId == offering.Id && 
-                             (slot.LecturerId == userId || 
-                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr))), ct);
+        var isLecturer = await _dbContext.CourseOfferingLecturers.AnyAsync(col =>
+                             col.CourseOfferingId == offering.Id && col.LecturerId == userId, ct);
 
         if (!isAdmin && !isLecturer)
             return Error.Forbidden("GradeManagement.AccessDenied", "You are not authorized to manage grades for this course");
@@ -1285,20 +1280,16 @@ public sealed class GradebookService : IGradebookService
 
         var query = _dbContext.CourseOfferings
             .Include(x => x.Course)
-            .Include(x => x.Program)
-            .Include(x => x.Level)
+            .Include(x => x.Programs).ThenInclude(p => p.Program)
+            .Include(x => x.Programs).ThenInclude(p => p.Level)
             .Include(x => x.AcademicSession)
-            .Include(x => x.Lecturer)
+            .Include(x => x.Lecturers).ThenInclude(l => l.Lecturer)
             .AsQueryable();
 
         if (!isAdmin)
         {
-            var userIdStr = userId.ToString();
-            query = query.Where(x => x.LecturerId == userId ||
-                                     _dbContext.LectureTimetableSlots.Any(slot => 
-                                         slot.CourseOfferingId == x.Id && 
-                                         (slot.LecturerId == userId || 
-                                          (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(userIdStr)))));
+            query = query.Where(x => _dbContext.CourseOfferingLecturers
+                .Any(col => col.CourseOfferingId == x.Id && col.LecturerId == userId));
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -1324,12 +1315,12 @@ public sealed class GradebookService : IGradebookService
                 offering.Id,
                 offering.Course.Code,
                 offering.Course.Title,
-                offering.Program.Name,
-                offering.Level.Name,
+                string.Join(", ", offering.Programs.Select(p => p.Program?.Name).Distinct()),
+                string.Join(", ", offering.Programs.Select(p => p.Level?.Name).Distinct()),
                 offering.AcademicSession.Name,
                 (int)offering.Semester,
                 isPublished,
-                offering.Lecturer?.DisplayName,
+                offering.Lecturers.FirstOrDefault(l => l.Role == Data.Enums.CourseLecturerRole.Main)?.Lecturer?.DisplayName,
                 offering.AcademicSession.IsActive));
         }
 
@@ -1416,10 +1407,15 @@ public sealed class GradebookService : IGradebookService
             true);
     }
 
-    public async Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, CancellationToken ct = default)
+    public async Task<ErrorOr<List<StudentGradeViewDto>>> GetStudentAllGradesAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
     {
-        var publications = await _dbContext.GradePublications
-            .Where(x => x.IsVisibleToStudents)
+        var publicationsQuery = _dbContext.GradePublications
+            .Where(x => x.IsVisibleToStudents);
+
+        if (academicSessionId.HasValue)
+            publicationsQuery = publicationsQuery.Where(x => x.AcademicSessionId == academicSessionId.Value);
+
+        var publications = await publicationsQuery
             .Select(x => x.CourseOfferingId)
             .ToListAsync(ct);
 
@@ -2126,26 +2122,44 @@ public sealed class GradebookService : IGradebookService
                 .FirstOrDefaultAsync(ct)
             ?? Data.Enums.Semester.First;
 
+        // Find offering by course+session+semester (new normalized model)
         var offering = await _dbContext.CourseOfferings
-            .FirstOrDefaultAsync(co => co.CourseId == courseId && co.ProgramId == student.AcademicProgramId && co.LevelId == student.LevelId && co.AcademicSessionId == academicSessionId, ct);
+            .FirstOrDefaultAsync(co => co.CourseId == courseId && co.AcademicSessionId == academicSessionId && co.Semester == semester, ct);
 
         if (offering == null)
         {
             offering = new CourseOffering
             {
-                Id = Guid.NewGuid(),
-                CourseId = courseId,
-                ProgramId = student.AcademicProgramId.Value,
-                LevelId = student.LevelId.Value,
+                Id                = Guid.NewGuid(),
+                CourseId          = courseId,
                 AcademicSessionId = academicSessionId,
-                Semester = semester,
-                CurriculumId = curriculumId
+                Semester          = semester,
+                CurriculumId      = curriculumId
             };
             _dbContext.CourseOfferings.Add(offering);
 
             try
             {
                 await _dbContext.SaveChangesAsync(ct);
+
+                // Attach the student's program/level to the new offering
+                if (student.AcademicProgramId.HasValue && student.LevelId.HasValue)
+                {
+                    var alreadyAttached = await _dbContext.CourseOfferingPrograms.AnyAsync(
+                        p => p.CourseOfferingId == offering.Id &&
+                             p.ProgramId == student.AcademicProgramId.Value &&
+                             p.LevelId == student.LevelId.Value, ct);
+                    if (!alreadyAttached)
+                    {
+                        _dbContext.CourseOfferingPrograms.Add(new CourseOfferingProgram
+                        {
+                            CourseOfferingId = offering.Id,
+                            ProgramId        = student.AcademicProgramId.Value,
+                            LevelId          = student.LevelId.Value
+                        });
+                        await _dbContext.SaveChangesAsync(ct);
+                    }
+                }
             }
             catch
             {
@@ -2174,20 +2188,35 @@ public sealed class GradebookService : IGradebookService
         if (appUser == null)
             return (null, false);
 
+        // Find program enrollment via offering programs
+        var offeringProgramId = await _dbContext.CourseOfferingPrograms
+            .Where(p => p.CourseOfferingId == offering.Id)
+            .Select(p => (Guid?)p.ProgramId)
+            .FirstOrDefaultAsync(ct);
+
+        if (!offeringProgramId.HasValue)
+            return (null, false);
+
         var enrollment = await _dbContext.Enrollments
-            .FirstOrDefaultAsync(e => e.UserId == appUser.Id && e.ProgramId == offering.ProgramId && e.AcademicSessionId == offering.AcademicSessionId, ct);
+            .FirstOrDefaultAsync(e => e.UserId == appUser.Id && e.ProgramId == offeringProgramId.Value && e.AcademicSessionId == offering.AcademicSessionId, ct);
 
         if (enrollment == null)
         {
+            // Find level from program attachment
+            var offeringLevelId = await _dbContext.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == offering.Id && p.ProgramId == offeringProgramId.Value)
+                .Select(p => (Guid?)p.LevelId)
+                .FirstOrDefaultAsync(ct);
+
             enrollment = new ProgramEnrollment
             {
-                Id = Guid.NewGuid(),
-                ProgramId = offering.ProgramId,
-                LevelId = offering.LevelId,
-                UserId = appUser.Id,
+                Id                = Guid.NewGuid(),
+                ProgramId         = offeringProgramId.Value,
+                LevelId           = offeringLevelId ?? Guid.Empty,
+                UserId            = appUser.Id,
                 AcademicSessionId = offering.AcademicSessionId,
-                CurriculumId = offering.CurriculumId.Value,
-                EnrolledAtUtc = DateTime.UtcNow
+                CurriculumId      = offering.CurriculumId.Value,
+                EnrolledAtUtc     = DateTime.UtcNow
             };
             _dbContext.Enrollments.Add(enrollment);
             await _dbContext.SaveChangesAsync(ct);

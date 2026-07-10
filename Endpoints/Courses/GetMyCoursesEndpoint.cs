@@ -70,7 +70,9 @@ public sealed class GetMyCoursesEndpoint : ApiEndpointWithoutRequest<LecturerCou
         var adminRoles = new[] { "Admin", "SuperAdmin" };
         var isAdmin = userRoles.Any(r => adminRoles.Contains(r, StringComparer.OrdinalIgnoreCase));
 
-        var result = await _courseService.GetMyCoursesAsync(userId.Value, isAdmin, ct);
+        var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
+        Guid.TryParse(sessionIdStr, out var sessionId);
+        var result = await _courseService.GetMyCoursesAsync(userId.Value, isAdmin, sessionId == Guid.Empty ? null : sessionId, ct);
 
         if (result.IsError)
         {

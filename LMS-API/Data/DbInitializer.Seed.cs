@@ -1,5 +1,6 @@
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Enums;
+using LMS.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -256,6 +257,99 @@ public sealed partial class DbInitializer
         }
 
         await dbContext.SaveChangesAsync(ct);
+        await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Added program credit mappings");
+    }
+
+    private async Task SeedStudentsAsync(CancellationToken ct)
+    {
+        if (await dbContext.Students.AnyAsync(ct))
+        {
+            logger.LogInformation("Students already seeded. Skipping.");
+            return;
+        }
+
+        logger.LogInformation("Seeding Students...");
+
+        var activeSession = await dbContext.AcademicSessions.FirstOrDefaultAsync(s => s.IsActive, ct);
+        if (activeSession == null)
+        {
+            logger.LogWarning("No active session found for student seeding. Skipping.");
+            return;
+        }
+
+        var faculties = await dbContext.Faculties.ToListAsync(ct);
+        var departments = await dbContext.Departments.ToListAsync(ct);
+        var programs = await dbContext.Programs.ToListAsync(ct);
+        var levels = await dbContext.Levels.ToListAsync(ct);
+        var role = await dbContext.Roles.FirstOrDefaultAsync(x => x.Name == LmsRoles.Student, ct);
+
+        var studentsToAdd = new List<Student>();
+        int studentCounter = 1;
+
+        foreach (var faculty in faculties)
+        {
+            // Find a department for this faculty
+            var dept = departments.FirstOrDefault(d => d.FacultyId == faculty.Id);
+            if (dept == null) continue;
+
+            // Find a program for this department
+            var program = programs.FirstOrDefault(p => p.DepartmentId == dept.Id);
+            if (program == null) continue;
+
+            // Find level 100
+            var level = levels.FirstOrDefault(l => l.ProgramId == program.Id && l.Order == 1);
+            if (level == null) continue;
+
+            var normalizedName = new string(faculty.Name.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+            var email = $"student.{normalizedName}@wigweuniversity.edu.ng";
+            var entraId = $"seed-student-{normalizedName}";
+
+            // Check if user already exists
+            if (await dbContext.Users.AnyAsync(x => x.Email == email || x.EntraObjectId == entraId, ct))
+                continue;
+
+            // Create AppUser
+            var user = new AppUser
+            {
+                DisplayName = $"Student {faculty.Name}",
+                Email = email,
+                EntraObjectId = entraId,
+                Username = email,
+                IsActive = true
+            };
+            dbContext.Users.Add(user);
+            await dbContext.SaveChangesAsync(ct);
+            
+            if (role != null)
+            {
+                dbContext.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+            }
+
+            var student = new Student
+            {
+                FirstName = "Test",
+                LastName = $"Student {faculty.Name}",
+                OfficialEmail = email,
+                PersonalEmail = $"personal.{normalizedName}@test.com",
+                Phone = "1234567890",
+                AcademicSessionId = activeSession.Id,
+                FacultyId = faculty.Id,
+                AcademicProgramId = program.Id,
+                LevelId = level.Id,
+                StudentNumber = $"MAT{DateTime.UtcNow.Year}{studentCounter:D4}",
+                EntraObjectId = entraId
+            };
+            
+            studentsToAdd.Add(student);
+            studentCounter++;
+        }
+
+        if (studentsToAdd.Count > 0)
+        {
+            dbContext.Students.AddRange(studentsToAdd);
+            await dbContext.SaveChangesAsync(ct);
+            logger.LogInformation("Added {Count} students", studentsToAdd.Count);
+        }
     }
 }

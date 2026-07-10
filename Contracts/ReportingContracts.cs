@@ -196,6 +196,23 @@ public record GraduationRateDto(
     decimal GraduationRate,
     string AcademicSessionName);
 
+public record TreasuryAnalyticsDto(
+    decimal TotalCollectedRevenue,
+    decimal ForecastedRevenue,
+    decimal TotalScholarships,
+    decimal OutstandingBalance,
+    int StudentsInArrearsCount,
+    List<FacultyRevenueDto> RevenueByFaculty,
+    List<MonthlyRevenueDto> MonthlyRevenueTrend,
+    string AcademicSessionName,
+    DateTime GeneratedAt);
+
+public record FacultyRevenueDto(
+    Guid FacultyId,
+    string FacultyName,
+    decimal ExpectedRevenue,
+    decimal CollectedRevenue);
+
 // ==================== DASHBOARD ====================
 
 public record DashboardSummaryDto(
@@ -277,3 +294,93 @@ public record LecturerStatsDto(
     int CourseCount,
     int TotalStudents,
     decimal AverageAttendance);
+
+// ==================== FINANCIAL REPORTS ====================
+
+public record FeeLedgerRequestDto(
+    Guid? SessionId,
+    DateTime? StartDate,
+    DateTime? EndDate,
+    int? PaymentMethod,
+    string? SearchTerm,
+    int Page,
+    int PageSize,
+    bool ExportAll = false);
+
+public record FeeLedgerResponseDto(
+    List<FeePaymentRecordDto> Payments,
+    int TotalCount);
+
+public record FeePaymentRecordDto(
+    Guid PaymentId,
+    Guid StudentId,
+    string StudentName,
+    string MatricNumber,
+    string SessionName,
+    decimal Amount,
+    int PaymentMethod,
+    string Reference,
+    DateTime PaymentDate,
+    string Status,
+    string FeeCategoryName,
+    string FeeTemplateName,
+    string FacultyName);
+
+public record DebtorsReportRequestDto(
+    Guid? SessionId,
+    Guid? FacultyId,
+    Guid? DepartmentId,
+    Guid? ProgramId,
+    Guid? LevelId,
+    int Page,
+    int PageSize,
+    bool ExportAll = false);
+
+public record DebtorsReportResponseDto(
+    List<DebtorRecordDto> Debtors,
+    int TotalCount,
+    decimal TotalDebt);
+
+public record DebtorRecordDto(
+    Guid StudentId,
+    string StudentName,
+    string MatricNumber,
+    string ProgramName,
+    string LevelName,
+    string FacultyName,
+    decimal TotalBilled,
+    decimal AmountPaid,
+    decimal OutstandingBalance,
+    int DaysOverdue,
+    DateTime? LastPaymentDate);
+
+public record RevenueByCategoryDto(
+    string CategoryName,
+    decimal ExpectedRevenue,
+    decimal CollectedRevenue,
+    decimal PendingRevenue);
+
+public record ScholarshipImpactDto(
+    string ScholarshipName,
+    string Type,
+    string SponsorName,
+    int StudentsBenefited,
+    decimal TotalDiscountApplied);
+
+// ==================== FEE REMINDERS ====================
+
+public record SendFeeRemindersRequest(Guid? SessionId);
+
+public record FeeReminderResult(
+    int TotalDebtors,
+    int RemindersQueued,
+    string Message);
+
+// ==================== MONTHLY REVENUE TREND ====================
+
+public record MonthlyRevenueDto(
+    int Month,
+    string MonthName,
+    int Year,
+    decimal CollectedRevenue,
+    decimal ExpectedRevenue);

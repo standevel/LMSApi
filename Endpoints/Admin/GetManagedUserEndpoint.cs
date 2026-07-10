@@ -26,7 +26,9 @@ public sealed record ManagedUserDetailResponse(
     Guid? FacultyId = null,
     string? AcademicProgramName = null,
     string? LevelName = null,
-    Guid? StudentId = null);
+    Guid? StudentId = null,
+    string? DepartmentName = null,
+    string? FacultyName = null);
 
 public sealed class GetManagedUserEndpoint(IAdminAuthzService adminAuthzService)
     : ApiEndpointWithoutRequest<ManagedUserDetailResponse>
@@ -76,7 +78,9 @@ public sealed class GetManagedUserEndpoint(IAdminAuthzService adminAuthzService)
             result.User.FacultyId,
             result.User.AcademicProgramName,
             result.User.LevelName,
-            result.User.StudentId);
+            result.User.StudentId,
+            result.User.DepartmentName,
+            result.User.FacultyName);
 
         await SendSuccessAsync(data, ct);
     }

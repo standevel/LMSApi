@@ -228,6 +228,7 @@ public static class ServiceCollectionExtensions
         // Reporting & Analytics (Phase 3)
         services.AddScoped<IGpaCalculationService, GpaCalculationService>();
         services.AddScoped<ITranscriptGenerationService, TranscriptGenerationService>();
+        services.AddScoped<ICertificateService, CertificateService>();
         services.AddScoped<IDegreeAuditService, DegreeAuditService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IReportSchedulerService, ReportSchedulerService>();

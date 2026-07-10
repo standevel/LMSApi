@@ -4,6 +4,7 @@ using LMS.Api.Common.Mapping;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
+using LMS.Api.Data.Enums;
 using LMS.Api.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,13 +16,25 @@ public sealed class CourseService(
     IAuditService auditService,
     LmsDbContext dbContext,
     IFileStorageService fileStorageService,
-    INotificationService notificationService) : BaseService(auditService), ICourseService
+    INotificationService notificationService,
+    IEmailService emailService) : BaseService(auditService), ICourseService
 {
+    // ─── Query helpers ────────────────────────────────────────────────────────
+
+    private IQueryable<CourseOffering> OfferingsWithNavigations() =>
+        dbContext.CourseOfferings
+            .Include(co => co.Course)
+            .Include(co => co.AcademicSession)
+            .Include(co => co.Programs).ThenInclude(p => p.Program)
+            .Include(co => co.Programs).ThenInclude(p => p.Level)
+            .Include(co => co.Lecturers).ThenInclude(l => l.Lecturer);
+
+    // ─── Course CRUD ──────────────────────────────────────────────────────────
+
     public async Task<ErrorOr<CourseDto>> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course is null) return DomainErrors.Course.NotFound;
-
         return course.ToDto();
     }
 
@@ -35,28 +48,27 @@ public sealed class CourseService(
     {
         var course = new Course
         {
-            ProgramId = request.ProgramId,
-            Code = request.Code,
-            Title = request.Title,
+            ProgramId   = request.ProgramId,
+            Code        = request.Code,
+            Title       = request.Title,
             Description = request.Description,
             CreditUnits = request.CreditUnits,
-            LevelId = request.LevelId,
-            Semester = request.Semester,
-            IsActive = true,
+            LevelId     = request.LevelId,
+            Semester    = request.Semester,
+            IsActive    = true,
+            // Bare offerings: course + session + semester only
             Offerings = request.Offerings.Select(o => new CourseOffering
             {
-                ProgramId = o.ProgramId,
-                LevelId = o.LevelId,
                 AcademicSessionId = o.AcademicSessionId,
-                LecturerId = o.LecturerId,
-                Semester = (LMS.Api.Data.Enums.Semester)o.Semester
+                Semester          = (Semester)o.Semester
             }).ToList()
         };
 
         await courseRepository.AddAsync(course, ct);
         await courseRepository.SaveChangesAsync(ct);
 
-        await LogActionAsync("Create", "Course", course.Id.ToString(), $"Created course: {course.Code} - {course.Title}", ct);
+        await LogActionAsync("Create", "Course", course.Id.ToString(),
+            $"Created course: {course.Code} - {course.Title}", ct);
 
         var createdCourse = await courseRepository.GetByIdAsync(course.Id, ct);
         return createdCourse!.ToDto();
@@ -67,52 +79,38 @@ public sealed class CourseService(
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course == null) return DomainErrors.Course.NotFound;
 
-        course.Code = request.Code;
-        course.Title = request.Title;
+        course.Code        = request.Code;
+        course.Title       = request.Title;
         course.Description = request.Description;
         course.CreditUnits = request.CreditUnits;
-        course.LevelId = request.LevelId;
-        course.Semester = request.Semester;
+        course.LevelId     = request.LevelId;
+        course.Semester    = request.Semester;
 
         var existingOfferings = course.Offerings.ToList();
-        var requestOfferings = request.Offerings.ToList();
+        var requestOfferings  = request.Offerings.ToList();
 
-        // 1. Remove offerings that are no longer in the request, and update matching ones
+        // Remove offerings no longer in the request (matched by session+semester)
         foreach (var existing in existingOfferings)
         {
-            var matched = requestOfferings.FirstOrDefault(r => 
-                r.ProgramId == existing.ProgramId && 
-                r.LevelId == existing.LevelId && 
+            var matched = requestOfferings.FirstOrDefault(r =>
                 r.AcademicSessionId == existing.AcademicSessionId &&
-                (LMS.Api.Data.Enums.Semester)r.Semester == existing.Semester);
+                (Semester)r.Semester == existing.Semester);
 
             if (matched == null)
-            {
-                // Remove from DB
                 dbContext.CourseOfferings.Remove(existing);
-            }
             else
-            {
-                // Update properties
-                existing.LecturerId = matched.LecturerId;
-                // Remove from request so we don't add it again
                 requestOfferings.Remove(matched);
-            }
         }
 
-        // 2. Add remaining request offerings as new
-        foreach (var reqOffering in requestOfferings)
+        // Add new offerings
+        foreach (var req in requestOfferings)
         {
-            var newOffering = new CourseOffering
+            dbContext.CourseOfferings.Add(new CourseOffering
             {
-                CourseId = id,
-                ProgramId = reqOffering.ProgramId,
-                LevelId = reqOffering.LevelId,
-                AcademicSessionId = reqOffering.AcademicSessionId,
-                LecturerId = reqOffering.LecturerId,
-                Semester = (LMS.Api.Data.Enums.Semester)reqOffering.Semester
-            };
-            dbContext.CourseOfferings.Add(newOffering);
+                CourseId          = id,
+                AcademicSessionId = req.AcademicSessionId,
+                Semester          = (Semester)req.Semester
+            });
         }
 
         await courseRepository.UpdateAsync(course, ct);
@@ -133,7 +131,6 @@ public sealed class CourseService(
         await courseRepository.SaveChangesAsync(ct);
 
         await LogActionAsync("Delete", "Course", id.ToString(), $"Deleted course: {course.Code}", ct);
-
         return Result.Deleted;
     }
 
@@ -146,120 +143,294 @@ public sealed class CourseService(
         await courseRepository.UpdateAsync(course, ct);
         await courseRepository.SaveChangesAsync(ct);
 
-        await LogActionAsync("ToggleStatus", "Course", id.ToString(), $"Toggled status for course {course.Code} to {course.IsActive}", ct);
+        await LogActionAsync("ToggleStatus", "Course", id.ToString(),
+            $"Toggled status for course {course.Code} to {course.IsActive}", ct);
 
         return course.ToDto();
     }
 
+    // ─── Lecturers list ───────────────────────────────────────────────────────
+
     public async Task<ErrorOr<List<SimpleUserDto>>> GetLecturersAsync(CancellationToken ct = default)
     {
         var lecturers = await userRepository.GetByRoleAsync("Lecturer", ct);
-        return lecturers.Select(u => new SimpleUserDto(u.Id, u.DisplayName, u.Email, u.DepartmentId, u.Department?.Name)).ToList();
+        return lecturers.Select(u => new SimpleUserDto(u.Id, u.DisplayName, u.Email, u.DepartmentId, u.Department?.Name))
+                        .ToList();
     }
 
-    public async Task<ErrorOr<LecturerCoursesResponse>> GetMyCoursesAsync(Guid lecturerId, bool isAdmin = false, CancellationToken ct = default)
+    // ─── Program attachment ───────────────────────────────────────────────────
+
+    public async Task<ErrorOr<CourseOfferingDto>> AttachProgramAsync(
+        Guid offeringId, Guid programId, Guid levelId, CancellationToken ct = default)
     {
-        // Admins see all offerings; lecturers see only their own
-        var query = dbContext.CourseOfferings
-            .AsNoTracking()
-            .Include(co => co.Course)
-            .Include(co => co.Program)
-            .Include(co => co.Level)
-            .Include(co => co.AcademicSession)
-            .OrderBy(co => co.Course.Code);
+        var offering = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
 
-        var lecturerIdStr = lecturerId.ToString();
-        var offerings = isAdmin
-            ? await query.ToListAsync(ct)
-            : await query.Where(co => co.LecturerId == lecturerId ||
-                                     dbContext.LectureTimetableSlots.Any(slot =>
-                                         slot.CourseOfferingId == co.Id &&
-                                         (slot.LecturerId == lecturerId ||
-                                          (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr)))))
-                         .ToListAsync(ct);
+        if (offering is null)
+            return Error.NotFound("CourseOffering.NotFound", "Course offering not found.");
 
-        if (!offerings.Any())
+        var alreadyAttached = offering.Programs.Any(p =>
+            p.ProgramId == programId && p.LevelId == levelId);
+
+        if (alreadyAttached)
+            return Error.Conflict("CourseOfferingProgram.Duplicate",
+                "This program/level combination is already attached to the offering.");
+
+        dbContext.CourseOfferingPrograms.Add(new CourseOfferingProgram
         {
-            return new LecturerCoursesResponse(
-                new List<LecturerCourseOfferingDto>(),
-                0,
-                0);
+            CourseOfferingId = offeringId,
+            ProgramId        = programId,
+            LevelId          = levelId
+        });
+
+        await dbContext.SaveChangesAsync(ct);
+        await LogActionAsync("AttachProgram", "CourseOffering", offeringId.ToString(),
+            $"Attached program {programId} / level {levelId}", ct);
+
+        // Reload
+        var updated = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        return updated!.ToDto();
+    }
+
+    public async Task<ErrorOr<CourseOfferingDto>> DetachProgramAsync(
+        Guid offeringId, Guid programId, Guid levelId, CancellationToken ct = default)
+    {
+        var row = await dbContext.CourseOfferingPrograms
+            .FirstOrDefaultAsync(p =>
+                p.CourseOfferingId == offeringId &&
+                p.ProgramId == programId &&
+                p.LevelId == levelId, ct);
+
+        if (row is null)
+            return Error.NotFound("CourseOfferingProgram.NotFound", "Program attachment not found.");
+
+        dbContext.CourseOfferingPrograms.Remove(row);
+        await dbContext.SaveChangesAsync(ct);
+
+        await LogActionAsync("DetachProgram", "CourseOffering", offeringId.ToString(),
+            $"Detached program {programId} / level {levelId}", ct);
+
+        var updated = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        return updated!.ToDto();
+    }
+
+    // ─── Lecturer assignment ──────────────────────────────────────────────────
+
+    public async Task<ErrorOr<CourseOfferingDto>> AssignLecturerAsync(
+        Guid offeringId,
+        Guid? lecturerId,
+        List<Guid>? coLecturerIds,
+        CancellationToken ct = default)
+    {
+        var offering = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        if (offering is null)
+            return Error.NotFound("CourseOffering.NotFound", "Course offering not found.");
+
+        // Remove all existing lecturer assignments
+        var existing = await dbContext.CourseOfferingLecturers
+            .Where(l => l.CourseOfferingId == offeringId)
+            .ToListAsync(ct);
+        dbContext.CourseOfferingLecturers.RemoveRange(existing);
+
+        var notifyList = new List<(AppUser user, CourseLecturerRole role)>();
+
+        // Add primary
+        if (lecturerId.HasValue)
+        {
+            var lecturer = await userRepository.GetByIdAsync(lecturerId.Value, ct);
+            if (lecturer is null) return Error.NotFound("Lecturer.NotFound", "Main lecturer not found.");
+
+            dbContext.CourseOfferingLecturers.Add(new CourseOfferingLecturer
+            {
+                CourseOfferingId = offeringId,
+                LecturerId       = lecturerId.Value,
+                Role             = CourseLecturerRole.Main
+            });
+            notifyList.Add((lecturer, CourseLecturerRole.Main));
         }
 
-        // Get student counts for each offering
-        var offeringDtos = new List<LecturerCourseOfferingDto>();
-        int totalStudents = 0;
-
-        foreach (var offering in offerings)
+        // Add co-lecturers (skip duplicates / same as primary)
+        foreach (var coId in (coLecturerIds ?? []).Distinct().Where(id => id != lecturerId))
         {
+            var co = await userRepository.GetByIdAsync(coId, ct);
+            if (co is null) continue;
+
+            dbContext.CourseOfferingLecturers.Add(new CourseOfferingLecturer
+            {
+                CourseOfferingId = offeringId,
+                LecturerId       = coId,
+                Role             = CourseLecturerRole.CoLecturer
+            });
+            notifyList.Add((co, CourseLecturerRole.CoLecturer));
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        await LogActionAsync("AssignLecturer", "CourseOffering", offeringId.ToString(),
+            $"Assigned lecturer(s) to {offering.Course.Code}", ct);
+
+        var sessionName = offering.AcademicSession?.Name ?? "the academic session";
+        foreach (var (user, role) in notifyList)
+            await NotifyLecturerAssignedAsync(user, offering.Course, sessionName, role, ct);
+
+        var updated = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+        return updated!.ToDto();
+    }
+
+    public async Task<ErrorOr<List<CourseOfferingDto>>> GetCourseOfferingsAsync(
+        Guid? academicSessionId = null, CancellationToken ct = default)
+    {
+        var query = OfferingsWithNavigations().AsQueryable();
+
+        if (academicSessionId.HasValue)
+            query = query.Where(co => co.AcademicSessionId == academicSessionId.Value);
+
+        var offerings = await query
+            .OrderBy(co => co.Course.Code)
+            .ToListAsync(ct);
+
+        return offerings.Select(co => co.ToDto()).ToList();
+    }
+
+    public async Task<ErrorOr<BulkAssignLecturersResult>> BulkAssignLecturersAsync(
+        List<OfferingAssignment> assignments, CancellationToken ct = default)
+    {
+        if (assignments is null || assignments.Count == 0)
+            return Error.Validation("Assignments.Empty", "At least one offering assignment is required.");
+
+        var offeringIds = assignments.Select(a => a.OfferingId).Distinct().ToList();
+        var updated  = new List<CourseOfferingDto>();
+        var errors   = new List<string>();
+
+        foreach (var assignment in assignments)
+        {
+            var result = await AssignLecturerAsync(
+                assignment.OfferingId,
+                assignment.LecturerId,
+                assignment.CoLecturerIds,
+                ct);
+
+            if (result.IsError)
+                errors.Add($"Offering {assignment.OfferingId}: {result.FirstError.Description}");
+            else
+                updated.Add(result.Value);
+        }
+
+        await LogActionAsync("BulkAssignLecturers", "CourseOffering",
+            string.Join(",", offeringIds),
+            $"Bulk assigned lecturers for {updated.Count} offerings", ct);
+
+        return new BulkAssignLecturersResult(updated, errors);
+    }
+
+    // ─── My Courses (Lecturer dashboard) ─────────────────────────────────────
+
+    public async Task<ErrorOr<LecturerCoursesResponse>> GetMyCoursesAsync(
+        Guid lecturerId,
+        bool isAdmin = false,
+        Guid? academicSessionId = null,
+        CancellationToken ct = default)
+    {
+        IQueryable<CourseOfferingLecturer> query = dbContext.CourseOfferingLecturers
+            .AsNoTracking()
+            .Include(col => col.CourseOffering)
+                .ThenInclude(co => co.Course)
+            .Include(col => col.CourseOffering)
+                .ThenInclude(co => co.AcademicSession)
+            .Include(col => col.CourseOffering)
+                .ThenInclude(co => co.Programs)
+                    .ThenInclude(p => p.Program)
+            .Include(col => col.CourseOffering)
+                .ThenInclude(co => co.Programs)
+                    .ThenInclude(p => p.Level);
+
+        if (!isAdmin)
+            query = query.Where(col => col.LecturerId == lecturerId);
+
+        if (academicSessionId.HasValue)
+            query = query.Where(col => col.CourseOffering.AcademicSessionId == academicSessionId.Value);
+
+        var lecturerRows = await query.ToListAsync(ct);
+
+        // Admins: show all offerings once (not per-lecturer-assignment)
+        if (isAdmin)
+        {
+            var allOfferings = await OfferingsWithNavigations()
+                .Where(co => !academicSessionId.HasValue || co.AcademicSessionId == academicSessionId.Value)
+                .OrderBy(co => co.Course.Code)
+                .ToListAsync(ct);
+
+            var offeringDtos = new List<LecturerCourseOfferingDto>();
+            int totalStudents = 0;
+
+            foreach (var co in allOfferings)
+            {
+                var studentCount = await dbContext.CourseEnrollments
+                    .CountAsync(e => e.CourseOfferingId == co.Id && e.Status == "Registered", ct);
+                var sessionCount = await dbContext.LectureSessions
+                    .CountAsync(ls => ls.CourseOfferingId == co.Id
+                        && ls.SessionDate >= DateOnly.FromDateTime(DateTime.UtcNow), ct);
+                totalStudents += studentCount;
+
+                offeringDtos.Add(BuildLecturerCourseOfferingDto(
+                    co, CourseLecturerRole.Main, studentCount, sessionCount));
+            }
+
+            return new LecturerCoursesResponse(offeringDtos, offeringDtos.Count, totalStudents);
+        }
+
+        // Lecturer: each CourseOfferingLecturer row = one card on dashboard
+        var dtos = new List<LecturerCourseOfferingDto>();
+        int lecturerTotalStudents = 0;
+
+        foreach (var row in lecturerRows)
+        {
+            var co = row.CourseOffering;
             var studentCount = await dbContext.CourseEnrollments
-                .CountAsync(e => e.CourseOfferingId == offering.Id && e.Status == "Registered", ct);
-
-            // Count upcoming lecture sessions for this course offering
+                .CountAsync(e => e.CourseOfferingId == co.Id && e.Status == "Registered", ct);
             var sessionCount = await dbContext.LectureSessions
-                .CountAsync(ls => ls.CourseOfferingId == offering.Id
+                .CountAsync(ls => ls.CourseOfferingId == co.Id
                     && ls.SessionDate >= DateOnly.FromDateTime(DateTime.UtcNow), ct);
+            lecturerTotalStudents += studentCount;
 
-            totalStudents += studentCount;
-
-            offeringDtos.Add(new LecturerCourseOfferingDto(
-                offering.Id,
-                offering.CourseId,
-                offering.Course.Code,
-                offering.Course.Title,
-                offering.Course.CreditUnits,
-                offering.ProgramId,
-                offering.Program.Name,
-                offering.LevelId,
-                offering.Level.Name,
-                offering.AcademicSessionId,
-                offering.AcademicSession.Name,
-                (int)offering.Semester,
-                studentCount,
-                sessionCount));
+            dtos.Add(BuildLecturerCourseOfferingDto(co, row.Role, studentCount, sessionCount));
         }
 
-        return new LecturerCoursesResponse(
-            offeringDtos,
-            offeringDtos.Count,
-            totalStudents);
+        return new LecturerCoursesResponse(dtos, dtos.Count, lecturerTotalStudents);
     }
 
-    public async Task<ErrorOr<CourseDetailResponse>> GetCourseDetailAsync(Guid offeringId, Guid lecturerId, CancellationToken ct = default)
+    // ─── Course detail (Lecturer-facing) ─────────────────────────────────────
+
+    public async Task<ErrorOr<CourseDetailResponse>> GetCourseDetailAsync(
+        Guid offeringId, Guid lecturerId, CancellationToken ct = default)
     {
-        // Verify the offering exists and belongs to this lecturer
-        var lecturerIdStr = lecturerId.ToString();
-        var offering = await dbContext.CourseOfferings
-            .AsNoTracking()
-            .Include(co => co.Course)
-            .Include(co => co.Program)
-            .Include(co => co.Level)
-            .Include(co => co.AcademicSession)
-            .FirstOrDefaultAsync(co => co.Id == offeringId && 
-                (co.LecturerId == lecturerId || 
-                 dbContext.LectureTimetableSlots.Any(slot => 
-                     slot.CourseOfferingId == co.Id && 
-                     (slot.LecturerId == lecturerId || 
-                      (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))))), ct);
+        // Must be assigned to this offering (or admin will pass a dummy lecturerId)
+        var isAssigned = await dbContext.CourseOfferingLecturers
+            .AnyAsync(col => col.CourseOfferingId == offeringId && col.LecturerId == lecturerId, ct);
 
-        if (offering == null)
-        {
-            return Error.NotFound("Course.NotFound", "Course offering not found or you don't have access to it.");
-        }
+        if (!isAssigned)
+            return Error.NotFound("Course.NotFound",
+                "Course offering not found or you don't have access to it.");
 
-        // Get materials for this offering
+        var offering = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        if (offering is null)
+            return Error.NotFound("Course.NotFound", "Course offering not found.");
+
         var materials = await dbContext.CourseMaterials
             .AsNoTracking()
             .Where(cm => cm.CourseOfferingId == offeringId)
             .Include(cm => cm.UploadedBy)
             .OrderByDescending(cm => cm.UploadedAt)
             .Select(cm => new CourseMaterialDto(
-                cm.Id,
-                cm.Title,
-                cm.Description,
-                cm.FileUrl,
-                cm.FileType,
-                cm.FileSize,
+                cm.Id, cm.Title, cm.Description, cm.FileUrl, cm.FileType, cm.FileSize,
                 cm.UploadedAt,
                 cm.UploadedBy.DisplayName ?? cm.UploadedBy.Email ?? "Unknown"))
             .ToListAsync(ct);
@@ -273,11 +444,16 @@ public sealed class CourseService(
 
         var students = enrollments.Select(e => new CourseStudentDto(
             e.Student.Id,
-            e.Student.Id.ToString().Substring(0, 8),
+            e.Student.Id.ToString()[..8],
             e.Student.DisplayName ?? e.Student.Email ?? "Unknown",
             e.Student.Email ?? "N/A",
             e.RegisteredAtUtc,
             null)).ToList();
+
+        var programs  = offering.Programs.Select(p => new OfferingProgramDto(
+            p.ProgramId, p.Program?.Name ?? "N/A", p.LevelId, p.Level?.Name ?? "N/A")).ToList();
+        var lecturers = offering.Lecturers.Select(l => new OfferingLecturerDto(
+            l.LecturerId, l.Lecturer?.DisplayName, l.Role)).ToList();
 
         return new CourseDetailResponse(
             offering.Id,
@@ -285,36 +461,32 @@ public sealed class CourseService(
             offering.Course.Title,
             offering.Course.Description,
             offering.Course.CreditUnits,
-            offering.ProgramId,
-            offering.Program.Name,
-            offering.LevelId,
-            offering.Level.Name,
+            programs,
             offering.AcademicSessionId,
             offering.AcademicSession.Name,
             (int)offering.Semester,
+            lecturers,
             materials,
             students,
             materials.Count,
             students.Count);
     }
 
-    public async Task<ErrorOr<AddCourseMaterialResponse>> AddCourseMaterialAsync(Guid offeringId, Guid lecturerId, AddCourseMaterialRequest request, CancellationToken ct = default)
+    // ─── Course materials ─────────────────────────────────────────────────────
+
+    public async Task<ErrorOr<AddCourseMaterialResponse>> AddCourseMaterialAsync(
+        Guid offeringId, Guid lecturerId, AddCourseMaterialRequest request, CancellationToken ct = default)
     {
-        // Verify the offering exists and belongs to this lecturer
-        var lecturerIdStr = lecturerId.ToString();
+        // Verify the lecturer is assigned to this offering
+        var isAssigned = await dbContext.CourseOfferingLecturers
+            .AnyAsync(col => col.CourseOfferingId == offeringId && col.LecturerId == lecturerId, ct);
+
         var offering = await dbContext.CourseOfferings
             .Include(co => co.Course)
-            .FirstOrDefaultAsync(co => co.Id == offeringId && 
-                (co.LecturerId == lecturerId || 
-                 dbContext.LectureTimetableSlots.Any(slot => 
-                     slot.CourseOfferingId == co.Id && 
-                     (slot.LecturerId == lecturerId || 
-                      (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))))), ct);
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
 
-        if (offering == null)
-        {
+        if (!isAssigned || offering is null)
             return Error.NotFound("Course.NotFound", "Course offering not found or you don't have access to it.");
-        }
 
         string fileUrl;
         string? fileType;
@@ -322,23 +494,18 @@ public sealed class CourseService(
 
         if (!string.IsNullOrWhiteSpace(request.LinkUrl))
         {
-            fileUrl = request.LinkUrl.Trim();
+            fileUrl  = request.LinkUrl.Trim();
             fileType = "Link";
             fileSize = null;
         }
         else
         {
             if (request.File == null || request.File.Length == 0)
-            {
                 return Error.Validation("File.Required", "Please select a file or enter a link URL.");
-            }
 
-            // Upload file using FileStorageService
             var fileName = $"{Guid.NewGuid()}_{request.File.FileName}";
-            fileUrl = await fileStorageService.UploadFileAsync(
-                request.File,
-                $"course-materials/{offeringId}",
-                fileName);
+            fileUrl  = await fileStorageService.UploadFileAsync(
+                request.File, $"course-materials/{offeringId}", fileName);
             fileType = request.File.ContentType;
             fileSize = request.File.Length;
         }
@@ -346,22 +513,22 @@ public sealed class CourseService(
         var material = new CourseMaterial
         {
             CourseOfferingId = offeringId,
-            Title = request.Title,
-            Description = request.Description,
-            FileUrl = fileUrl,
-            FileType = fileType,
-            FileSize = fileSize,
-            UploadedById = lecturerId,
-            UploadedAt = DateTime.UtcNow
+            Title            = request.Title,
+            Description      = request.Description,
+            FileUrl          = fileUrl,
+            FileType         = fileType,
+            FileSize         = fileSize,
+            UploadedById     = lecturerId,
+            UploadedAt       = DateTime.UtcNow
         };
 
         dbContext.CourseMaterials.Add(material);
         await dbContext.SaveChangesAsync(ct);
 
-        await LogActionAsync("AddMaterial", "CourseMaterial", material.Id.ToString(), 
+        await LogActionAsync("AddMaterial", "CourseMaterial", material.Id.ToString(),
             $"Added material '{request.Title}' to course {offering.Course.Code}", ct);
 
-        // Trigger notification to enrolled students
+        // Notify enrolled students
         var enrolledStudentIds = await dbContext.CourseEnrollments
             .AsNoTracking()
             .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
@@ -371,23 +538,18 @@ public sealed class CourseService(
         foreach (var studentId in enrolledStudentIds)
         {
             await notificationService.CreateAsync(new CreateNotificationRequest(
-                studentId,
-                lecturerId,
+                studentId, lecturerId,
                 $"New Material: {request.Title}",
                 $"New course material has been added to {offering.Course.Code}.",
                 "System",
-                $"/courses/{offeringId}/materials"
-            ), ct);
+                $"/courses/{offeringId}/materials"), ct);
         }
 
-        return new AddCourseMaterialResponse(
-            material.Id,
-            material.Title,
-            material.FileUrl,
-            material.UploadedAt);
+        return new AddCourseMaterialResponse(material.Id, material.Title, material.FileUrl, material.UploadedAt);
     }
 
-    public async Task<ErrorOr<Deleted>> DeleteCourseMaterialAsync(Guid materialId, Guid lecturerId, CancellationToken ct = default)
+    public async Task<ErrorOr<Deleted>> DeleteCourseMaterialAsync(
+        Guid materialId, Guid lecturerId, CancellationToken ct = default)
     {
         var material = await dbContext.CourseMaterials
             .Include(cm => cm.CourseOffering)
@@ -395,44 +557,34 @@ public sealed class CourseService(
             .FirstOrDefaultAsync(cm => cm.Id == materialId, ct);
 
         if (material == null)
-        {
             return Error.NotFound("Material.NotFound", "Material not found.");
-        }
 
-        // Verify the lecturer owns this course (primary or via timetable slot)
-        var lecturerIdStr = lecturerId.ToString();
-        var isAssigned = material.CourseOffering.LecturerId == lecturerId ||
-                         await dbContext.LectureTimetableSlots.AnyAsync(slot => 
-                             slot.CourseOfferingId == material.CourseOfferingId && 
-                             (slot.LecturerId == lecturerId || 
-                              (slot.CoLecturersJson != null && slot.CoLecturersJson.Contains(lecturerIdStr))), ct);
+        // Verify the lecturer is assigned to this offering
+        var isAssigned = await dbContext.CourseOfferingLecturers
+            .AnyAsync(col => col.CourseOfferingId == material.CourseOfferingId
+                          && col.LecturerId == lecturerId, ct);
 
         if (!isAssigned)
-        {
-            return Error.Forbidden("Material.Forbidden", "You don't have permission to delete this material.");
-        }
+            return Error.Forbidden("Material.Forbidden",
+                "You don't have permission to delete this material.");
 
-        // Delete file from storage
         if (material.FileType != "Link")
-        {
             await fileStorageService.DeleteFileAsync(material.FileUrl);
-        }
 
         dbContext.CourseMaterials.Remove(material);
         await dbContext.SaveChangesAsync(ct);
 
-        await LogActionAsync("DeleteMaterial", "CourseMaterial", materialId.ToString(), 
+        await LogActionAsync("DeleteMaterial", "CourseMaterial", materialId.ToString(),
             $"Deleted material '{material.Title}' from course {material.CourseOffering.Course.Code}", ct);
 
         return Result.Deleted;
     }
 
+    // ─── Student course detail ────────────────────────────────────────────────
+
     public async Task<ErrorOr<StudentCourseDetailResponse>> GetStudentCourseDetailAsync(
-        Guid offeringId,
-        Guid studentId,
-        CancellationToken ct = default)
+        Guid offeringId, Guid studentId, CancellationToken ct = default)
     {
-        // 1. Verify the student is enrolled
         var enrollment = await dbContext.CourseEnrollments
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.CourseOfferingId == offeringId
@@ -442,47 +594,38 @@ public sealed class CourseService(
         if (enrollment == null)
             return Error.Forbidden("Enrollment.Forbidden", "You are not enrolled in this course.");
 
-        // 2. Load offering details
-        var offering = await dbContext.CourseOfferings
-            .AsNoTracking()
-            .Include(co => co.Course)
-            .Include(co => co.Program)
-            .Include(co => co.Level)
-            .Include(co => co.AcademicSession)
+        var offering = await OfferingsWithNavigations()
             .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
 
-        if (offering == null)
+        if (offering is null)
             return Error.NotFound("Course.NotFound", "Course offering not found.");
 
-        // 3. Materials (read-only for student)
+        // Use the first program/level for legacy display
+        var firstProgram = offering.Programs.FirstOrDefault();
+        var programName  = firstProgram?.Program?.Name ?? "N/A";
+        var levelName    = firstProgram?.Level?.Name   ?? "N/A";
+
         var materials = await dbContext.CourseMaterials
             .AsNoTracking()
             .Where(cm => cm.CourseOfferingId == offeringId)
             .Include(cm => cm.UploadedBy)
             .OrderByDescending(cm => cm.UploadedAt)
             .Select(cm => new CourseMaterialDto(
-                cm.Id,
-                cm.Title,
-                cm.Description,
-                cm.FileUrl,
-                cm.FileType,
-                cm.FileSize,
+                cm.Id, cm.Title, cm.Description, cm.FileUrl, cm.FileType, cm.FileSize,
                 cm.UploadedAt,
                 cm.UploadedBy.DisplayName ?? cm.UploadedBy.Email ?? "Unknown"))
             .ToListAsync(ct);
 
-        // 4. Check if grades are published for this offering
         var publication = await dbContext.GradePublications
             .AsNoTracking()
             .FirstOrDefaultAsync(gp => gp.CourseOfferingId == offeringId && gp.IsVisibleToStudents, ct);
 
         bool isPublished = publication != null;
+        StudentCourseGradeDto? gradeDto   = null;
+        CourseClassAnalyticsDto? analytics = null;
 
-        // 5. Compute student grade from Assessment + Grade tables
-        StudentCourseGradeDto? gradeDto = null;
         if (isPublished)
         {
-            // Load assessments for the offering with the student's grades
             var assessments = await dbContext.Assessments
                 .AsNoTracking()
                 .Where(a => a.CourseOfferingId == offeringId)
@@ -492,9 +635,7 @@ public sealed class CourseService(
 
             if (assessments.Any())
             {
-                // Group by category type to compute per-category weighted scores
-                double ca1 = 0, ca2 = 0, ca3 = 0, exam = 0;
-                double total = 0;
+                double ca1 = 0, ca2 = 0, ca3 = 0, exam = 0, total = 0;
 
                 foreach (var assessment in assessments)
                 {
@@ -503,13 +644,13 @@ public sealed class CourseService(
 
                     double maxMarks = (double)assessment.MaxMarks;
                     double obtained = (double)studentGrade.MarksObtained;
-                    double weight = (double)assessment.AssessmentCategory.Weight;
+                    double weight   = (double)assessment.AssessmentCategory.Weight;
                     double weighted = maxMarks > 0 ? (obtained / maxMarks) * weight : 0;
 
                     var catType = assessment.AssessmentCategory.CategoryType;
-                    if (catType == AssessmentCategoryType.CA1) ca1 += weighted;
-                    else if (catType == AssessmentCategoryType.CA2) ca2 += weighted;
-                    else if (catType == AssessmentCategoryType.CA3) ca3 += weighted;
+                    if      (catType == AssessmentCategoryType.CA1) ca1  += weighted;
+                    else if (catType == AssessmentCategoryType.CA2) ca2  += weighted;
+                    else if (catType == AssessmentCategoryType.CA3) ca3  += weighted;
                     else if (assessment.AssessmentCategory.IsExamCategory) exam += weighted;
 
                     total += weighted;
@@ -521,59 +662,36 @@ public sealed class CourseService(
                     .FirstOrDefaultAsync(ct);
 
                 var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
-                    ? new List<LMS.Api.Contracts.GradeMappingDto>()
-                    : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
-                      ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+                    ? new List<GradeMappingDto>()
+                    : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(sysConfig.LetterGradesMappingJson)
+                      ?? new List<GradeMappingDto>();
 
-                string letterGrade = "F";
-                double gradePoints = 0.0;
-                
-                if (mappings == null || !mappings.Any())
+                string letterGrade;
+                double gradePoints;
+
+                if (!mappings.Any())
                 {
-                    // Simple letter grade mapping (5-point scale) fallback
-                    letterGrade = total >= 70 ? "A"
-                        : total >= 60 ? "B"
-                        : total >= 50 ? "C"
-                        : total >= 45 ? "D"
-                        : total >= 40 ? "E"
-                        : "F";
-
+                    letterGrade = total >= 70 ? "A" : total >= 60 ? "B" : total >= 50 ? "C"
+                                : total >= 45 ? "D" : total >= 40 ? "E" : "F";
                     gradePoints = letterGrade switch
                     {
-                        "A" => 5.0,
-                        "B" => 4.0,
-                        "C" => 3.0,
-                        "D" => 2.0,
-                        "E" => 1.0,
-                        _ => 0.0
+                        "A" => 5.0, "B" => 4.0, "C" => 3.0, "D" => 2.0, "E" => 1.0, _ => 0.0
                     };
                 }
                 else
                 {
                     var match = mappings.OrderByDescending(m => m.MinPercentage)
                         .FirstOrDefault(m => (decimal)total >= m.MinPercentage);
-                        
                     letterGrade = match?.LetterGrade ?? "F";
                     gradePoints = match != null ? (double)match.GradePoints : 0.0;
                 }
 
                 gradeDto = new StudentCourseGradeDto(
-                    Math.Round(ca1, 2),
-                    Math.Round(ca2, 2),
-                    Math.Round(ca3, 2),
-                    Math.Round(exam, 2),
-                    Math.Round(total, 2),
-                    letterGrade,
-                    gradePoints,
-                    true);
+                    Math.Round(ca1, 2), Math.Round(ca2, 2), Math.Round(ca3, 2),
+                    Math.Round(exam, 2), Math.Round(total, 2), letterGrade, gradePoints, true);
             }
-        }
 
-        // 6. Class analytics: score distribution across all enrolled students (published only)
-        CourseClassAnalyticsDto? analyticsDto = null;
-        if (isPublished)
-        {
-            // Get all enrolled student IDs for this offering
+            // Class analytics
             var enrolledStudentIds = await dbContext.CourseEnrollments
                 .AsNoTracking()
                 .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
@@ -582,7 +700,6 @@ public sealed class CourseService(
 
             if (enrolledStudentIds.Count > 1)
             {
-                // Compute total scores for each enrolled student
                 var allAssessments = await dbContext.Assessments
                     .AsNoTracking()
                     .Where(a => a.CourseOfferingId == offeringId)
@@ -590,7 +707,6 @@ public sealed class CourseService(
                     .Include(a => a.Grades.Where(g => enrolledStudentIds.Contains(g.StudentId)))
                     .ToListAsync(ct);
 
-                // Aggregate per student
                 var studentTotals = new Dictionary<Guid, double>();
                 foreach (var sid in enrolledStudentIds)
                 {
@@ -600,7 +716,7 @@ public sealed class CourseService(
                         var g = assessment.Grades.FirstOrDefault(gr => gr.StudentId == sid);
                         if (g == null) continue;
                         double maxM = (double)assessment.MaxMarks;
-                        double w = (double)assessment.AssessmentCategory.Weight;
+                        double w    = (double)assessment.AssessmentCategory.Weight;
                         if (maxM > 0) t += ((double)g.MarksObtained / maxM) * w;
                     }
                     studentTotals[sid] = Math.Round(t, 1);
@@ -610,12 +726,12 @@ public sealed class CourseService(
                 if (scores.Count > 0)
                 {
                     double classAverage = scores.Average();
-                    double? myScore = studentTotals.TryGetValue(studentId, out var ms) ? ms : null;
+                    double? myScore     = studentTotals.TryGetValue(studentId, out var ms) ? ms : null;
 
                     var buckets = new List<ScoreBucketDto>();
                     for (int start = 0; start < 100; start += 10)
                     {
-                        int end = start == 90 ? 100 : start + 9;
+                        int end   = start == 90 ? 100 : start + 9;
                         int count = scores.Count(s => s >= start && s <= end);
                         buckets.Add(new ScoreBucketDto(start, end, count));
                     }
@@ -627,12 +743,8 @@ public sealed class CourseService(
                         percentile = (int)Math.Round((double)below / scores.Count * 100);
                     }
 
-                    analyticsDto = new CourseClassAnalyticsDto(
-                        Math.Round(classAverage, 1),
-                        myScore,
-                        percentile,
-                        scores.Count,
-                        buckets);
+                    analytics = new CourseClassAnalyticsDto(
+                        Math.Round(classAverage, 1), myScore, percentile, scores.Count, buckets);
                 }
             }
         }
@@ -643,14 +755,56 @@ public sealed class CourseService(
             offering.Course.Title,
             offering.Course.Description,
             offering.Course.CreditUnits,
-            offering.Program.Name,
-            offering.Level.Name,
+            programName,
+            levelName,
             offering.AcademicSession.Name,
             (int)offering.Semester,
             materials,
             materials.Count,
             gradeDto,
-            analyticsDto);
+            analytics);
+    }
+
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private async Task NotifyLecturerAssignedAsync(
+        AppUser lecturer, Course course, string sessionName,
+        CourseLecturerRole role, CancellationToken ct)
+    {
+        var roleLabel = role == CourseLecturerRole.Main ? "Main Lecturer" : "Co-Lecturer";
+
+        await notificationService.CreateAsync(new CreateNotificationRequest(
+            lecturer.Id, null,
+            "New Course Assignment",
+            $"You have been assigned as {roleLabel} for {course.Code} – {course.Title} ({sessionName}).",
+            "System",
+            "/dashboard/lecturer/courses"), ct);
+
+        if (!string.IsNullOrEmpty(lecturer.Email))
+            await emailService.SendCourseAssignmentEmailAsync(
+                lecturer.Email, lecturer.DisplayName ?? "Lecturer",
+                course.Code, course.Title, sessionName);
+    }
+
+    private static LecturerCourseOfferingDto BuildLecturerCourseOfferingDto(
+        CourseOffering co, CourseLecturerRole role, int studentCount, int sessionCount)
+    {
+        var programNames = string.Join(", ", co.Programs.Select(p => p.Program?.Name).Distinct());
+        var levelNames   = string.Join(", ", co.Programs.Select(p => p.Level?.Name).Distinct());
+
+        return new LecturerCourseOfferingDto(
+            co.Id,
+            co.CourseId,
+            co.Course.Code,
+            co.Course.Title,
+            co.Course.CreditUnits,
+            string.IsNullOrEmpty(programNames) ? "N/A" : programNames,
+            string.IsNullOrEmpty(levelNames)   ? "N/A" : levelNames,
+            co.AcademicSessionId,
+            co.AcademicSession?.Name ?? "N/A",
+            (int)co.Semester,
+            role,
+            studentCount,
+            sessionCount);
     }
 }
-

@@ -10,4 +10,6 @@ public interface IAcademicSessionService
     Task<ErrorOr<AcademicSessionDto>> CreateAsync(CreateAcademicSessionRequest request, CancellationToken ct = default);
     Task<ErrorOr<AcademicSessionDto>> UpdateAsync(Guid id, UpdateAcademicSessionRequest request, CancellationToken ct = default);
     Task<ErrorOr<AcademicSessionDto>> ToggleStatusAsync(Guid id, CancellationToken ct = default);
+    Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionStatusAsync(Guid id, CancellationToken ct = default);
+    Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionOpenStatusAsync(Guid id, CancellationToken ct = default);
 }
