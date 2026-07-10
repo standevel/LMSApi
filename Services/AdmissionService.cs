@@ -719,6 +719,7 @@ public sealed class AdmissionService(
         };
 
         var pdf = await pdfService.GenerateOfferLetterAsync(app, templateType);
+        var memoPdf = await pdfService.GenerateAdvancePaymentMemoAsync();
         var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
 
         await emailService.SendAdmissionOfferEmailAsync(
@@ -726,7 +727,9 @@ public sealed class AdmissionService(
             studentName: fullName,
             programName: app.AcademicProgram?.Name ?? "Selected Program",
             pdfAttachment: pdf,
-            fileName: "Admission_Letter.pdf"
+            fileName: "Admission_Letter.pdf",
+            secondAttachment: memoPdf,
+            secondFileName: "Advance_Payment_Memo.pdf"
         );
 
         // Refresh offer expiry to give another 14 days from resend
@@ -804,13 +807,16 @@ public sealed class AdmissionService(
                             _ => "Undergraduate"
                         };
                         var pdf = await pdfService.GenerateOfferLetterAsync(app, templateType);
+                        var memoPdf = await pdfService.GenerateAdvancePaymentMemoAsync();
                         var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
                         await emailService.SendAdmissionOfferEmailAsync(
                             toEmail: app.StudentEmail,
                             studentName: fullName,
                             programName: app.AcademicProgram?.Name ?? "Selected Program",
                             pdfAttachment: pdf,
-                            fileName: "Admission_Letter.pdf"
+                            fileName: "Admission_Letter.pdf",
+                            secondAttachment: memoPdf,
+                            secondFileName: "Advance_Payment_Memo.pdf"
                         );
                         
                         dbContext.AuditLogs.Add(new AuditLog

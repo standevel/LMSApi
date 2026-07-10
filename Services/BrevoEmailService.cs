@@ -82,7 +82,9 @@ public sealed class BrevoEmailService(
         string studentName,
         string programName,
         byte[]? pdfAttachment = null,
-        string? fileName = null)
+        string? fileName = null,
+        byte[]? secondAttachment = null,
+        string? secondFileName = null)
     {
         var subject = "Admission Offer - Wigwe University";
         var content = $@"
@@ -91,18 +93,22 @@ public sealed class BrevoEmailService(
                 <p>Dear {studentName},</p>
                 <p>We are pleased to offer you admission into the <strong>{programName}</strong> program at Wigwe University!</p>
                 <p>Please find attached your provisional admission letter.</p>
+                <p style='color:#b45309; font-size:13px;'><strong>Note:</strong> A separate memorandum on advance tuition fee payments is also attached for your parent/guardian.</p>
                 <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
                 <p style='font-size: 12px; color: #666;'>Wigwe University Admissions Office</p>
             </div>";
 
         object? attachment = null;
+        var attachments = new List<object>();
+
         if (pdfAttachment != null && !string.IsNullOrEmpty(fileName))
-        {
-            attachment = new[]
-            {
-                new { content = Convert.ToBase64String(pdfAttachment), name = fileName }
-            };
-        }
+            attachments.Add(new { content = Convert.ToBase64String(pdfAttachment), name = fileName });
+
+        if (secondAttachment != null && !string.IsNullOrEmpty(secondFileName))
+            attachments.Add(new { content = Convert.ToBase64String(secondAttachment), name = secondFileName });
+
+        if (attachments.Count > 0)
+            attachment = attachments.ToArray();
 
         return SendEmailAsync(toEmail, subject, content, attachment);
     }

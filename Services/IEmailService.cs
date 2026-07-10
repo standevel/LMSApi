@@ -11,7 +11,9 @@ public interface IEmailService
         string studentName,
         string programName,
         byte[]? pdfAttachment = null,
-        string? fileName = null);
+        string? fileName = null,
+        byte[]? secondAttachment = null,
+        string? secondFileName = null);
     Task SendPaymentInstructionsEmailAsync(string toEmail, string studentName, decimal amountDue, string paymentPageUrl);
     Task SendStudentCredentialsEmailAsync(string toEmail, string studentName, string officialEmail, string temporaryPassword);
     Task SendOfferAcceptedConfirmationAsync(string toEmail, string studentName, string programName);

@@ -372,4 +372,141 @@ public sealed class OfferLetterPdfService(ILetterTemplateService templateService
     }
 
     private record LetterSectionDto(string Id, string Type, string Title, string? Content, bool IsVisible);
+
+    public Task<byte[]> GenerateAdvancePaymentMemoAsync(LetterTemplateResponse? template = null)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var document = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(0.7f, Unit.Inch);
+                page.PageColor(Colors.White);
+                page.DefaultTextStyle(x => x.FontSize(11).FontFamily(Fonts.Verdana));
+
+                page.Content().Column(col =>
+                {
+                    // Logo
+                    col.Item().PaddingBottom(24).Row(headerRow =>
+                    {
+                        headerRow.RelativeItem().Column(c =>
+                        {
+                            if (template != null && !string.IsNullOrEmpty(template.LogoBase64))
+                            {
+                                try
+                                {
+                                    var logoBytes = Convert.FromBase64String(
+                                        template.LogoBase64.Contains(",")
+                                            ? template.LogoBase64.Split(',')[1]
+                                            : template.LogoBase64);
+                                    c.Item().Height(60).Image(logoBytes);
+                                }
+                                catch
+                                {
+                                    c.Item().Text("WIGWE UNIVERSITY").FontSize(22).Bold().FontColor("#0F172A");
+                                }
+                            }
+                            else
+                            {
+                                c.Item().Text("WIGWE").FontSize(26).Bold().FontColor("#0F172A");
+                                c.Item().Text("UNIVERSITY").FontSize(10).Bold().FontColor("#64748B").LetterSpacing(0.3f);
+                            }
+                        });
+                    });
+
+                    // Gold divider
+                    col.Item().PaddingBottom(22).BorderBottom(1.5f).BorderColor("#D4AF37");
+
+                    // Memo Title Block
+                    col.Item().PaddingBottom(6).AlignCenter()
+                        .Text("WIGWE UNIVERSITY MEMORANDUM")
+                        .FontSize(13).Bold().FontColor("#0F172A").LetterSpacing(0.05f);
+
+                    col.Item().PaddingBottom(4).AlignCenter()
+                        .Text($"DATE: {DateTime.UtcNow:dd MMMM, yyyy}".ToUpper())
+                        .FontSize(11).Bold().FontColor("#1E293B");
+
+                    col.Item().PaddingBottom(4).AlignCenter()
+                        .Text("ATTENTION:")
+                        .FontSize(11).Bold().FontColor("#334155");
+
+                    col.Item().PaddingBottom(18).AlignCenter()
+                        .Text("ALL WIGWE UNIVERSITY PARENTS AND INTENDING PARENTS")
+                        .FontSize(12).Bold().FontColor("#0F172A");
+
+                    col.Item().PaddingBottom(22).AlignCenter()
+                        .Text("RE: ADVANCE PAYMENT OF TUITION FEES")
+                        .FontSize(12).Bold().Underline().FontColor("#0F172A");
+
+                    // Body
+                    col.Item().PaddingBottom(16).Text(
+                        "This directive is to all parents who desire to make advance payments of the tuition fees for their Children / Wards.")
+                        .FontSize(11).FontColor("#334155").LineHeight(1.6f);
+
+                    col.Item().PaddingBottom(8).Text("Please note as follows:")
+                        .FontSize(11).Bold().FontColor("#1E293B");
+
+                    var points = new[]
+                    {
+                        "That the University account details are available on the WU website.",
+                        "The bursary unit must be notified whenever such payments are made.",
+                        "All such payments must be clearly given the narrative \"advance payment\".",
+                        "Refund of such \"advance payments\" is done with 50% of the sum retained as administrative fees."
+                    };
+
+                    for (int i = 0; i < points.Length; i++)
+                    {
+                        col.Item().PaddingBottom(10).Row(row =>
+                        {
+                            row.AutoItem().PaddingRight(10).Text($"{i + 1}.")
+                                .FontSize(11).Bold().FontColor("#334155");
+                            row.RelativeItem().Text(points[i])
+                                .FontSize(11).FontColor("#334155").LineHeight(1.6f);
+                        });
+                    }
+
+                    col.Item().PaddingTop(18).PaddingBottom(14).Text(
+                        "For further information, please contact the Dean, Student Affairs, Students Welfare Officer.")
+                        .FontSize(11).FontColor("#334155").LineHeight(1.6f);
+
+                    col.Item().PaddingTop(6).Text("Bursary Unit")
+                        .FontSize(11).Bold().FontColor("#1E293B");
+
+                    // Contact block
+                    col.Item().PaddingTop(36).BorderTop(1).BorderColor("#E2E8F0").PaddingTop(12).Row(foot =>
+                    {
+                        foot.RelativeItem().Column(fc =>
+                        {
+                            fc.Item().Text("Isiokpo, Rivers State").FontSize(9).FontColor("#64748B");
+                            fc.Item().Text("T: +2348032006346").FontSize(9).FontColor("#64748B");
+                            fc.Item().Text("E: contact@wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
+                            fc.Item().Text("E: bursary@wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
+                        });
+                        foot.RelativeItem().AlignCenter()
+                            .Text("www.wigweuniversity.edu.ng").FontSize(9).FontColor("#64748B");
+                        foot.RelativeItem().AlignRight()
+                            .Text("RC-7258338").FontSize(9).FontColor("#64748B");
+                    });
+                });
+
+                page.Footer().Column(fcol =>
+                {
+                    fcol.Item().Height(5).Row(row =>
+                    {
+                        row.RelativeItem().Background("#10B981");
+                        row.RelativeItem().Background("#059669");
+                        row.RelativeItem().Background("#0F172A");
+                        row.RelativeItem().Background("#D4AF37");
+                    });
+                    fcol.Item().PaddingVertical(10).AlignCenter()
+                        .Text("WIGWE UNIVERSITY — BURSARY UNIT")
+                        .FontSize(8).FontColor("#94A3B8");
+                });
+            });
+        });
+
+        return Task.FromResult(document.GeneratePdf());
+    }
 }

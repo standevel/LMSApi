@@ -6,4 +6,5 @@ namespace LMS.Api.Services;
 public interface IPdfService
 {
     Task<byte[]> GenerateOfferLetterAsync(AdmissionApplication application, string? templateType = "Undergraduate");
+    Task<byte[]> GenerateAdvancePaymentMemoAsync(LetterTemplateResponse? template = null);
 }
