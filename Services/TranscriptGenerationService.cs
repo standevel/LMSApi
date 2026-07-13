@@ -42,7 +42,7 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
             
         var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
 
         var offerings = await _dbContext.CourseOfferings
@@ -98,8 +98,10 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
                 continue;
             }
 
-            var roundedScore = Math.Round(totalScore.Value, 2);
-            var letterGrade = CalculateLetterGrade(roundedScore, mappings);
+            var rStrategy = sysConfig!.RoundingStrategy;
+            var decimalPlaces = sysConfig!.RoundingDecimalPlaces;
+            var roundedScore = GradeCalculator.RoundScore(totalScore.Value, rStrategy, decimalPlaces);
+            var letterGrade = CalculateLetterGrade(roundedScore, mappings, sysConfig);
             var gradePoints = ConvertToGradePoints(roundedScore, sysConfig);
             var attendancePercentage = await CalculateAttendancePercentage(offering.Id, studentId, ct);
 
@@ -403,25 +405,14 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
         return totalSessions > 0 ? (int)((decimal)attendedSessions / totalSessions * 100) : 0;
     }
 
-    private string CalculateLetterGrade(decimal marks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null)
+    private string CalculateLetterGrade(decimal marks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null, SystemGradingConfiguration? sysConfig = null)
     {
-        if (mappings == null || !mappings.Any())
-        {
-            return marks switch
-            {
-                >= 70 => "A",
-                >= 60 => "B",
-                >= 50 => "C",
-                >= 45 => "D",
-                >= 40 => "E",
-                _ => "F"
-            };
-        }
-        
-        var match = mappings.OrderByDescending(m => m.MinPercentage)
-            .FirstOrDefault(m => marks >= m.MinPercentage);
-            
-        return match?.LetterGrade ?? "F";
+        var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+        var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+        var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
+
+        var result = GradeCalculator.CalculateGrade(marks, rStrategy, decimalPlaces, graceThreshold, mappings ?? new List<LMS.Api.Contracts.GradeMappingDto>());
+        return result.LetterGrade;
     }
 
     private static decimal? CalculateCourseScore(
@@ -481,41 +472,45 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
     {
         var mappings = string.IsNullOrEmpty(sysConfig.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
               
-        if (mappings == null || !mappings.Any())
-        {
-            if (sysConfig.GpaScale == 5.0m)
-            {
-                return marks switch
-                {
-                    >= 70 => 5.0m,
-                    >= 60 => 4.0m,
-                    >= 50 => 3.0m,
-                    >= 45 => 2.0m,
-                    >= 40 => 1.0m,
-                    _ => 0.0m
-                };
-            }
+        var rStrategy = sysConfig.RoundingStrategy;
+        var decimalPlaces = sysConfig.RoundingDecimalPlaces;
+        var graceThreshold = sysConfig.GraceThreshold;
 
-            return marks switch
-            {
-                >= 70 => 4.0m,
-                >= 65 => 3.75m,
-                >= 60 => 3.5m,
-                >= 55 => 3.0m,
-                >= 50 => 2.5m,
-                >= 45 => 2.0m,
-                >= 40 => 1.0m,
-                _ => 0.0m
-            };
+        if (mappings != null && mappings.Any())
+        {
+            var result = GradeCalculator.CalculateGrade(marks, rStrategy, decimalPlaces, graceThreshold, mappings);
+            return result.GradePoints;
         }
-        
-        var match = mappings.OrderByDescending(m => m.MinPercentage)
-            .FirstOrDefault(m => marks >= m.MinPercentage);
-            
-        return match?.GradePoints ?? 0.0m;
+
+        var defaults5 = new List<(decimal Min, string Letter, decimal Points)>
+        {
+            (70m, "A", 5.0m), (60m, "B", 4.0m), (50m, "C", 3.0m), (45m, "D", 2.0m), (40m, "E", 1.0m), (0m, "F", 0.0m)
+        };
+        var defaults4 = new List<(decimal Min, string Letter, decimal Points)>
+        {
+            (70m, "A", 4.0m), (65m, "B+", 3.75m), (60m, "B", 3.5m), (55m, "C+", 3.0m), (50m, "C", 2.5m), (45m, "D", 2.0m), (40m, "E", 1.0m), (0m, "F", 0.0m)
+        };
+
+        var targetDefaults = sysConfig.GpaScale == 5.0m ? defaults5 : defaults4;
+
+        decimal score = GradeCalculator.RoundScore(marks, rStrategy, decimalPlaces);
+        if (graceThreshold > 0)
+        {
+            foreach (var d in targetDefaults)
+            {
+                if (score < d.Min && d.Min - score <= graceThreshold)
+                {
+                    score = d.Min;
+                    break;
+                }
+            }
+        }
+
+        var matched = targetDefaults.FirstOrDefault(x => score >= x.Min);
+        return matched.Points;
     }
 
     private sealed record AssessmentPercentage(Guid CategoryId, decimal CategoryWeight, decimal Percentage);

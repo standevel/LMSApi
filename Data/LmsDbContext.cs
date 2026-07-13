@@ -840,6 +840,9 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.DefaultCA3Weight).HasPrecision(5, 2);
             entity.Property(x => x.DefaultExamWeight).HasPrecision(5, 2);
             entity.Property(x => x.GpaScale).HasPrecision(3, 2);
+            entity.Property(x => x.RoundingStrategy).HasConversion<string>().IsRequired().HasDefaultValue(RoundingStrategy.Standard);
+            entity.Property(x => x.RoundingDecimalPlaces).HasDefaultValue(0);
+            entity.Property(x => x.GraceThreshold).HasPrecision(5, 2).HasDefaultValue(0.00m);
         });
 
         modelBuilder.Entity<SystemRegistrationConfiguration>(entity =>

@@ -106,6 +106,19 @@ public class ParentPortalService : BaseService, IParentPortalService
             }
         }
 
+        var sysConfig = await _context.SystemGradingConfigurations
+            .AsNoTracking()
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+        var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+            ? new List<LMS.Api.Contracts.GradeMappingDto>()
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+              ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
+        var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+        var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+        var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
+
         var enrollmentsQuery = _context.CourseEnrollments
             .Include(e => e.CourseOffering)
                 .ThenInclude(co => co.Course)
@@ -130,8 +143,9 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .SumAsync(g => g.MarksObtained, ct);
 
             if (totalMarks > 100m) totalMarks = 100m;
-            var currentGrade = ComputeLetterGrade(totalMarks);
-            bool isCompleted = totalMarks >= 40m;
+            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
+            var currentGrade = gradeResult.LetterGrade;
+            bool isCompleted = gradeResult.Score >= 40m;
 
             var totalSessions = await _context.LectureSessions
                 .CountAsync(ls => ls.CourseOfferingId == offering.Id && ls.IsCompleted, ct);
@@ -154,13 +168,9 @@ public class ParentPortalService : BaseService, IParentPortalService
                 offering.AcademicSessionId));
         }
 
-        var fullName = !string.IsNullOrWhiteSpace(student.FirstName) || !string.IsNullOrWhiteSpace(student.LastName) 
-            ? $"{student.FirstName} {student.LastName}".Trim() 
-            : "Unknown";
-
         return new StudentProgressDto(
             student.Id,
-            fullName,
+            $"{student.FirstName} {student.LastName}".Trim(),
             student.StudentNumber ?? string.Empty,
             gpa,
             creditsEarned,
@@ -185,8 +195,12 @@ public class ParentPortalService : BaseService, IParentPortalService
             
         var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
+        var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+        var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+        var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
 
         var enrollmentsQuery = _context.CourseEnrollments
             .Include(e => e.CourseOffering)
@@ -212,7 +226,8 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .SumAsync(g => g.MarksObtained, ct);
 
             if (totalMarks > 100m) totalMarks = 100m;
-            var gradeLetter = ComputeLetterGrade(totalMarks, mappings);
+            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
+            var gradeLetter = gradeResult.LetterGrade;
 
             grades.Add(new StudentGradeDto(
                 offering.Id,

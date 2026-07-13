@@ -31,8 +31,7 @@ public sealed class SendFeeRemindersEndpoint : ApiEndpointWithoutRequest<FeeRemi
 
         if (result.IsError)
         {
-            var error = result.FirstError;
-            await SendFailureAsync(400, error.Description, error.Code, error.Description, ct);
+            await HandleErrorAsync(result.Errors, ct);
             return;
         }
 

@@ -89,6 +89,16 @@ public sealed class GradebookService : IGradebookService
             config.LetterGradesMappingJson = System.Text.Json.JsonSerializer.Serialize(request.LetterGradesMapping);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.RoundingStrategy) &&
+            Enum.TryParse<RoundingStrategy>(request.RoundingStrategy, ignoreCase: true, out var parsedRounding))
+            config.RoundingStrategy = parsedRounding;
+
+        if (request.RoundingDecimalPlaces.HasValue)
+            config.RoundingDecimalPlaces = request.RoundingDecimalPlaces.Value;
+
+        if (request.GraceThreshold.HasValue)
+            config.GraceThreshold = request.GraceThreshold.Value;
+
         // Validate that category weights sum to 100%
         var totalWeight = config.DefaultCA1Weight + config.DefaultCA2Weight + config.DefaultCA3Weight + config.DefaultExamWeight;
         if (totalWeight != 100m)
@@ -338,17 +348,25 @@ public sealed class GradebookService : IGradebookService
                   (examScore * sysConfig.Value.DefaultExamWeight / 100m)
                 : CalculateUnweightedAverage(ca1Score, ca2Score, ca3Score, examScore);
 
+            Enum.TryParse<RoundingStrategy>(sysConfig.Value.RoundingStrategy, ignoreCase: true, out var rStrategy);
+            var gradeResult = GradeCalculator.CalculateGrade(
+                totalScore,
+                rStrategy,
+                sysConfig.Value.RoundingDecimalPlaces,
+                sysConfig.Value.GraceThreshold,
+                sysConfig.Value.LetterGradesMapping);
+
             result.Add(new StudentGradeSummaryDto(
                 student.StudentId,
                 student.MatricNumber,
                 student.StudentName,
                 student.StudentEmail,
-                ca1Score,
-                ca2Score,
-                ca3Score,
-                examScore,
-                Math.Round(totalScore, 2),
-                CalculateLetterGrade(totalScore, sysConfig.Value.LetterGradesMapping),
+                Math.Round(ca1Score, 2),
+                Math.Round(ca2Score, 2),
+                Math.Round(ca3Score, 2),
+                Math.Round(examScore, 2),
+                gradeResult.Score,
+                gradeResult.LetterGrade,
                 null));
         }
 
@@ -380,9 +398,9 @@ public sealed class GradebookService : IGradebookService
 
         foreach (var studentGrade in request.Grades)
         {
-            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA1Score, AssessmentCategoryType.CA1);
-            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA2Score, AssessmentCategoryType.CA2);
-            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.CA3Score, AssessmentCategoryType.CA3);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.Ca1Score, AssessmentCategoryType.CA1);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.Ca2Score, AssessmentCategoryType.CA2);
+            await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.Ca3Score, AssessmentCategoryType.CA3);
             await UpdateOrAddGradeForCategory(studentGrade.StudentId, studentGrade.ExamScore, AssessmentCategoryType.Exam);
         }
 
@@ -1441,7 +1459,7 @@ public sealed class GradebookService : IGradebookService
     {
         var mapping = string.IsNullOrEmpty(config.LetterGradesMappingJson) || config.LetterGradesMappingJson == "[]"
             ? new List<GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(config.LetterGradesMappingJson) ?? new List<GradeMappingDto>();
+            : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(config.LetterGradesMappingJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<GradeMappingDto>();
 
         return new SystemGradingConfigurationDto(
             config.Id,
@@ -1454,6 +1472,9 @@ public sealed class GradebookService : IGradebookService
             config.DefaultExamWeight,
             config.GpaScale,
             mapping,
+            config.RoundingStrategy.ToString(),
+            config.RoundingDecimalPlaces,
+            config.GraceThreshold,
             config.UpdatedAt);
     }
 
@@ -1555,23 +1576,33 @@ public sealed class GradebookService : IGradebookService
 
     private string CalculateLetterGrade(decimal percentage, List<GradeMappingDto>? mappings = null)
     {
-        if (mappings == null || !mappings.Any())
+        SystemGradingConfiguration? sysConfig = null;
+        try
         {
-            return percentage switch
+            sysConfig = _dbContext.SystemGradingConfigurations
+                .AsNoTracking()
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefault();
+
+            if (mappings == null || !mappings.Any())
             {
-                >= 70 => "A",
-                >= 60 => "B",
-                >= 50 => "C",
-                >= 45 => "D",
-                >= 40 => "E",
-                _ => "F"
-            };
+                if (sysConfig != null && !string.IsNullOrEmpty(sysConfig.LetterGradesMappingJson) && sysConfig.LetterGradesMappingJson != "[]")
+                {
+                    mappings = JsonSerializer.Deserialize<List<GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+            }
+        }
+        catch
+        {
+            // Fallback to default
         }
 
-        var match = mappings.OrderByDescending(m => m.MinPercentage)
-            .FirstOrDefault(m => percentage >= m.MinPercentage);
-            
-        return match?.LetterGrade ?? "F";
+        var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+        var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+        var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
+
+        var result = GradeCalculator.CalculateGrade(percentage, rStrategy, decimalPlaces, graceThreshold, mappings ?? new List<GradeMappingDto>());
+        return result.LetterGrade;
     }
 
     private async Task<GradeApprovalDto?> GetNextPendingApprovalAsync(Guid courseOfferingId, CancellationToken ct)
@@ -1609,7 +1640,7 @@ public sealed class GradebookService : IGradebookService
             return Error.NotFound("Session.NotFound", "Academic session not found");
 
         var upload = await _dbContext.ClassterResultUploads
-            .FirstOrDefaultAsync(u => u.UploadId == uploadId, ct);
+            .FirstOrDefaultAsync(u => (uploadId != null && u.UploadId == uploadId) || (u.CourseId == courseId && u.AcademicSessionId == academicSessionId), ct);
 
         if (upload != null)
         {
@@ -1621,6 +1652,36 @@ public sealed class GradebookService : IGradebookService
             upload.FailedRows = 0;
             upload.UpdatedAt = DateTime.UtcNow;
             upload.CompletedAt = null;
+
+            // Drop existing rows in ClassterResultUploadRows
+            var existingRows = await _dbContext.ClassterResultUploadRows
+                .Where(r => r.UploadId == upload.Id)
+                .ToListAsync(ct);
+            _dbContext.ClassterResultUploadRows.RemoveRange(existingRows);
+
+            // Drop existing grades for this course offering in this session
+            var offeringIds = await _dbContext.CourseOfferings
+                .Where(co => co.CourseId == courseId && co.AcademicSessionId == academicSessionId)
+                .Select(co => co.Id)
+                .ToListAsync(ct);
+
+            if (offeringIds.Any())
+            {
+                var assessmentIds = await _dbContext.Assessments
+                    .Where(a => offeringIds.Contains(a.CourseOfferingId))
+                    .Select(a => a.Id)
+                    .ToListAsync(ct);
+
+                if (assessmentIds.Any())
+                {
+                    var gradesToDelete = await _dbContext.Grades
+                        .Where(g => assessmentIds.Contains(g.AssessmentId))
+                        .ToListAsync(ct);
+                    _dbContext.Grades.RemoveRange(gradesToDelete);
+                }
+            }
+
+            await _dbContext.SaveChangesAsync(ct);
         }
         else
         {
@@ -1650,6 +1711,7 @@ public sealed class GradebookService : IGradebookService
         var totalRecords = 0;
         var provisionedUsers = 0;
         var provisionedEnrollments = 0;
+        var provisionedCourseEnrollments = 0;
 
         var processedCourseOfferings = new Dictionary<string, CourseOffering>(StringComparer.OrdinalIgnoreCase);
 
@@ -1716,7 +1778,7 @@ public sealed class GradebookService : IGradebookService
                         AssignmentScore = assignmentScore,
                         MidsemesterScore = midsemesterScore,
                         ExamScore = examScore,
-                        RowValues = row.CellsUsed().Select(c => c.GetString()).ToArray()
+                        RowValues = row.CellsUsed().Select(c => c.Value.ToString() ?? string.Empty).ToArray()
                     });
 
                     var rowEntity = await _dbContext.ClassterResultUploadRows
@@ -1748,7 +1810,6 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = "Missing identity number";
-                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
                         failedRows++;
                         upload.FailedRows++;
                         upload.ProcessedRows++;
@@ -1774,7 +1835,6 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = $"Student not found (identity: {identityNumber})";
-                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
                         failedRows++;
                         upload.FailedRows++;
                         upload.ProcessedRows++;
@@ -1787,7 +1847,6 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = $"Could not provision user for student (identity: {identityNumber})";
-                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
                         failedRows++;
                         upload.FailedRows++;
                         upload.ProcessedRows++;
@@ -1803,7 +1862,6 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = "Could not create course offering for student";
-                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
                         failedRows++;
                         upload.FailedRows++;
                         upload.ProcessedRows++;
@@ -1816,6 +1874,10 @@ public sealed class GradebookService : IGradebookService
                     var (enrollment, enrollmentCreated) = await ProvisionEnrollmentAsync(student, courseOffering, ct);
                     if (enrollmentCreated)
                         provisionedEnrollments++;
+
+                    var (courseEnrollment, courseEnrollmentCreated) = await ProvisionCourseEnrollmentAsync(student, courseOffering, userId, ct);
+                    if (courseEnrollmentCreated)
+                        provisionedCourseEnrollments++;
 
                     var categories = await EnsureAssessmentCategoriesAsync(courseOffering.Id, ct);
                     var assessments = await EnsureAssessmentsAsync(courseOffering.Id, categories, ct);
@@ -1872,7 +1934,6 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = "No valid grade values found";
-                        _dbContext.ClassterResultUploadRows.Add(rowEntity);
                         failedRows++;
                         upload.FailedRows++;
                         upload.ProcessedRows++;
@@ -1886,7 +1947,6 @@ public sealed class GradebookService : IGradebookService
                     rowEntity.MappingReason = null;
                     rowEntity.ProcessedAtUtc = DateTime.UtcNow;
                     rowEntity.UpdatedAtUtc = DateTime.UtcNow;
-                    _dbContext.ClassterResultUploadRows.Add(rowEntity);
 
                     await _dbContext.SaveChangesAsync(ct);
 
@@ -1914,6 +1974,8 @@ public sealed class GradebookService : IGradebookService
                 auditMessage += $", {provisionedUsers} users provisioned";
             if (provisionedEnrollments > 0)
                 auditMessage += $", {provisionedEnrollments} enrollments created";
+            if (provisionedCourseEnrollments > 0)
+                auditMessage += $", {provisionedCourseEnrollments} course enrollments created";
 
             await _auditService.LogAsync("MigrateClassterGrades", "Gradebook",
                 $"{courseId}_{academicSessionId}", auditMessage, ct);
@@ -1961,7 +2023,7 @@ public sealed class GradebookService : IGradebookService
         for (int rowNum = 1; rowNum <= Math.Min(5, lastRow.RowNumber()); rowNum++)
         {
             var row = worksheet.Row(rowNum);
-            var cells = row.CellsUsed().Select(c => c.GetString().ToLowerInvariant().Trim()).ToList();
+            var cells = row.CellsUsed().Select(c => c.Value.ToString().ToLowerInvariant().Trim()).ToList();
 
             if (cells.Any(c => c.Contains("identity number") || c.Contains("identity")) &&
                 cells.Any(c => c.Contains("first name")) &&
@@ -1979,7 +2041,7 @@ public sealed class GradebookService : IGradebookService
 
         foreach (var cell in headerRow.CellsUsed())
         {
-            var value = cell.GetString().ToLowerInvariant().Trim();
+            var value = cell.Value.ToString().ToLowerInvariant().Trim();
             map[value] = cell.WorksheetColumn().ColumnNumber();
         }
 
@@ -1991,7 +2053,7 @@ public sealed class GradebookService : IGradebookService
         var normalizedName = columnName.ToLowerInvariant().Trim();
         if (columnMap.TryGetValue(normalizedName, out var colNum))
         {
-            var cellValue = row.Cell(colNum).GetString();
+            var cellValue = row.Cell(colNum).Value.ToString();
             return cellValue?.Trim() ?? string.Empty;
         }
         return string.Empty;
@@ -2017,7 +2079,7 @@ public sealed class GradebookService : IGradebookService
                 if (kvp.Key.Contains(normalizedAlias))
                 {
                     var colNum = kvp.Value;
-                    var cellValue = row.Cell(colNum).GetString();
+                    var cellValue = row.Cell(colNum).Value.ToString();
                     if (decimal.TryParse(cellValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
                         return true;
                 }
@@ -2226,6 +2288,49 @@ public sealed class GradebookService : IGradebookService
         return (enrollment, false);
     }
 
+    private async Task<(CourseEnrollment? Enrollment, bool Created)> ProvisionCourseEnrollmentAsync(
+        Student student,
+        CourseOffering offering,
+        Guid userId,
+        CancellationToken ct)
+    {
+        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u =>
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
+            || u.Email == student.OfficialEmail, ct);
+        if (appUser == null)
+            return (null, false);
+
+        var enrollment = await _dbContext.CourseEnrollments
+            .FirstOrDefaultAsync(ce => ce.StudentId == appUser.Id && ce.CourseOfferingId == offering.Id, ct);
+
+        if (enrollment == null)
+        {
+            enrollment = new CourseEnrollment
+            {
+                Id = Guid.NewGuid(),
+                StudentId = appUser.Id,
+                CourseOfferingId = offering.Id,
+                Status = "Registered",
+                RegisteredAtUtc = DateTime.UtcNow,
+                CreatedById = userId
+            };
+            _dbContext.CourseEnrollments.Add(enrollment);
+            await _dbContext.SaveChangesAsync(ct);
+            return (enrollment, true);
+        }
+        else if (enrollment.Status != "Registered")
+        {
+            enrollment.Status = "Registered";
+            enrollment.RegisteredAtUtc = DateTime.UtcNow;
+            enrollment.DroppedAtUtc = null;
+            enrollment.UpdatedById = userId;
+            await _dbContext.SaveChangesAsync(ct);
+            return (enrollment, false);
+        }
+
+        return (enrollment, false);
+    }
+
     private async Task<List<AssessmentCategory>> EnsureAssessmentCategoriesAsync(Guid courseOfferingId, CancellationToken ct)
     {
         var categories = await _dbContext.AssessmentCategories
@@ -2240,19 +2345,30 @@ public sealed class GradebookService : IGradebookService
             AssessmentCategoryType.Exam
         };
 
+        var sysConfig = await _dbContext.SystemGradingConfigurations
+            .AsNoTracking()
+            .OrderByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        var defaultCA1 = sysConfig?.DefaultCA1Weight ?? 15m;
+        var defaultCA2 = sysConfig?.DefaultCA2Weight ?? 15m;
+        var defaultCA3 = sysConfig?.DefaultCA3Weight ?? 15m;
+        var defaultExam = sysConfig?.DefaultExamWeight ?? 55m;
+
         foreach (var categoryType in defaultCategories)
         {
-            if (!categories.Any(c => c.CategoryType == categoryType))
+            var weight = categoryType switch
             {
-                var weight = categoryType switch
-                {
-                    AssessmentCategoryType.CA1 => 15m,
-                    AssessmentCategoryType.CA2 => 15m,
-                    AssessmentCategoryType.CA3 => 15m,
-                    AssessmentCategoryType.Exam => 55m,
-                    _ => 20m
-                };
+                AssessmentCategoryType.CA1 => defaultCA1,
+                AssessmentCategoryType.CA2 => defaultCA2,
+                AssessmentCategoryType.CA3 => defaultCA3,
+                AssessmentCategoryType.Exam => defaultExam,
+                _ => 20m
+            };
 
+            var existing = categories.FirstOrDefault(c => c.CategoryType == categoryType);
+            if (existing == null)
+            {
                 var category = new AssessmentCategory
                 {
                     CourseOfferingId = courseOfferingId,
@@ -2265,6 +2381,11 @@ public sealed class GradebookService : IGradebookService
                 };
                 _dbContext.AssessmentCategories.Add(category);
                 categories.Add(category);
+            }
+            else if (existing.Weight != weight)
+            {
+                existing.Weight = weight;
+                _dbContext.AssessmentCategories.Update(existing);
             }
         }
 

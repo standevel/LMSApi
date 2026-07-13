@@ -128,7 +128,9 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
             var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: true);
             if (!totalScore.HasValue) continue;
 
-            var roundedScore = Math.Round(totalScore.Value, 2);
+            var rStrategy = sysConfig.RoundingStrategy;
+            var decimalPlaces = sysConfig.RoundingDecimalPlaces;
+            var roundedScore = GradeCalculator.RoundScore(totalScore.Value, rStrategy, decimalPlaces);
             var gradePoints = ConvertToGradePoints(roundedScore, sysConfig);
             var creditUnits = offering.Course?.CreditUnits ?? 3;
 
@@ -179,41 +181,45 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
     {
         var mappings = string.IsNullOrEmpty(sysConfig.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
               
-        if (mappings == null || !mappings.Any())
-        {
-            if (sysConfig.GpaScale == 5.0m)
-            {
-                return marks switch
-                {
-                    >= 70 => 5.0m,
-                    >= 60 => 4.0m,
-                    >= 50 => 3.0m,
-                    >= 45 => 2.0m,
-                    >= 40 => 1.0m,
-                    _ => 0.0m
-                };
-            }
+        var rStrategy = sysConfig.RoundingStrategy;
+        var decimalPlaces = sysConfig.RoundingDecimalPlaces;
+        var graceThreshold = sysConfig.GraceThreshold;
 
-            return marks switch
-            {
-                >= 70 => 4.0m,
-                >= 65 => 3.75m,
-                >= 60 => 3.5m,
-                >= 55 => 3.0m,
-                >= 50 => 2.5m,
-                >= 45 => 2.0m,
-                >= 40 => 1.0m,
-                _ => 0.0m
-            };
+        if (mappings != null && mappings.Any())
+        {
+            var result = GradeCalculator.CalculateGrade(marks, rStrategy, decimalPlaces, graceThreshold, mappings);
+            return result.GradePoints;
         }
-        
-        var match = mappings.OrderByDescending(m => m.MinPercentage)
-            .FirstOrDefault(m => marks >= m.MinPercentage);
-            
-        return match?.GradePoints ?? 0.0m;
+
+        var defaults5 = new List<(decimal Min, string Letter, decimal Points)>
+        {
+            (70m, "A", 5.0m), (60m, "B", 4.0m), (50m, "C", 3.0m), (45m, "D", 2.0m), (40m, "E", 1.0m), (0m, "F", 0.0m)
+        };
+        var defaults4 = new List<(decimal Min, string Letter, decimal Points)>
+        {
+            (70m, "A", 4.0m), (65m, "B+", 3.75m), (60m, "B", 3.5m), (55m, "C+", 3.0m), (50m, "C", 2.5m), (45m, "D", 2.0m), (40m, "E", 1.0m), (0m, "F", 0.0m)
+        };
+
+        var targetDefaults = sysConfig.GpaScale == 5.0m ? defaults5 : defaults4;
+
+        decimal score = GradeCalculator.RoundScore(marks, rStrategy, decimalPlaces);
+        if (graceThreshold > 0)
+        {
+            foreach (var d in targetDefaults)
+            {
+                if (score < d.Min && d.Min - score <= graceThreshold)
+                {
+                    score = d.Min;
+                    break;
+                }
+            }
+        }
+
+        var matched = targetDefaults.FirstOrDefault(x => score >= x.Min);
+        return matched.Points;
     }
 
     private static decimal? CalculateCourseScore(

@@ -46,9 +46,27 @@ public sealed class CourseService(
 
     public async Task<ErrorOr<CourseDto>> CreateAsync(CreateCourseRequest request, CancellationToken ct = default)
     {
+        // Resolve the owning ProgramId: the client may send Guid.Empty when the program is
+        // captured per-offering rather than at the top level.  Fall back to the first offering.
+        var resolvedProgramId = request.ProgramId != Guid.Empty
+            ? request.ProgramId
+            : request.Offerings.FirstOrDefault(o => o.ProgramId.HasValue && o.ProgramId != Guid.Empty)?.ProgramId
+              ?? Guid.Empty;
+
+        if (resolvedProgramId == Guid.Empty)
+            return Error.Validation("Course.ProgramRequired", "A program must be selected for the course.");
+
+        // Check for duplicate course code within the same program
+        var existingCourse = await dbContext.Courses
+            .FirstOrDefaultAsync(c => c.ProgramId == resolvedProgramId && c.Code == request.Code, ct);
+        if (existingCourse != null)
+        {
+            return Error.Conflict("Course.DuplicateCode", $"Course code '{request.Code}' already exists for the selected program.");
+        }
+
         var course = new Course
         {
-            ProgramId   = request.ProgramId,
+            ProgramId   = resolvedProgramId,
             Code        = request.Code,
             Title       = request.Title,
             Description = request.Description,
@@ -56,7 +74,7 @@ public sealed class CourseService(
             LevelId     = request.LevelId,
             Semester    = request.Semester,
             IsActive    = true,
-            // Bare offerings: course + session + semester only
+            // Offerings with session, semester, and optional program+level
             Offerings = request.Offerings.Select(o => new CourseOffering
             {
                 AcademicSessionId = o.AcademicSessionId,
@@ -67,8 +85,35 @@ public sealed class CourseService(
         await courseRepository.AddAsync(course, ct);
         await courseRepository.SaveChangesAsync(ct);
 
-        await LogActionAsync("Create", "Course", course.Id.ToString(),
-            $"Created course: {course.Code} - {course.Title}", ct);
+        // Attach programs to offerings if provided in the request
+        var attachmentErrors = new List<string>();
+        foreach (var offeringRequest in request.Offerings.Where(o => o.ProgramId.HasValue && o.LevelId.HasValue))
+        {
+            var offering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == offeringRequest.AcademicSessionId && o.Semester == (Semester)offeringRequest.Semester);
+            if (offering == null)
+            {
+                attachmentErrors.Add($"No offering found for session {offeringRequest.AcademicSessionId}, semester {offeringRequest.Semester}");
+                continue;
+            }
+
+            var attachResult = await AttachProgramAsync(offering.Id, offeringRequest.ProgramId.GetValueOrDefault(), offeringRequest.LevelId.GetValueOrDefault(), ct);
+            if (attachResult.IsError)
+            {
+                attachmentErrors.Add($"Failed to attach program {offeringRequest.ProgramId} to offering: {attachResult.FirstError.Description}");
+            }
+        }
+
+        if (attachmentErrors.Any())
+        {
+            // Course was created but some attachments failed - return partial success with warnings
+            await LogActionAsync("Create", "Course", course.Id.ToString(),
+                $"Created course: {course.Code} - {course.Title} with attachment warnings: {string.Join("; ", attachmentErrors)}", ct);
+        }
+        else
+        {
+            await LogActionAsync("Create", "Course", course.Id.ToString(),
+                $"Created course: {course.Code} - {course.Title}", ct);
+        }
 
         var createdCourse = await courseRepository.GetByIdAsync(course.Id, ct);
         return createdCourse!.ToDto();
@@ -126,6 +171,31 @@ public sealed class CourseService(
     {
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course == null) return DomainErrors.Course.NotFound;
+
+        // Check if there are any dependent records in dbContext directly to prevent DB exception
+        var hasOfferings = await dbContext.CourseOfferings.AnyAsync(x => x.CourseId == id, ct);
+        if (hasOfferings)
+        {
+            return Error.Conflict("Course.HasOfferings", "Cannot delete this course because it has active course offerings.");
+        }
+
+        var hasCurriculum = await dbContext.CurriculumCourses.AnyAsync(x => x.CourseId == id, ct);
+        if (hasCurriculum)
+        {
+            return Error.Conflict("Course.HasCurriculum", "Cannot delete this course because it is part of a curriculum.");
+        }
+
+        var hasDegreeReq = await dbContext.DegreeRequirementCourses.AnyAsync(x => x.CourseId == id, ct);
+        if (hasDegreeReq)
+        {
+            return Error.Conflict("Course.HasDegreeRequirements", "Cannot delete this course because it is linked to degree requirements.");
+        }
+
+        var hasAssignments = await dbContext.Assignments.AnyAsync(x => x.CourseId == id, ct);
+        if (hasAssignments)
+        {
+            return Error.Conflict("Course.HasAssignments", "Cannot delete this course because it has associated assignments.");
+        }
 
         await courseRepository.DeleteAsync(course, ct);
         await courseRepository.SaveChangesAsync(ct);
@@ -635,7 +705,10 @@ public sealed class CourseService(
 
             if (assessments.Any())
             {
-                double ca1 = 0, ca2 = 0, ca3 = 0, exam = 0, total = 0;
+                double ca1Obtained = 0, ca1Max = 0;
+                double ca2Obtained = 0, ca2Max = 0;
+                double ca3Obtained = 0, ca3Max = 0;
+                double examObtained = 0, examMax = 0;
 
                 foreach (var assessment in assessments)
                 {
@@ -644,51 +717,82 @@ public sealed class CourseService(
 
                     double maxMarks = (double)assessment.MaxMarks;
                     double obtained = (double)studentGrade.MarksObtained;
-                    double weight   = (double)assessment.AssessmentCategory.Weight;
-                    double weighted = maxMarks > 0 ? (obtained / maxMarks) * weight : 0;
 
                     var catType = assessment.AssessmentCategory.CategoryType;
-                    if      (catType == AssessmentCategoryType.CA1) ca1  += weighted;
-                    else if (catType == AssessmentCategoryType.CA2) ca2  += weighted;
-                    else if (catType == AssessmentCategoryType.CA3) ca3  += weighted;
-                    else if (assessment.AssessmentCategory.IsExamCategory) exam += weighted;
-
-                    total += weighted;
+                    if (catType == AssessmentCategoryType.CA1)
+                    {
+                        ca1Obtained += obtained;
+                        ca1Max += maxMarks;
+                    }
+                    else if (catType == AssessmentCategoryType.CA2)
+                    {
+                        ca2Obtained += obtained;
+                        ca2Max += maxMarks;
+                    }
+                    else if (catType == AssessmentCategoryType.CA3)
+                    {
+                        ca3Obtained += obtained;
+                        ca3Max += maxMarks;
+                    }
+                    else if (assessment.AssessmentCategory.IsExamCategory || catType == AssessmentCategoryType.Exam)
+                    {
+                        examObtained += obtained;
+                        examMax += maxMarks;
+                    }
                 }
+
+                double ca1 = ca1Max > 0 ? (ca1Obtained / ca1Max) * 100 : 0;
+                double ca2 = ca2Max > 0 ? (ca2Obtained / ca2Max) * 100 : 0;
+                double ca3 = ca3Max > 0 ? (ca3Obtained / ca3Max) * 100 : 0;
+                double exam = examMax > 0 ? (examObtained / examMax) * 100 : 0;
 
                 var sysConfig = await dbContext.SystemGradingConfigurations
                     .AsNoTracking()
                     .OrderByDescending(x => x.UpdatedAt)
                     .FirstOrDefaultAsync(ct);
 
-                var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
-                    ? new List<GradeMappingDto>()
-                    : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(sysConfig.LetterGradesMappingJson)
-                      ?? new List<GradeMappingDto>();
+                double ca1Weight = sysConfig != null ? (double)sysConfig.DefaultCA1Weight : 15.0;
+                double ca2Weight = sysConfig != null ? (double)sysConfig.DefaultCA2Weight : 15.0;
+                double ca3Weight = sysConfig != null ? (double)sysConfig.DefaultCA3Weight : 15.0;
+                double examWeight = sysConfig != null ? (double)sysConfig.DefaultExamWeight : 55.0;
 
-                string letterGrade;
-                double gradePoints;
-
-                if (!mappings.Any())
+                double total = 0;
+                if (sysConfig != null && sysConfig.DefaultGradingStyle == GradingStyle.Unweighted)
                 {
-                    letterGrade = total >= 70 ? "A" : total >= 60 ? "B" : total >= 50 ? "C"
-                                : total >= 45 ? "D" : total >= 40 ? "E" : "F";
-                    gradePoints = letterGrade switch
-                    {
-                        "A" => 5.0, "B" => 4.0, "C" => 3.0, "D" => 2.0, "E" => 1.0, _ => 0.0
-                    };
+                    var activeScores = new List<double>();
+                    if (ca1Max > 0) activeScores.Add(ca1);
+                    if (ca2Max > 0) activeScores.Add(ca2);
+                    if (ca3Max > 0) activeScores.Add(ca3);
+                    if (examMax > 0) activeScores.Add(exam);
+                    total = activeScores.Any() ? activeScores.Average() : 0;
                 }
                 else
                 {
-                    var match = mappings.OrderByDescending(m => m.MinPercentage)
-                        .FirstOrDefault(m => (decimal)total >= m.MinPercentage);
-                    letterGrade = match?.LetterGrade ?? "F";
-                    gradePoints = match != null ? (double)match.GradePoints : 0.0;
+                    total = (ca1 * ca1Weight / 100.0) +
+                            (ca2 * ca2Weight / 100.0) +
+                            (ca3 * ca3Weight / 100.0) +
+                            (exam * examWeight / 100.0);
                 }
+
+                var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
+                    ? new List<GradeMappingDto>()
+                    : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                      ?? new List<GradeMappingDto>();
+
+                var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+                var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+                var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
+
+                var gradeResult = GradeCalculator.CalculateGrade(
+                    (decimal)total,
+                    rStrategy,
+                    decimalPlaces,
+                    graceThreshold,
+                    mappings);
 
                 gradeDto = new StudentCourseGradeDto(
                     Math.Round(ca1, 2), Math.Round(ca2, 2), Math.Round(ca3, 2),
-                    Math.Round(exam, 2), Math.Round(total, 2), letterGrade, gradePoints, true);
+                    Math.Round(exam, 2), (double)gradeResult.Score, gradeResult.LetterGrade, (double)gradeResult.GradePoints, true);
             }
 
             // Class analytics

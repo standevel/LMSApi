@@ -51,12 +51,14 @@ public record CourseDto(
 
 // ─── Create / Update requests ─────────────────────────────────────────────────
 
-/// <summary>Creates a bare offering: course + session + semester only.
-/// Programs and lecturers are attached via separate endpoints afterwards.</summary>
+/// <summary>Creates a course offering with program+level attached.</summary>
 public record CreateCourseOfferingRequest(
     Guid AcademicSessionId,
-    int Semester);
+    int Semester,
+    Guid? ProgramId = null,
+    Guid? LevelId = null);
 
+/// <summary>Creates a course. If offerings include program+level, they will be attached automatically.</summary>
 public record CreateCourseRequest(
     Guid ProgramId,
     string Code,

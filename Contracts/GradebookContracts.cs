@@ -17,6 +17,9 @@ public record SystemGradingConfigurationDto(
     decimal DefaultExamWeight,
     decimal GpaScale,
     List<GradeMappingDto> LetterGradesMapping,
+    string RoundingStrategy,
+    int RoundingDecimalPlaces,
+    decimal GraceThreshold,
     DateTime UpdatedAt);
 
 public record UpdateSystemGradingConfigurationRequest(
@@ -28,7 +31,10 @@ public record UpdateSystemGradingConfigurationRequest(
     decimal? DefaultCA3Weight,
     decimal? DefaultExamWeight,
     decimal? GpaScale,
-    List<GradeMappingDto>? LetterGradesMapping);
+    List<GradeMappingDto>? LetterGradesMapping,
+    string? RoundingStrategy,
+    int? RoundingDecimalPlaces,
+    decimal? GraceThreshold);
 
 public record GradeMappingDto(decimal MinPercentage, string LetterGrade, decimal GradePoints);
 
@@ -100,9 +106,9 @@ public record StudentGradeSummaryDto(
     string MatricNumber,
     string StudentName,
     string StudentEmail,
-    decimal CA1Score,
-    decimal CA2Score,
-    decimal CA3Score,
+    decimal Ca1Score,
+    decimal Ca2Score,
+    decimal Ca3Score,
     decimal ExamScore,
     decimal TotalScore,
     string LetterGrade,
@@ -112,9 +118,9 @@ public record GradeDistributionDto(string LetterGrade, int Count);
 
 public record UpdateStudentGradeSummaryItem(
     Guid StudentId,
-    decimal? CA1Score,
-    decimal? CA2Score,
-    decimal? CA3Score,
+    decimal? Ca1Score,
+    decimal? Ca2Score,
+    decimal? Ca3Score,
     decimal? ExamScore);
 
 public record UpdateStudentGradeSummaryRequest(

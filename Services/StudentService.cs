@@ -200,8 +200,12 @@ public class StudentService(LmsDbContext context) : IStudentService
             
         var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
-            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson) 
+            : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
+
+        var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
+        var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
+        var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
 
         var courseOfferings = await context.CourseOfferings
             .Include(co => co.Course)
@@ -226,8 +230,8 @@ public class StudentService(LmsDbContext context) : IStudentService
 
             var totalMarks = caScore + examScore;
 
-            // Compute grade and point
-            var (grade, point) = ComputeGrade(totalMarks, mappings);
+            // Compute grade and point using GradeCalculator
+            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
 
             results.Add(new StudentCourseResultDto
             {
@@ -239,9 +243,9 @@ public class StudentService(LmsDbContext context) : IStudentService
                 Level = 0, // Level is now per-program via CourseOfferingPrograms join table
                 TotalCA = (decimal)caScore,
                 TotalExam = examScore,
-                TotalMarks = totalMarks,
-                Grade = grade,
-                Point = point,
+                TotalMarks = gradeResult.Score,
+                Grade = gradeResult.LetterGrade,
+                Point = gradeResult.GradePoints.ToString("F2"),
                 IsPublished = false
             });
         }

@@ -50,6 +50,21 @@ public sealed class SystemGradingConfiguration
     /// JSON array of GradeMappingDto (e.g., [{"MinPercentage":70, "LetterGrade":"A", "GradePoints":4.0}, ...])
     /// </summary>
     public string LetterGradesMappingJson { get; set; } = "[]";
+
+    /// <summary>
+    /// Rounding strategy for grades
+    /// </summary>
+    public RoundingStrategy RoundingStrategy { get; set; } = RoundingStrategy.Standard;
+
+    /// <summary>
+    /// Number of decimal places to round to
+    /// </summary>
+    public int RoundingDecimalPlaces { get; set; } = 0;
+
+    /// <summary>
+    /// Grace/borderline threshold delta. If student's rounded score is within this delta of the next higher letter grade's minimum percentage, they get bumped.
+    /// </summary>
+    public decimal GraceThreshold { get; set; } = 0.0m;
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -61,4 +76,12 @@ public enum GradingStyle
 {
     Weighted,
     Unweighted
+}
+
+public enum RoundingStrategy
+{
+    None,
+    Standard,
+    Ceiling,
+    Floor
 }
