@@ -59,7 +59,7 @@ public class NotificationBackgroundService : BackgroundService
 
         // Find assignments due in the next 24 hours that haven't sent a reminder
         var upcomingAssignments = await dbContext.Assignments
-            .Include(a => a.Course)
+            .Include(a => a.CourseOffering)
             .Where(a => !a.IsDeleted && !a.ReminderSent && a.DueDate > now && a.DueDate <= upcomingThreshold)
             .ToListAsync(ct);
 
@@ -67,7 +67,7 @@ public class NotificationBackgroundService : BackgroundService
         {
             var enrolledStudentIds = await dbContext.CourseEnrollments
                 .AsNoTracking()
-                .Where(e => e.CourseOfferingId == assignment.CourseId && e.Status == "Registered")
+                .Where(e => e.CourseOfferingId == assignment.CourseOfferingId && e.Status == "Registered")
                 .Select(e => e.StudentId)
                 .ToListAsync(ct);
 
@@ -79,7 +79,7 @@ public class NotificationBackgroundService : BackgroundService
                     $"Upcoming Assignment: {assignment.Title}",
                     $"Reminder: Assignment '{assignment.Title}' is due on {assignment.DueDate:f}.",
                     "System",
-                    $"/dashboard/student/courses/{assignment.CourseId}"
+                    $"/dashboard/student/courses/{assignment.CourseOfferingId}"
                 ), ct);
             }
 

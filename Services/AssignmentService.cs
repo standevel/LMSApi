@@ -15,7 +15,7 @@ public sealed class AssignmentService(
     {
         var validation = ValidateAssignment(request);
         if (validation is not null) return validation.Value;
-        var programValidation = await ValidateTargetProgramsAsync(request.CourseId, request.TargetProgramIds, ct);
+        var programValidation = await ValidateTargetProgramsAsync(request.CourseOfferingId, request.TargetProgramIds, ct);
         if (programValidation is not null) return programValidation.Value;
 
         var assignment = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -31,7 +31,7 @@ public sealed class AssignmentService(
             var enrolledStudentIds = await context.CourseEnrollments
                 .AsNoTracking()
                 .Where(e =>
-                    e.CourseOffering.CourseId == request.CourseId &&
+                    e.CourseOfferingId == request.CourseOfferingId &&
                     e.Status == "Registered" &&
                     (targetProgramIds.Count == 0 || context.CourseOfferingPrograms.Any(p =>
                         p.CourseOfferingId == e.CourseOfferingId &&
@@ -41,9 +41,12 @@ public sealed class AssignmentService(
                 .ToListAsync(ct);
 
             // Fetch course details for notification
-            var course = await context.Courses
+            var course = await context.CourseOfferings
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == request.CourseId, ct);
+                .Include(co => co.Course)
+                .Where(co => co.Id == request.CourseOfferingId)
+                .Select(co => co.Course)
+                .FirstOrDefaultAsync(ct);
                 
             var courseCode = course?.Code ?? "Course";
 
@@ -55,7 +58,7 @@ public sealed class AssignmentService(
                     $"New Assignment: {request.Title}",
                     $"A new assignment has been created for {courseCode}. Due date: {request.DueDate:f}",
                     "System",
-                    $"/courses/{request.CourseId}/assignments/{a.Id}"
+                    $"/courses/{request.CourseOfferingId}/assignments/{a.Id}"
                 ), ct);
             }
 
@@ -70,7 +73,7 @@ public sealed class AssignmentService(
     {
         var validation = ValidateAssignment(request);
         if (validation is not null) return validation.Value;
-        var programValidation = await ValidateTargetProgramsAsync(request.CourseId, request.TargetProgramIds, ct);
+        var programValidation = await ValidateTargetProgramsAsync(request.CourseOfferingId, request.TargetProgramIds, ct);
         if (programValidation is not null) return programValidation.Value;
 
         var assignment = await context.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -111,10 +114,10 @@ public sealed class AssignmentService(
         return Result.Deleted;
     }
 
-    public async Task<ErrorOr<List<AssignmentDto>>> GetAssignmentsAsync(Guid? courseId, Guid? currentUserId = null, bool restrictToStudentEnrollments = false, CancellationToken ct = default)
+    public async Task<ErrorOr<List<AssignmentDto>>> GetAssignmentsAsync(Guid? courseOfferingId, Guid? currentUserId = null, bool restrictToStudentEnrollments = false, CancellationToken ct = default)
     {
         var query = context.Assignments.AsNoTracking();
-        if (courseId.HasValue) query = query.Where(x => x.CourseId == courseId.Value);
+        if (courseOfferingId.HasValue) query = query.Where(x => x.CourseOfferingId == courseOfferingId.Value);
         if (restrictToStudentEnrollments)
         {
             if (!currentUserId.HasValue) return Error.Unauthorized("Assignment.Unauthorized", "User is not authenticated.");
@@ -124,7 +127,7 @@ public sealed class AssignmentService(
                 .Where(e => e.StudentId == currentUserId.Value && e.Status == "Registered")
                 .Select(e => new
                 {
-                    e.CourseOffering.CourseId,
+                    e.CourseOfferingId,
                     ProgramId = context.CourseOfferingPrograms
                         .Where(p => p.CourseOfferingId == e.CourseOfferingId)
                         .Select(p => p.ProgramId)
@@ -132,14 +135,14 @@ public sealed class AssignmentService(
                 })
                 .ToListAsync(ct);
 
-            var enrolledCourseIds = enrollments.Select(e => e.CourseId).Distinct().ToList();
+            var enrolledOfferingIds = enrollments.Select(e => e.CourseOfferingId).Distinct().ToList();
             var assignments = await query
-                .Where(x => enrolledCourseIds.Contains(x.CourseId))
+                .Where(x => enrolledOfferingIds.Contains(x.CourseOfferingId))
                 .OrderBy(x => x.DueDate)
                 .ToListAsync(ct);
 
             return assignments
-                .Where(assignment => StudentCanAccessAssignmentProgram(assignment, enrollments.Select(e => (e.CourseId, e.ProgramId))))
+                .Where(assignment => StudentCanAccessAssignmentProgram(assignment, enrollments.Select(e => (e.CourseOfferingId, e.ProgramId))))
                 .Select(ToDto)
                 .ToList();
         }
@@ -162,10 +165,10 @@ public sealed class AssignmentService(
             .Where(enrollment =>
                 enrollment.StudentId == currentUserId &&
                 enrollment.Status == "Registered" &&
-                enrollment.CourseOffering.CourseId == assignment.CourseId)
+                enrollment.CourseOfferingId == assignment.CourseOfferingId)
             .Select(enrollment => new
             {
-                enrollment.CourseOffering.CourseId,
+                enrollment.CourseOfferingId,
                 ProgramId = context.CourseOfferingPrograms
                     .Where(p => p.CourseOfferingId == enrollment.CourseOfferingId)
                     .Select(p => p.ProgramId)
@@ -173,7 +176,7 @@ public sealed class AssignmentService(
             })
             .ToListAsync(ct);
 
-        if (!StudentCanAccessAssignmentProgram(assignment, canAccessAssignment.Select(e => (e.CourseId, e.ProgramId))))
+        if (!StudentCanAccessAssignmentProgram(assignment, canAccessAssignment.Select(e => (e.CourseOfferingId, e.ProgramId))))
         {
             return Error.Forbidden("Assignment.Forbidden", "This assignment is not available to your program.");
         }
@@ -298,7 +301,7 @@ public sealed class AssignmentService(
     {
         if (string.IsNullOrWhiteSpace(request.Title)) return Error.Validation("Assignment.TitleRequired", "Title is required.");
         if (request.Title.Length > 200) return Error.Validation("Assignment.TitleTooLong", "Title cannot exceed 200 characters.");
-        if (request.CourseId == Guid.Empty) return Error.Validation("Assignment.CourseRequired", "Course is required.");
+        if (request.CourseOfferingId == Guid.Empty) return Error.Validation("Assignment.CourseOfferingRequired", "Course offering is required.");
         if (request.MaxPoints <= 0) return Error.Validation("Assignment.InvalidPoints", "Max points must be greater than zero.");
         if (request.MaxFileSizeMb <= 0) return Error.Validation("Assignment.InvalidFileSize", "Maximum file size must be greater than zero.");
         if (request.CutoffDate.HasValue && request.CutoffDate.Value < request.DueDate)
@@ -308,16 +311,14 @@ public sealed class AssignmentService(
         return null;
     }
 
-    private async Task<Error?> ValidateTargetProgramsAsync(Guid courseId, IEnumerable<Guid>? programIds, CancellationToken ct)
+    private async Task<Error?> ValidateTargetProgramsAsync(Guid courseOfferingId, IEnumerable<Guid>? programIds, CancellationToken ct)
     {
         var ids = NormalizeTargetProgramIds(programIds);
         if (ids.Count == 0) return null;
 
         var validProgramIds = await context.CourseOfferingPrograms
             .AsNoTracking()
-            .Where(p => context.CourseOfferings.Any(co =>
-                co.Id == p.CourseOfferingId && co.CourseId == courseId) &&
-                ids.Contains(p.ProgramId))
+            .Where(p => p.CourseOfferingId == courseOfferingId && ids.Contains(p.ProgramId))
             .Select(p => p.ProgramId)
             .Distinct()
             .ToListAsync(ct);
@@ -332,7 +333,7 @@ public sealed class AssignmentService(
         assignment.Title = request.Title.Trim();
         assignment.Description = request.Description;
         assignment.MaxPoints = request.MaxPoints;
-        assignment.CourseId = request.CourseId;
+        assignment.CourseOfferingId = request.CourseOfferingId;
         assignment.AssessmentCategoryId = request.AssessmentCategoryId;
         assignment.DueDate = request.DueDate.ToUniversalTime();
         assignment.CutoffDate = request.CutoffDate?.ToUniversalTime();
@@ -350,11 +351,11 @@ public sealed class AssignmentService(
             .Distinct()
             .ToList();
 
-    private static bool StudentCanAccessAssignmentProgram(Assignment assignment, IEnumerable<(Guid CourseId, Guid ProgramId)> enrollments)
+    private static bool StudentCanAccessAssignmentProgram(Assignment assignment, IEnumerable<(Guid CourseOfferingId, Guid ProgramId)> enrollments)
     {
         var targetProgramIds = DeserializeTargetProgramIds(assignment.TargetProgramIdsJson);
         return enrollments.Any(enrollment =>
-            enrollment.CourseId == assignment.CourseId &&
+            enrollment.CourseOfferingId == assignment.CourseOfferingId &&
             (targetProgramIds.Count == 0 || targetProgramIds.Contains(enrollment.ProgramId)));
     }
 
@@ -377,9 +378,74 @@ public sealed class AssignmentService(
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.MaxGroupSize, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt);
+    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseOfferingId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.MaxGroupSize, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt);
 
     private static AssignmentSubmissionDto ToDto(AssignmentSubmission x) => new(x.Id, x.AssignmentId, x.SubmitterId, x.GroupId, x.Status.ToString(), x.SubmittedAt, x.SubmissionMetadataJson, x.DigitalReceipt, x.Grade is null ? null : ToDto(x.Grade), x.CreatedAt, x.UpdatedAt);
 
     private static SubmissionGradeDto ToDto(SubmissionGrade x) => new(x.Id, x.SubmissionId, x.GraderId, x.Score, x.FeedbackText, x.FeedbackMediaUrl, x.RubricExecutionJson, x.GradedAt);
+
+    public async Task<ErrorOr<int>> ImportAssignmentsFromOfferingAsync(Guid sourceOfferingId, Guid targetOfferingId, Guid userId, CancellationToken ct = default)
+    {
+        var sourceAssignments = await context.Assignments
+            .AsNoTracking()
+            .Where(x => x.CourseOfferingId == sourceOfferingId)
+            .ToListAsync(ct);
+
+        if (sourceAssignments.Count == 0) return 0;
+
+        var sourceOffering = await context.CourseOfferings
+            .AsNoTracking()
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == sourceOfferingId, ct);
+
+        var targetOffering = await context.CourseOfferings
+            .AsNoTracking()
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == targetOfferingId, ct);
+
+        var timeShift = TimeSpan.Zero;
+        if (sourceOffering?.AcademicSession != null && targetOffering?.AcademicSession != null)
+        {
+            timeShift = targetOffering.AcademicSession.StartDate - sourceOffering.AcademicSession.StartDate;
+        }
+
+        var importedCount = 0;
+        foreach (var src in sourceAssignments)
+        {
+            var exists = await context.Assignments
+                .AnyAsync(x => x.CourseOfferingId == targetOfferingId && x.Title == src.Title, ct);
+
+            if (!exists)
+            {
+                var copy = new Assignment
+                {
+                    Id = Guid.NewGuid(),
+                    Title = src.Title,
+                    Description = src.Description,
+                    MaxPoints = src.MaxPoints,
+                    CourseOfferingId = targetOfferingId,
+                    AssessmentCategoryId = src.AssessmentCategoryId,
+                    DueDate = src.DueDate.Add(timeShift),
+                    CutoffDate = src.CutoffDate?.Add(timeShift),
+                    AllowedExtensions = src.AllowedExtensions,
+                    MaxFileSizeMb = src.MaxFileSizeMb,
+                    IsGroupAssignment = src.IsGroupAssignment,
+                    MaxGroupSize = src.MaxGroupSize,
+                    ReleaseConditionsJson = src.ReleaseConditionsJson,
+                    TargetProgramIdsJson = src.TargetProgramIdsJson,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                };
+                context.Assignments.Add(copy);
+                importedCount++;
+            }
+        }
+
+        if (importedCount > 0)
+        {
+            await context.SaveChangesAsync(ct);
+        }
+
+        return importedCount;
+    }
 }

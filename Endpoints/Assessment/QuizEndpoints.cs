@@ -892,3 +892,29 @@ public sealed class UpdateQuizStatusEndpoint(IQuizService quizService, ICurrentU
         await SendAsync(result, ct);
     }
 }
+
+public record ImportQuizzesRequest(Guid SourceOfferingId, Guid TargetOfferingId);
+
+public sealed class ImportQuizzesFromOfferingEndpoint(IQuizService quizService, ICurrentUserContext currentUserContext)
+    : ApiEndpoint<ImportQuizzesRequest, int>
+{
+    public override void Configure()
+    {
+        Post("quizzes/import-from-offering");
+        Roles("Lecturer", "SuperAdmin", "Admin");
+        Tags("Assessment");
+    }
+
+    public override async Task HandleAsync(ImportQuizzesRequest req, CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var result = await quizService.ImportQuizzesFromOfferingAsync(req.SourceOfferingId, req.TargetOfferingId, userId.Value, ct);
+        await SendAsync(result, ct);
+    }
+}

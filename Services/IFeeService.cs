@@ -49,7 +49,7 @@ public interface IFeeService
 
     // History
     Task<IEnumerable<FeePayment>> GetPaymentHistoryAsync(Guid studentId);
-    Task<IEnumerable<FeePayment>> GetAllPaymentsAsync(PaymentStatus? status = null, Guid? sessionId = null);
+    Task<IEnumerable<FeePayment>> GetAllPaymentsAsync(PaymentStatus? status = null, Guid? sessionId = null, string? methodFilter = null);
 
     // Late Fees
     Task<IEnumerable<ApplyLateFeesResult>> ApplyLateFeesAsync(Guid sessionId, bool isDryRun, string appliedBy = "System");

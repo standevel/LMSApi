@@ -6,6 +6,7 @@ using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
 using LMS.Api.Security;
+using LMS.Api.Data.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
@@ -194,6 +195,10 @@ public sealed class AcademicProgramService(
         if (hasEnrollments)
             return Error.Validation("AcademicProgram.HasEnrollments", "Cannot delete a program with enrolled students.");
 
+        var hasStudents = await dbContext.Students.AnyAsync(s => s.AcademicProgramId == id, ct);
+        if (hasStudents)
+            return Error.Validation("AcademicProgram.HasStudents", "Cannot delete a program that has students attached.");
+
         var hasFeeTemplates = await dbContext.FeeTemplates.AnyAsync(f => f.ProgramId == id, ct);
         if (hasFeeTemplates)
             return Error.Validation("AcademicProgram.HasFeeTemplates", "Cannot delete a program that has fee templates attached.");
@@ -216,5 +221,105 @@ public sealed class AcademicProgramService(
         await LogActionAsync("Delete", "AcademicProgram", id.ToString(), $"Deleted program: {program.Name}", ct);
 
         return Result.Deleted;
+    }
+
+    public async Task<ErrorOr<AcademicProgramDto>> AddLevelAsync(Guid programId, AddAcademicLevelRequest request, CancellationToken ct = default)
+    {
+        var program = await programRepository.GetByIdAsync(programId, ct);
+        if (program is null) return DomainErrors.AcademicProgram.NotFound;
+
+        var level = new AcademicLevel
+        {
+            Name = request.Name,
+            Order = request.Order,
+            Program = program
+        };
+
+        level.Semesters = new List<LevelSemesterConfig>
+        {
+            new() { Semester = Semester.First, MaxCreditLoad = request.Semester1MaxCreditLoad, Level = level },
+            new() { Semester = Semester.Second, MaxCreditLoad = request.Semester2MaxCreditLoad, Level = level }
+        };
+
+        program.Levels.Add(level);
+        await programRepository.UpdateAsync(program, ct);
+        await programRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("AddLevel", "AcademicProgram", programId.ToString(), $"Added academic level: {level.Name} (Order: {level.Order})", ct);
+
+        var updatedProgram = await programRepository.GetByIdAsync(programId, ct);
+        return updatedProgram!.ToDto();
+    }
+
+    public async Task<ErrorOr<AcademicProgramDto>> UpdateLevelAsync(Guid programId, Guid levelId, UpdateAcademicLevelRequest request, CancellationToken ct = default)
+    {
+        var program = await programRepository.GetByIdAsync(programId, ct);
+        if (program is null) return DomainErrors.AcademicProgram.NotFound;
+
+        var level = program.Levels.FirstOrDefault(l => l.Id == levelId);
+        if (level is null) return Error.NotFound("AcademicLevel.NotFound", "The specified academic level was not found.");
+
+        level.Name = request.Name;
+        level.Order = request.Order;
+
+        var sem1 = level.Semesters.FirstOrDefault(s => s.Semester == Semester.First);
+        if (sem1 is not null)
+        {
+            sem1.MaxCreditLoad = request.Semester1MaxCreditLoad;
+        }
+        else
+        {
+            level.Semesters.Add(new LevelSemesterConfig { Semester = Semester.First, MaxCreditLoad = request.Semester1MaxCreditLoad, Level = level });
+        }
+
+        var sem2 = level.Semesters.FirstOrDefault(s => s.Semester == Semester.Second);
+        if (sem2 is not null)
+        {
+            sem2.MaxCreditLoad = request.Semester2MaxCreditLoad;
+        }
+        else
+        {
+            level.Semesters.Add(new LevelSemesterConfig { Semester = Semester.Second, MaxCreditLoad = request.Semester2MaxCreditLoad, Level = level });
+        }
+
+        await programRepository.UpdateAsync(program, ct);
+        await programRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("UpdateLevel", "AcademicProgram", programId.ToString(), $"Updated academic level: {level.Name}", ct);
+
+        var updatedProgram = await programRepository.GetByIdAsync(programId, ct);
+        return updatedProgram!.ToDto();
+    }
+
+    public async Task<ErrorOr<AcademicProgramDto>> DeleteLevelAsync(Guid programId, Guid levelId, CancellationToken ct = default)
+    {
+        var program = await programRepository.GetByIdAsync(programId, ct);
+        if (program is null) return DomainErrors.AcademicProgram.NotFound;
+
+        var level = program.Levels.FirstOrDefault(l => l.Id == levelId);
+        if (level is null) return Error.NotFound("AcademicLevel.NotFound", "The specified academic level was not found.");
+
+        var hasCourses = await dbContext.CurriculumCourses.AnyAsync(cc => cc.LevelId == levelId, ct);
+        if (hasCourses)
+            return Error.Validation("AcademicLevel.HasCourses", "Cannot delete a level that has curriculum courses mapped to it.");
+
+        var hasEnrollments = await dbContext.Enrollments.AnyAsync(e => e.LevelId == levelId, ct);
+        if (hasEnrollments)
+            return Error.Validation("AcademicLevel.HasEnrollments", "Cannot delete a level with enrolled students.");
+
+        var hasStudents = await dbContext.Students.AnyAsync(s => s.LevelId == levelId, ct);
+        if (hasStudents)
+            return Error.Validation("AcademicLevel.HasStudents", "Cannot delete a level with students attached.");
+
+        dbContext.LevelSemesterConfigs.RemoveRange(level.Semesters);
+        program.Levels.Remove(level);
+
+        await programRepository.UpdateAsync(program, ct);
+        await programRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("DeleteLevel", "AcademicProgram", programId.ToString(), $"Deleted academic level: {level.Name}", ct);
+
+        var updatedProgram = await programRepository.GetByIdAsync(programId, ct);
+        return updatedProgram!.ToDto();
     }
 }

@@ -350,7 +350,6 @@ await SeedCountriesAsync(ct);
             new() { Name = "B.Eng. Mechatronics Engineering", Code = "BMEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
             new() { Name = "Specialization Track Energy & Environment", Code = "BSEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
             new() { Name = "B.Eng. Computer Engineering", Code = "BCEN", DepartmentId = cenDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
-            new() { Name = "Specialization Track Robotics Engineering", Code = "BCRO", DepartmentId = cenDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
 
             // Management and Social Sciences College
             new() { Name = "B.Sc. Accounting and Data Analytics", Code = "BADA", DepartmentId = afDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 4 },

@@ -56,7 +56,7 @@ public sealed class AssignmentGroupService(LmsDbContext context) : IAssignmentGr
 
         var enrolled = await context.CourseEnrollments
             .AsNoTracking()
-            .Where(e => e.CourseOffering.CourseId == assignment.CourseId && e.Status == "Registered")
+            .Where(e => e.CourseOfferingId == assignment.CourseOfferingId && e.Status == "Registered")
             .Select(e => new
             {
                 e.StudentId,
@@ -150,7 +150,7 @@ public sealed class AssignmentGroupService(LmsDbContext context) : IAssignmentGr
         // Get all enrolled students
         var enrolled = await context.CourseEnrollments
             .AsNoTracking()
-            .Where(e => e.CourseOffering.CourseId == assignment.CourseId && e.Status == "Registered")
+            .Where(e => e.CourseOfferingId == assignment.CourseOfferingId && e.Status == "Registered")
             .Select(e => e.StudentId)
             .Distinct()
             .ToListAsync(ct);

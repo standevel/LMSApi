@@ -1655,4 +1655,131 @@ public class QuizService : BaseService, IQuizService
 
         return null;
     }
+
+    public async Task<ErrorOr<int>> ImportQuizzesFromOfferingAsync(Guid sourceOfferingId, Guid targetOfferingId, Guid userId, CancellationToken ct = default)
+    {
+        var sourceQuizzes = await _context.Quizzes
+            .Include(q => q.Setting)
+            .Include(q => q.Questions)
+                .ThenInclude(qq => qq.Options)
+            .Where(q => q.CourseOfferingId == sourceOfferingId)
+            .ToListAsync(ct);
+
+        if (sourceQuizzes.Count == 0) return 0;
+
+        var sourceOffering = await _context.CourseOfferings
+            .AsNoTracking()
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == sourceOfferingId, ct);
+
+        var targetOffering = await _context.CourseOfferings
+            .AsNoTracking()
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == targetOfferingId, ct);
+
+        var timeShift = TimeSpan.Zero;
+        if (sourceOffering?.AcademicSession != null && targetOffering?.AcademicSession != null)
+        {
+            timeShift = targetOffering.AcademicSession.StartDate - sourceOffering.AcademicSession.StartDate;
+        }
+
+        var importedCount = 0;
+        foreach (var srcQuiz in sourceQuizzes)
+        {
+            var exists = await _context.Quizzes
+                .AnyAsync(q => q.CourseOfferingId == targetOfferingId && q.Title == srcQuiz.Title, ct);
+
+            if (!exists)
+            {
+                var newQuiz = new Quiz
+                {
+                    Id = Guid.NewGuid(),
+                    Title = srcQuiz.Title,
+                    Description = srcQuiz.Description,
+                    TimeLimitMinutes = srcQuiz.TimeLimitMinutes,
+                    CourseOfferingId = targetOfferingId,
+                    AssessmentCategoryId = srcQuiz.AssessmentCategoryId,
+                    Status = "Draft",
+                    OpenDateUtc = srcQuiz.OpenDateUtc.HasValue ? srcQuiz.OpenDateUtc.Value.Add(timeShift) : (DateTime?)null,
+                    CloseDateUtc = srcQuiz.CloseDateUtc.HasValue ? srcQuiz.CloseDateUtc.Value.Add(timeShift) : (DateTime?)null,
+                    PassThreshold = srcQuiz.PassThreshold,
+                    TargetProgramIdsJson = srcQuiz.TargetProgramIdsJson,
+                    CreatedBy = userId,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                if (srcQuiz.Setting != null)
+                {
+                    newQuiz.Setting = new QuizSetting
+                    {
+                        Id = Guid.NewGuid(),
+                        QuizId = newQuiz.Id,
+                        ShuffleQuestions = srcQuiz.Setting.ShuffleQuestions,
+                        ShuffleOptions = srcQuiz.Setting.ShuffleOptions,
+                        MaxAttempts = srcQuiz.Setting.MaxAttempts,
+                        AllowPartialCredit = srcQuiz.Setting.AllowPartialCredit,
+                        ScoreBestAttempt = srcQuiz.Setting.ScoreBestAttempt,
+                        OpenDateUtc = newQuiz.OpenDateUtc,
+                        CloseDateUtc = newQuiz.CloseDateUtc,
+                        Status = "Draft",
+                        PassThreshold = srcQuiz.Setting.PassThreshold,
+                        UseRandomPool = srcQuiz.Setting.UseRandomPool,
+                        PoolSize = srcQuiz.Setting.PoolSize,
+                        PoolQuestionBankId = srcQuiz.Setting.PoolQuestionBankId,
+                        FeedbackVisibility = srcQuiz.Setting.FeedbackVisibility,
+                        RequireFullscreen = srcQuiz.Setting.RequireFullscreen,
+                        AllowTabSwitchDetection = srcQuiz.Setting.AllowTabSwitchDetection,
+                        MaxTabSwitches = srcQuiz.Setting.MaxTabSwitches,
+                        AccessCode = srcQuiz.Setting.AccessCode,
+                        RestrictToAllowedIps = srcQuiz.Setting.RestrictToAllowedIps,
+                        AllowedIpRangesJson = srcQuiz.Setting.AllowedIpRangesJson,
+                        AllowedCbtHallIdsJson = srcQuiz.Setting.AllowedCbtHallIdsJson,
+                        CreatedBy = userId,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                }
+
+                foreach (var question in srcQuiz.Questions)
+                {
+                    var newQuestion = new QuizQuestion
+                    {
+                        Id = Guid.NewGuid(),
+                        QuizId = newQuiz.Id,
+                        QuestionText = question.QuestionText,
+                        OrderIndex = question.OrderIndex,
+                        QuestionType = question.QuestionType,
+                        Points = question.Points,
+                        Difficulty = question.Difficulty,
+                        Category = question.Category,
+                        Tags = question.Tags,
+                        Explanation = question.Explanation,
+                        SourceBankItemId = question.SourceBankItemId
+                    };
+
+                    foreach (var option in question.Options)
+                    {
+                        newQuestion.Options.Add(new QuestionOption
+                        {
+                            Id = Guid.NewGuid(),
+                            QuizQuestionId = newQuestion.Id,
+                            OptionText = option.OptionText,
+                            DisplayOrder = option.DisplayOrder,
+                            IsCorrectAnswer = option.IsCorrectAnswer
+                        });
+                    }
+                    newQuiz.Questions.Add(newQuestion);
+                }
+
+                _context.Quizzes.Add(newQuiz);
+                importedCount++;
+            }
+        }
+
+        if (importedCount > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return importedCount;
+    }
 }

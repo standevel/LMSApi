@@ -10,7 +10,7 @@ namespace LMS.Api.Data.Entities;
 /// </summary>
 public sealed class CourseOfferingLecturer
 {
-    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid Id { get; set; }
 
     public Guid CourseOfferingId { get; set; }
 

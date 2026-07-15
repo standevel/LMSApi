@@ -398,9 +398,6 @@ public sealed class CourseDeduplicationTempEndpoint(LMS.Api.Data.LmsDbContext db
                 var drs = await dbContext.Set<DegreeRequirementCourse>().Where(x => x.CourseId == dupId).ToListAsync(ct);
                 foreach (var dr in drs) { dr.CourseId = primId; relationsUpdated++; }
 
-                // Assignments
-                var asgns = await dbContext.Assignments.Where(x => x.CourseId == dupId).ToListAsync(ct);
-                foreach (var a in asgns) { a.CourseId = primId; relationsUpdated++; }
 
                 // CoursePrerequisites (CourseId)
                 var cp1 = await dbContext.CoursePrerequisites.Where(x => x.CourseId == dupId).ToListAsync(ct);

@@ -57,4 +57,6 @@ public interface IQuizService
     Task<ErrorOr<List<TimeExtensionDto>>> GetQuizTimeExtensionsAsync(Guid quizId, CancellationToken ct = default);
     Task<ErrorOr<TimeExtensionDto>> CreateTimeExtensionAsync(Guid quizId, Guid studentId, int additionalMinutes, DateTime? effectiveFrom, DateTime? effectiveUntil, string reason, string approvedBy, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> RevokeTimeExtensionAsync(Guid timeExtensionId, CancellationToken ct = default);
+
+    Task<ErrorOr<int>> ImportQuizzesFromOfferingAsync(Guid sourceOfferingId, Guid targetOfferingId, Guid userId, CancellationToken ct = default);
 }

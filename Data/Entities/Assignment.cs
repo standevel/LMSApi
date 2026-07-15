@@ -6,7 +6,7 @@ public sealed class Assignment
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal MaxPoints { get; set; } = 100m;
-    public Guid CourseId { get; set; }
+    public Guid CourseOfferingId { get; set; }
     public Guid? AssessmentCategoryId { get; set; }
     public DateTimeOffset DueDate { get; set; }
     public DateTimeOffset? CutoffDate { get; set; }
@@ -22,6 +22,6 @@ public sealed class Assignment
     public bool IsDeleted { get; set; }
     public bool ReminderSent { get; set; } = false;
 
-    public Course Course { get; set; } = null!;
+    public CourseOffering CourseOffering { get; set; } = null!;
     public ICollection<AssignmentSubmission> Submissions { get; set; } = [];
 }

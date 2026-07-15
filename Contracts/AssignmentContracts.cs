@@ -5,7 +5,7 @@ public sealed record AssignmentDto(
     string Title,
     string? Description,
     decimal MaxPoints,
-    Guid CourseId,
+    Guid CourseOfferingId,
     Guid? AssessmentCategoryId,
     DateTimeOffset DueDate,
     DateTimeOffset? CutoffDate,
@@ -46,7 +46,7 @@ public class UpsertAssignmentRequest
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal MaxPoints { get; set; } = 100m;
-    public Guid CourseId { get; set; }
+    public Guid CourseOfferingId { get; set; }
     public Guid? AssessmentCategoryId { get; set; }
     public DateTimeOffset DueDate { get; set; }
     public DateTimeOffset? CutoffDate { get; set; }

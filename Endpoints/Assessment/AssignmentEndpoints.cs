@@ -35,15 +35,15 @@ public sealed class ListAssignmentsEndpoint(IAssignmentService service, ICurrent
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        var raw = Query<string?>("courseId", isRequired: false);
-        var courseId = Guid.TryParse(raw, out var parsed) ? parsed : (Guid?)null;
+        var raw = Query<string?>("courseOfferingId", isRequired: false);
+        var courseOfferingId = Guid.TryParse(raw, out var parsed) ? parsed : (Guid?)null;
         var isStudentOnly = User.IsInRole("Student")
             && !User.IsInRole("Admin")
             && !User.IsInRole("SuperAdmin")
             && !User.IsInRole("Instructor")
             && !User.IsInRole("Lecturer");
         var userId = isStudentOnly ? await userContext.GetUserIdAsync(ct) : null;
-        await SendAsync(await service.GetAssignmentsAsync(courseId, userId, isStudentOnly, ct), ct);
+        await SendAsync(await service.GetAssignmentsAsync(courseOfferingId, userId, isStudentOnly, ct), ct);
     }
 }
 
@@ -164,5 +164,29 @@ public sealed class GradeAssignmentSubmissionEndpoint(IAssignmentService service
             return;
         }
         await SendAsync(await service.GradeAsync(req, graderId.Value, ct), ct);
+    }
+}
+
+public record ImportAssignmentsRequest(Guid SourceOfferingId, Guid TargetOfferingId);
+
+public sealed class ImportAssignmentsFromOfferingEndpoint(IAssignmentService service, ICurrentUserContext userContext) : ApiEndpoint<ImportAssignmentsRequest, int>
+{
+    public override void Configure()
+    {
+        Post("assignments/import-from-offering");
+        Roles("SuperAdmin", "Admin", "Instructor", "Lecturer");
+        Tags("Assignments");
+    }
+
+    public override async Task HandleAsync(ImportAssignmentsRequest req, CancellationToken ct)
+    {
+        var userId = await userContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
+        var result = await service.ImportAssignmentsFromOfferingAsync(req.SourceOfferingId, req.TargetOfferingId, userId.Value, ct);
+        await SendAsync(result, ct);
     }
 }

@@ -98,6 +98,18 @@ public record CreateLevelSemesterConfigRequest(
     Semester Semester,
     int MaxCreditLoad);
 
+public record AddAcademicLevelRequest(
+    string Name,
+    int Order,
+    int Semester1MaxCreditLoad = 24,
+    int Semester2MaxCreditLoad = 24);
+
+public record UpdateAcademicLevelRequest(
+    string Name,
+    int Order,
+    int Semester1MaxCreditLoad = 24,
+    int Semester2MaxCreditLoad = 24);
+
 public record UpdateAcademicProgramRequest(
     string Name,
     string Code,

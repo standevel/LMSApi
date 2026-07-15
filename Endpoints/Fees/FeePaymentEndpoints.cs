@@ -289,9 +289,10 @@ public sealed class GetAllPaymentsEndpoint(IFeeService feeService)
     {
         var statusStr = Query<string?>("status", isRequired: false);
         var sessionIdStr = Query<string?>("sessionId", isRequired: false);
+        var methodStr = Query<string?>("method", isRequired: false);
         Data.Enums.PaymentStatus? status = statusStr != null && Enum.TryParse<Data.Enums.PaymentStatus>(statusStr, true, out var s) ? s : null;
         Guid? sessionId = sessionIdStr != null && Guid.TryParse(sessionIdStr, out var g) ? g : null;
-        var payments = await feeService.GetAllPaymentsAsync(status, sessionId);
+        var payments = await feeService.GetAllPaymentsAsync(status, sessionId, methodStr);
         await SendSuccessAsync(payments.Select(FeeMapper.ToPaymentResponse), ct);
     }
 }

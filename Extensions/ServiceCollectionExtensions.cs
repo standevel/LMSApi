@@ -160,6 +160,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<IAcademicProgramService, AcademicProgramService>();
         services.AddScoped<IAcademicSessionService, AcademicSessionService>();
+        services.AddScoped<ISessionRolloverService, SessionRolloverService>();
         services.AddScoped<ICurriculumService, CurriculumService>();
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<IFacultyService, FacultyService>();

@@ -75,45 +75,28 @@ public sealed class CourseService(
             Semester    = request.Semester,
             IsActive    = true,
             // Offerings with session, semester, and optional program+level
-            Offerings = request.Offerings.Select(o => new CourseOffering
-            {
-                AcademicSessionId = o.AcademicSessionId,
-                Semester          = (Semester)o.Semester
-            }).ToList()
+            Offerings = request.Offerings
+                .GroupBy(o => new { o.AcademicSessionId, o.Semester })
+                .Select(g => new CourseOffering
+                {
+                    AcademicSessionId = g.Key.AcademicSessionId,
+                    Semester          = (Semester)g.Key.Semester,
+                    Programs = g.Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
+                                .Select(r => new { r.ProgramId, r.LevelId })
+                                .Distinct()
+                                .Select(rp => new CourseOfferingProgram
+                                {
+                                    ProgramId = rp.ProgramId!.Value,
+                                    LevelId = rp.LevelId!.Value
+                                }).ToList()
+                }).ToList()
         };
 
         await courseRepository.AddAsync(course, ct);
         await courseRepository.SaveChangesAsync(ct);
 
-        // Attach programs to offerings if provided in the request
-        var attachmentErrors = new List<string>();
-        foreach (var offeringRequest in request.Offerings.Where(o => o.ProgramId.HasValue && o.LevelId.HasValue))
-        {
-            var offering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == offeringRequest.AcademicSessionId && o.Semester == (Semester)offeringRequest.Semester);
-            if (offering == null)
-            {
-                attachmentErrors.Add($"No offering found for session {offeringRequest.AcademicSessionId}, semester {offeringRequest.Semester}");
-                continue;
-            }
-
-            var attachResult = await AttachProgramAsync(offering.Id, offeringRequest.ProgramId.GetValueOrDefault(), offeringRequest.LevelId.GetValueOrDefault(), ct);
-            if (attachResult.IsError)
-            {
-                attachmentErrors.Add($"Failed to attach program {offeringRequest.ProgramId} to offering: {attachResult.FirstError.Description}");
-            }
-        }
-
-        if (attachmentErrors.Any())
-        {
-            // Course was created but some attachments failed - return partial success with warnings
-            await LogActionAsync("Create", "Course", course.Id.ToString(),
-                $"Created course: {course.Code} - {course.Title} with attachment warnings: {string.Join("; ", attachmentErrors)}", ct);
-        }
-        else
-        {
-            await LogActionAsync("Create", "Course", course.Id.ToString(),
-                $"Created course: {course.Code} - {course.Title}", ct);
-        }
+        await LogActionAsync("Create", "Course", course.Id.ToString(),
+            $"Created course: {course.Code} - {course.Title}", ct);
 
         var createdCourse = await courseRepository.GetByIdAsync(course.Id, ct);
         return createdCourse!.ToDto();
@@ -132,30 +115,70 @@ public sealed class CourseService(
         course.Semester    = request.Semester;
 
         var existingOfferings = course.Offerings.ToList();
-        var requestOfferings  = request.Offerings.ToList();
+        var uniqueOfferingRequests = request.Offerings
+            .GroupBy(r => new { r.AcademicSessionId, r.Semester })
+            .ToList();
 
         // Remove offerings no longer in the request (matched by session+semester)
-        foreach (var existing in existingOfferings)
-        {
-            var matched = requestOfferings.FirstOrDefault(r =>
-                r.AcademicSessionId == existing.AcademicSessionId &&
-                (Semester)r.Semester == existing.Semester);
+        var offeringsToRemove = course.Offerings
+            .Where(existing => !uniqueOfferingRequests.Any(g => 
+                g.Key.AcademicSessionId == existing.AcademicSessionId && 
+                g.Key.Semester == (int)existing.Semester))
+            .ToList();
 
-            if (matched == null)
-                dbContext.CourseOfferings.Remove(existing);
-            else
-                requestOfferings.Remove(matched);
+        foreach (var toRemove in offeringsToRemove)
+        {
+            course.Offerings.Remove(toRemove);
+            dbContext.CourseOfferings.Remove(toRemove);
         }
 
-        // Add new offerings
-        foreach (var req in requestOfferings)
+        // Add or Update offerings and sync programs
+        foreach (var offeringGroup in uniqueOfferingRequests)
         {
-            dbContext.CourseOfferings.Add(new CourseOffering
+            var session = offeringGroup.Key.AcademicSessionId;
+            var sem = (Semester)offeringGroup.Key.Semester;
+
+            var offering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == session && o.Semester == sem);
+            
+            if (offering == null)
             {
-                CourseId          = id,
-                AcademicSessionId = req.AcademicSessionId,
-                Semester          = (Semester)req.Semester
-            });
+                offering = new CourseOffering
+                {
+                    CourseId = id,
+                    AcademicSessionId = session,
+                    Semester = sem,
+                    Programs = new List<CourseOfferingProgram>()
+                };
+                course.Offerings.Add(offering);
+            }
+
+            // Sync programs
+            var requestedPrograms = offeringGroup
+                .Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
+                .Select(r => new { ProgramId = r.ProgramId!.Value, LevelId = r.LevelId!.Value })
+                .Distinct()
+                .ToList();
+
+            var programsToRemove = offering.Programs
+                .Where(p => !requestedPrograms.Any(rp => rp.ProgramId == p.ProgramId && rp.LevelId == p.LevelId))
+                .ToList();
+
+            foreach (var pToRemove in programsToRemove)
+            {
+                offering.Programs.Remove(pToRemove);
+            }
+
+            foreach (var rp in requestedPrograms)
+            {
+                if (!offering.Programs.Any(p => p.ProgramId == rp.ProgramId && p.LevelId == rp.LevelId))
+                {
+                    offering.Programs.Add(new CourseOfferingProgram
+                    {
+                        ProgramId = rp.ProgramId,
+                        LevelId = rp.LevelId
+                    });
+                }
+            }
         }
 
         await courseRepository.UpdateAsync(course, ct);
@@ -191,7 +214,7 @@ public sealed class CourseService(
             return Error.Conflict("Course.HasDegreeRequirements", "Cannot delete this course because it is linked to degree requirements.");
         }
 
-        var hasAssignments = await dbContext.Assignments.AnyAsync(x => x.CourseId == id, ct);
+        var hasAssignments = await dbContext.Assignments.AnyAsync(x => x.CourseOffering.CourseId == id, ct);
         if (hasAssignments)
         {
             return Error.Conflict("Course.HasAssignments", "Cannot delete this course because it has associated assignments.");

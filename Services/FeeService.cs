@@ -558,7 +558,7 @@ public sealed class FeeService(
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<FeePayment>> GetAllPaymentsAsync(PaymentStatus? status = null, Guid? sessionId = null)
+    public async Task<IEnumerable<FeePayment>> GetAllPaymentsAsync(PaymentStatus? status = null, Guid? sessionId = null, string? methodFilter = null)
     {
         var q = db.FeePayments
             .Include(p => p.StudentFeeRecord)
@@ -568,6 +568,19 @@ public sealed class FeeService(
             .AsQueryable();
         if (status.HasValue) q = q.Where(p => p.Status == status.Value);
         if (sessionId.HasValue) q = q.Where(p => p.StudentFeeRecord.SessionId == sessionId.Value);
+
+        if (!string.IsNullOrWhiteSpace(methodFilter))
+        {
+            if (methodFilter.Equals("Manual", StringComparison.OrdinalIgnoreCase))
+            {
+                q = q.Where(p => p.PaymentMethod == PaymentMethod.Manual);
+            }
+            else if (methodFilter.Equals("Online", StringComparison.OrdinalIgnoreCase))
+            {
+                q = q.Where(p => p.PaymentMethod != PaymentMethod.Manual);
+            }
+        }
+
         return await q.OrderByDescending(p => p.PaidAt).ToListAsync();
     }
 

@@ -609,6 +609,600 @@ public sealed class GradebookService : IGradebookService
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 
+    public async Task<ErrorOr<GradebookExcelTemplateDto>> GenerateSenateResultTemplateAsync(Guid courseOfferingId, string? collegeName = null, CancellationToken ct = default)
+    {
+        // ── Load Target Offering and Cohort Context ───────────────────────
+        var offering = await _dbContext.CourseOfferings
+            .Include(x => x.Course)
+                .ThenInclude(c => c.Program)
+                    .ThenInclude(p => p.Department)
+                        .ThenInclude(d => d.Faculty)
+            .Include(x => x.AcademicSession)
+            .Include(x => x.Programs).ThenInclude(p => p.Program)
+                .ThenInclude(p => p.Department).ThenInclude(d => d.Faculty)
+            .Include(x => x.Programs).ThenInclude(p => p.Level)
+            .FirstOrDefaultAsync(x => x.Id == courseOfferingId, ct);
+
+        if (offering == null)
+            return Error.NotFound("Course.NotFound", "Course offering not found");
+
+        var offeringProgram = offering.Programs.FirstOrDefault();
+        var programName  = offeringProgram?.Program?.Name ?? offering.Course.Program?.Name ?? "N/A";
+        var levelName    = offeringProgram?.Level?.Name    ?? "N/A";
+        var sessionName  = offering.AcademicSession.Name;
+        var semesterLabel = offering.Semester == Data.Enums.Semester.First ? "FIRST" : "SECOND";
+
+        var resolvedFaculty = offeringProgram?.Program?.Department?.Faculty
+                           ?? offering.Course.Program?.Department?.Faculty;
+        var facultyLabel    = resolvedFaculty?.Label ?? "COLLEGE";
+        var facultyName     = collegeName
+                           ?? resolvedFaculty?.Name
+                           ?? programName;
+        var collegeHeader   = $"{facultyLabel.ToUpper()} OF {facultyName.ToUpper()}";
+
+        // Query all peer course offerings in this cohort (same Session, Semester, Program, Level)
+        var targetProgramIds = offering.Programs.Select(p => p.ProgramId).ToList();
+        var targetLevelIds = offering.Programs.Select(p => p.LevelId).ToList();
+
+        var peerOfferings = await _dbContext.CourseOfferings
+            .Include(x => x.Course)
+            .Where(x => x.AcademicSessionId == offering.AcademicSessionId &&
+                        x.Semester == offering.Semester &&
+                        x.Programs.Any(p => targetProgramIds.Contains(p.ProgramId) && targetLevelIds.Contains(p.LevelId)))
+            .ToListAsync(ct);
+
+        var uniquePeerOfferings = peerOfferings
+            .GroupBy(x => x.Course.Code)
+            .Select(g => g.First())
+            .OrderBy(x => x.Course.Code)
+            .ToList();
+
+        // Get student summaries for each of these peer offerings
+        var allSummaries = new Dictionary<Guid, List<StudentGradeSummaryDto>>();
+        foreach (var peer in uniquePeerOfferings)
+        {
+            var sumRes = await GetStudentGradeSummariesAsync(peer.Id, ct);
+            if (!sumRes.IsError)
+            {
+                allSummaries[peer.Id] = sumRes.Value;
+            }
+        }
+
+        // Gather all enrolled students across all peer offerings
+        var peerOfferingIds = uniquePeerOfferings.Select(x => x.Id).ToList();
+        var enrollments = await _dbContext.CourseEnrollments
+            .AsNoTracking()
+            .Where(e => peerOfferingIds.Contains(e.CourseOfferingId) && e.Status == "Registered")
+            .Include(e => e.Student)
+            .ToListAsync(ct);
+
+        var cohortStudents = enrollments
+            .GroupBy(e => e.StudentId)
+            .Select(g => g.First().Student)
+            .OrderBy(s => s.DisplayName)
+            .ToList();
+
+        var studentIds = cohortStudents.Select(x => x.Id).ToList();
+        var studentNumberMap = await _dbContext.Students
+            .AsNoTracking()
+            .Where(s => studentIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, s => s.StudentNumber, ct);
+
+        // ── Load Template Workbook ───────────────────────────────────────
+        var templatePath = Path.Combine(AppContext.BaseDirectory, "Assets", "wigwe_result_template.xlsx");
+        if (!File.Exists(templatePath))
+        {
+            // Fallback to project root if BaseDirectory assets aren't copied yet
+            templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "wigwe_result_template.xlsx");
+            if (!File.Exists(templatePath))
+            {
+                templatePath = "/Users/mac/Apps/LMS APP/wigwe_result_template.xlsx";
+            }
+        }
+
+        using var workbook = new XLWorkbook(templatePath);
+        var ws = workbook.Worksheet("CGPA (2)");
+        ws.Name = "Senate Result";
+
+        // ── Header Metadata Row 1 ─────────────────────────────────────────
+        var deptName = offeringProgram?.Program?.Department?.Name ?? offering.Course.Program?.Department?.Name ?? "N/A";
+        var headerText = $"{facultyLabel.ToUpper()} OF {facultyName.ToUpper()}\nDEPARTMENT OF {deptName.ToUpper()}\nAcademic Year: {sessionName}\nLevel: {levelName}";
+        ws.Cell(1, 7).Value = headerText;
+
+        // ── Populate Courses (columns 9 to 38) ─────────────────────────────
+        int startCourseCol = 9;
+        int maxCourseCols = 30; // Columns I (9) to AL (38)
+        int numCourses = Math.Min(uniquePeerOfferings.Count, maxCourseCols);
+
+        for (int i = 0; i < numCourses; i++)
+        {
+            var peer = uniquePeerOfferings[i];
+            int col = startCourseCol + i;
+
+            var parts = peer.Course.Code.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var prefix = parts.FirstOrDefault() ?? "";
+            var suffix = parts.Length > 1 ? parts[1] : "";
+
+            ws.Cell(2, col).Value = prefix;
+            ws.Cell(3, col).Value = suffix;
+            ws.Cell(4, col).Value = peer.Course.CreditUnits;
+        }
+
+        // Delete unused course columns (shifting summary columns left)
+        int deleteStartCol = startCourseCol + numCourses;
+        int deleteEndCol = 38;
+        if (deleteEndCol >= deleteStartCol)
+        {
+            ws.Columns(deleteStartCol, deleteEndCol).Delete();
+        }
+
+        int deletedCount = deleteEndCol - deleteStartCol + 1;
+        int regUnitsCol = 39 - deletedCount;
+        int passedUnitsCol = 40 - deletedCount;
+        int failedUnitsCol = 41 - deletedCount;
+        int totalGpCol = 42 - deletedCount;
+        int gpaCol = 43 - deletedCount;
+        int remarksCol = 44 - deletedCount;
+
+        // Clear existing template dummy values (rows 6 to 327)
+        ws.Rows(6, 327).Clear(XLClearOptions.Contents);
+
+        // Standard grading mapping
+        Func<double, (string Grade, double Points)> getGradeAndPoints = (score) =>
+        {
+            if (score >= 70) return ("A", 5.0);
+            if (score >= 60) return ("B", 4.0);
+            if (score >= 50) return ("C", 3.0);
+            if (score >= 45) return ("D", 2.0);
+            if (score >= 40) return ("E", 1.0);
+            return ("F", 0.0);
+        };
+
+        // ── Populate Student Data Rows ─────────────────────────────────────
+        int currentRow = 6;
+        for (int k = 0; k < cohortStudents.Count; k++)
+        {
+            var student = cohortStudents[k];
+            int r1 = currentRow;
+            int r2 = currentRow + 1;
+
+            // S/N
+            ws.Cell(r1, 1).Value = k + 1;
+            ws.Range(r1, 1, r2, 1).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(r1, 1, r2, 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Matric No
+            studentNumberMap.TryGetValue(student.Id, out var matricNum);
+            ws.Cell(r1, 2).Value = matricNum ?? "N/A";
+            ws.Range(r1, 2, r2, 2).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(r1, 2, r2, 2).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Name
+            ws.Cell(r1, 3).Value = student.DisplayName ?? "Unknown";
+            ws.Range(r1, 3, r2, 8).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(r1, 3, r2, 8).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Course scores & grades
+            double totalRegisteredUnits = 0;
+            double totalPassedUnits = 0;
+            double totalFailedUnits = 0;
+            double totalGradePoints = 0;
+            var outstandingList = new List<string>();
+
+            for (int i = 0; i < numCourses; i++)
+            {
+                int col = startCourseCol + i;
+                var peer = uniquePeerOfferings[i];
+
+                double? score = null;
+                if (allSummaries.TryGetValue(peer.Id, out var peerSummaries))
+                {
+                    var studSummary = peerSummaries.FirstOrDefault(s => s.StudentId == student.Id);
+                    if (studSummary != null)
+                    {
+                        score = (double)studSummary.TotalScore;
+                    }
+                }
+
+                if (score.HasValue)
+                {
+                    var gp = getGradeAndPoints(score.Value);
+                    totalRegisteredUnits += peer.Course.CreditUnits;
+
+                    if (gp.Grade != "F")
+                    {
+                        totalPassedUnits += peer.Course.CreditUnits;
+                    }
+                    else
+                    {
+                        totalFailedUnits += peer.Course.CreditUnits;
+                        outstandingList.Add($"{peer.Course.Code} ({peer.Course.CreditUnits})");
+                    }
+
+                    totalGradePoints += gp.Points * peer.Course.CreditUnits;
+
+                    // Row 1: Score
+                    ws.Cell(r1, col).Value = Math.Round(score.Value, 1);
+                    ws.Cell(r1, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                    // Row 2: Grade formula
+                    var scoreCellRef = ws.Cell(r1, col).Address.ToString();
+                    ws.Cell(r2, col).FormulaA1 = $"=IFS({scoreCellRef}>=70,\"A\",{scoreCellRef}>=60,\"B\",{scoreCellRef}>=50,\"C\",{scoreCellRef}>=45,\"D\",{scoreCellRef}>=40,\"E\",{scoreCellRef}<40,\"F\")";
+                    ws.Cell(r2, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                }
+            }
+
+            // Summary metrics
+            // Total Registered
+            ws.Cell(r2, regUnitsCol).Value = totalRegisteredUnits;
+            ws.Cell(r2, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Total Passed
+            ws.Cell(r2, passedUnitsCol).Value = totalPassedUnits;
+            ws.Cell(r2, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Total Failed
+            ws.Cell(r2, failedUnitsCol).Value = totalFailedUnits;
+            ws.Cell(r2, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Total Grade Point
+            ws.Cell(r1, totalGpCol).Value = totalGradePoints;
+            ws.Range(r1, totalGpCol, r2, totalGpCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(r1, totalGpCol, r2, totalGpCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // GPA
+            var totalGpCell = ws.Cell(r1, totalGpCol).Address.ToString();
+            var regUnitsCell = ws.Cell(r2, regUnitsCol).Address.ToString();
+            ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({regUnitsCell}>0, ROUND({totalGpCell}/{regUnitsCell}, 2), 0)";
+            ws.Range(r1, gpaCol, r2, gpaCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(r1, gpaCol, r2, gpaCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Remarks
+            string remarksVal = outstandingList.Count > 0 ? string.Join(", ", outstandingList) : "PASS";
+            ws.Cell(r1, remarksCol).Value = remarksVal;
+            ws.Range(r1, remarksCol, r2, remarksCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(r1, remarksCol, r2, remarksCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+            // Borders and styles
+            var studentRange = ws.Range(r1, 1, r2, remarksCol);
+            studentRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            studentRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            studentRange.Style.Font.FontName = "Aptos Narrow";
+            studentRange.Style.Font.FontSize = 10;
+
+            currentRow += 2;
+        }
+
+        // Delete other sheets to return only the result worksheet
+        var sheetsToDelete = workbook.Worksheets.Where(x => x.Name != "Senate Result").ToList();
+        foreach (var sheet in sheetsToDelete)
+        {
+            workbook.Worksheets.Delete(sheet.Name);
+        }
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var fileName = $"SenateResult_{offering.Course.Code}_{sessionName}_{semesterLabel}Sem.xlsx";
+        return new GradebookExcelTemplateDto(
+            stream.ToArray(),
+            fileName,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+
+    public async Task<ErrorOr<GradebookExcelTemplateDto>> GenerateCollegeSenateResultAsync(
+        Guid academicSessionId,
+        Data.Enums.Semester semester,
+        Guid collegeId,
+        Guid levelId,
+        CancellationToken ct = default)
+    {
+        // ── Load Metadata ─────────────────────────────────────────────────
+        var session = await _dbContext.AcademicSessions.FindAsync(new object[] { academicSessionId }, ct);
+        var faculty = await _dbContext.Faculties.FindAsync(new object[] { collegeId }, ct);
+        var level = await _dbContext.Levels.FindAsync(new object[] { levelId }, ct);
+
+        if (session == null) return Error.NotFound("Session.NotFound", "Academic session not found");
+        if (faculty == null) return Error.NotFound("Faculty.NotFound", "Faculty not found");
+        if (level == null) return Error.NotFound("Level.NotFound", "Academic level not found");
+
+        var semesterLabel = semester == Data.Enums.Semester.First ? "FIRST" : "SECOND";
+
+        // ── Load Template Workbook ────────────────────────────────────────
+        var templatePath = Path.Combine(AppContext.BaseDirectory, "Assets", "wigwe_result_template.xlsx");
+        if (!File.Exists(templatePath))
+        {
+            templatePath = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "wigwe_result_template.xlsx");
+            if (!File.Exists(templatePath))
+            {
+                templatePath = "/Users/mac/Apps/LMS APP/wigwe_result_template.xlsx";
+            }
+        }
+
+        using var workbook = new XLWorkbook(templatePath);
+        var wsTemplate = workbook.Worksheet("CGPA (2)");
+
+        // ── Load Active Programs in the College ────────────────────────────
+        var programs = await _dbContext.Programs
+            .Include(p => p.Department)
+                .ThenInclude(d => d.Faculty)
+            .Where(p => p.Department.FacultyId == collegeId && p.IsActive)
+            .ToListAsync(ct);
+
+        bool hasAnyWorksheet = false;
+
+        Func<double, (string Grade, double Points)> getGradeAndPoints = (score) =>
+        {
+            if (score >= 70) return ("A", 5.0);
+            if (score >= 60) return ("B", 4.0);
+            if (score >= 50) return ("C", 3.0);
+            if (score >= 45) return ("D", 2.0);
+            if (score >= 40) return ("E", 1.0);
+            return ("F", 0.0);
+        };
+
+        foreach (var program in programs)
+        {
+            // Find all offerings for this program and level in this semester/session
+            var offerings = await _dbContext.CourseOfferings
+                .Include(co => co.Course)
+                .Where(co => co.AcademicSessionId == academicSessionId &&
+                            co.Semester == semester &&
+                            co.Programs.Any(p => p.ProgramId == program.Id && 
+                                                (p.LevelId == levelId || 
+                                                 p.Level.Order == level.Order || 
+                                                 p.Level.Name.ToLower() == level.Name.ToLower())))
+                .ToListAsync(ct);
+
+            if (offerings.Count == 0)
+                continue;
+
+            var uniquePeerOfferings = offerings
+                .GroupBy(x => x.Course.Code)
+                .Select(g => g.First())
+                .OrderBy(x => x.Course.Code)
+                .ToList();
+
+            var peerOfferingIds = uniquePeerOfferings.Select(x => x.Id).ToList();
+
+            // Load registered students for this program cohort
+            var enrollments = await _dbContext.CourseEnrollments
+                .AsNoTracking()
+                .Where(e => peerOfferingIds.Contains(e.CourseOfferingId) && e.Status == "Registered")
+                .Include(e => e.Student)
+                .ToListAsync(ct);
+
+            var cohortStudents = enrollments
+                .GroupBy(e => e.StudentId)
+                .Select(g => g.First().Student)
+                .OrderBy(s => s.DisplayName)
+                .ToList();
+
+            if (cohortStudents.Count == 0)
+                continue;
+
+            var studentIds = cohortStudents.Select(x => x.Id).ToList();
+            var studentNumberMap = await _dbContext.Students
+                .AsNoTracking()
+                .Where(s => studentIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.StudentNumber, ct);
+
+            // Fetch student summaries for each offering
+            var allSummaries = new Dictionary<Guid, List<StudentGradeSummaryDto>>();
+            foreach (var peer in uniquePeerOfferings)
+            {
+                var sumRes = await GetStudentGradeSummariesAsync(peer.Id, ct);
+                if (!sumRes.IsError)
+                {
+                    allSummaries[peer.Id] = sumRes.Value;
+                }
+            }
+
+            // Define sheet name (limited to 30 chars, no special chars)
+            var sheetName = program.Code;
+            if (string.IsNullOrWhiteSpace(sheetName)) sheetName = program.Name;
+            sheetName = sheetName.Length > 30 ? sheetName.Substring(0, 30) : sheetName;
+            foreach (var ch in new[] { '\\', '/', '?', '*', ':', '[', ']' })
+            {
+                sheetName = sheetName.Replace(ch, '_');
+            }
+
+            var ws = wsTemplate.CopyTo(sheetName);
+            hasAnyWorksheet = true;
+
+            // ── Set Metadata Row 1 ─────────────────────────────────────────
+            var facultyLabel = program.Department?.Faculty?.Label ?? faculty.Label;
+            var facultyName = program.Department?.Faculty?.Name ?? faculty.Name;
+            var deptName = program.Department?.Name ?? "N/A";
+            var headerText = $"{facultyLabel.ToUpper()} OF {facultyName.ToUpper()}\nDEPARTMENT OF {deptName.ToUpper()}\nAcademic Year: {session.Name}\nLevel: {level.Name}";
+            ws.Cell(1, 7).Value = headerText;
+
+            // ── Populate Courses (columns 9 to 38) ─────────────────────────
+            int startCourseCol = 9;
+            int maxCourseCols = 30;
+            int numCourses = Math.Min(uniquePeerOfferings.Count, maxCourseCols);
+
+            for (int i = 0; i < numCourses; i++)
+            {
+                var peer = uniquePeerOfferings[i];
+                int col = startCourseCol + i;
+
+                var parts = peer.Course.Code.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var prefix = parts.FirstOrDefault() ?? "";
+                var suffix = parts.Length > 1 ? parts[1] : "";
+
+                ws.Cell(2, col).Value = prefix;
+                ws.Cell(3, col).Value = suffix;
+                ws.Cell(4, col).Value = peer.Course.CreditUnits;
+            }
+
+            // Delete unused course columns
+            int deleteStartCol = startCourseCol + numCourses;
+            int deleteEndCol = 38;
+            if (deleteEndCol >= deleteStartCol)
+            {
+                ws.Columns(deleteStartCol, deleteEndCol).Delete();
+            }
+
+            int deletedCount = deleteEndCol - deleteStartCol + 1;
+            int regUnitsCol = 39 - deletedCount;
+            int passedUnitsCol = 40 - deletedCount;
+            int failedUnitsCol = 41 - deletedCount;
+            int totalGpCol = 42 - deletedCount;
+            int gpaCol = 43 - deletedCount;
+            int remarksCol = 44 - deletedCount;
+
+            // Clear dummy rows
+            ws.Rows(6, 327).Clear(XLClearOptions.Contents);
+
+            // ── Populate Student Data Rows ─────────────────────────────────
+            int currentRow = 6;
+            for (int k = 0; k < cohortStudents.Count; k++)
+            {
+                var student = cohortStudents[k];
+                int r1 = currentRow;
+                int r2 = currentRow + 1;
+
+                // S/N
+                ws.Cell(r1, 1).Value = k + 1;
+                ws.Range(r1, 1, r2, 1).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(r1, 1, r2, 1).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // Matric No
+                studentNumberMap.TryGetValue(student.Id, out var matricNum);
+                ws.Cell(r1, 2).Value = matricNum ?? "N/A";
+                ws.Range(r1, 2, r2, 2).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(r1, 2, r2, 2).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // Name
+                ws.Cell(r1, 3).Value = student.DisplayName ?? "Unknown";
+                ws.Range(r1, 3, r2, 8).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                ws.Range(r1, 3, r2, 8).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // Course scores & grades
+                double totalRegisteredUnits = 0;
+                double totalPassedUnits = 0;
+                double totalFailedUnits = 0;
+                double totalGradePoints = 0;
+                var outstandingList = new List<string>();
+
+                for (int i = 0; i < numCourses; i++)
+                {
+                    int col = startCourseCol + i;
+                    var peer = uniquePeerOfferings[i];
+
+                    double? score = null;
+                    if (allSummaries.TryGetValue(peer.Id, out var peerSummaries))
+                    {
+                        var studSummary = peerSummaries.FirstOrDefault(s => s.StudentId == student.Id);
+                        if (studSummary != null)
+                        {
+                            score = (double)studSummary.TotalScore;
+                        }
+                    }
+
+                    if (score.HasValue)
+                    {
+                        var gp = getGradeAndPoints(score.Value);
+                        totalRegisteredUnits += peer.Course.CreditUnits;
+
+                        if (gp.Grade != "F")
+                        {
+                            totalPassedUnits += peer.Course.CreditUnits;
+                        }
+                        else
+                        {
+                            totalFailedUnits += peer.Course.CreditUnits;
+                            outstandingList.Add($"{peer.Course.Code} ({peer.Course.CreditUnits})");
+                        }
+
+                        totalGradePoints += gp.Points * peer.Course.CreditUnits;
+
+                        // Row 1: Score
+                        ws.Cell(r1, col).Value = Math.Round(score.Value, 1);
+                        ws.Cell(r1, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                        // Row 2: Grade formula
+                        var scoreCellRef = ws.Cell(r1, col).Address.ToString();
+                        ws.Cell(r2, col).FormulaA1 = $"=IFS({scoreCellRef}>=70,\"A\",{scoreCellRef}>=60,\"B\",{scoreCellRef}>=50,\"C\",{scoreCellRef}>=45,\"D\",{scoreCellRef}>=40,\"E\",{scoreCellRef}<40,\"F\")";
+                        ws.Cell(r2, col).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    }
+                }
+
+                // Summary metrics
+                // Total Registered
+                ws.Cell(r2, regUnitsCol).Value = totalRegisteredUnits;
+                ws.Cell(r2, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                // Total Passed
+                ws.Cell(r2, passedUnitsCol).Value = totalPassedUnits;
+                ws.Cell(r2, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                // Total Failed
+                ws.Cell(r2, failedUnitsCol).Value = totalFailedUnits;
+                ws.Cell(r2, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                // Total Grade Point
+                ws.Cell(r1, totalGpCol).Value = totalGradePoints;
+                ws.Range(r1, totalGpCol, r2, totalGpCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(r1, totalGpCol, r2, totalGpCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // GPA
+                var totalGpCell = ws.Cell(r1, totalGpCol).Address.ToString();
+                var regUnitsCell = ws.Cell(r2, regUnitsCol).Address.ToString();
+                ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({regUnitsCell}>0, ROUND({totalGpCell}/{regUnitsCell}, 2), 0)";
+                ws.Range(r1, gpaCol, r2, gpaCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(r1, gpaCol, r2, gpaCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // Remarks
+                string remarksVal = outstandingList.Count > 0 ? string.Join(", ", outstandingList) : "PASS";
+                ws.Cell(r1, remarksCol).Value = remarksVal;
+                ws.Range(r1, remarksCol, r2, remarksCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(r1, remarksCol, r2, remarksCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
+                // Borders and styles
+                var studentRange = ws.Range(r1, 1, r2, remarksCol);
+                studentRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                studentRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+                studentRange.Style.Font.FontName = "Aptos Narrow";
+                studentRange.Style.Font.FontSize = 10;
+
+                currentRow += 2;
+            }
+        }
+
+        if (!hasAnyWorksheet)
+        {
+            var ws = workbook.Worksheets.Add("No Results");
+            ws.Cell(1, 1).Value = "No active course offerings or registrations found for this college, level, and semester.";
+            ws.Cell(1, 1).Style.Font.Bold = true;
+            ws.Cell(1, 1).Style.Font.FontSize = 12;
+            ws.Column(1).AdjustToContents();
+        }
+
+        // Delete other sheets to return only the newly generated results
+        var sheetsToDelete = workbook.Worksheets.Where(x => x.Name != "No Results" && !programs.Any(p => x.Name == (p.Code.Length > 30 ? p.Code.Substring(0, 30) : p.Code) || x.Name == (p.Name.Length > 30 ? p.Name.Substring(0, 30) : p.Name))).ToList();
+        foreach (var sheet in sheetsToDelete)
+        {
+            workbook.Worksheets.Delete(sheet.Name);
+        }
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var cleanFacultyName = faculty.Name.Replace(" ", "_");
+        var cleanSessionName = session.Name.Replace("/", "_");
+        var fileName = $"SenateResult_{cleanFacultyName}_{cleanSessionName}_{semesterLabel}Sem.xlsx";
+
+        return new GradebookExcelTemplateDto(
+            stream.ToArray(),
+            fileName,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    }
+
+
     public async Task<ErrorOr<GradeUploadResultDto>> BulkUploadGradesAsync(
         Guid courseOfferingId,
         IFormFile excelFile,

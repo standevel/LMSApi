@@ -450,7 +450,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
         {
             entity.ToTable("AuditLogs");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Action).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(256).IsRequired();
             entity.Property(x => x.EntityName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.EntityId).HasMaxLength(100).IsRequired();
             entity.Property(x => x.Changes).HasColumnType("nvarchar(max)");
@@ -840,7 +840,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.DefaultCA3Weight).HasPrecision(5, 2);
             entity.Property(x => x.DefaultExamWeight).HasPrecision(5, 2);
             entity.Property(x => x.GpaScale).HasPrecision(3, 2);
-            entity.Property(x => x.RoundingStrategy).HasConversion<string>().IsRequired().HasDefaultValue(RoundingStrategy.Standard);
+            entity.Property(x => x.RoundingStrategy).HasConversion<string>().IsRequired().HasDefaultValue(RoundingStrategy.Standard).HasSentinel((RoundingStrategy)(-1));
             entity.Property(x => x.RoundingDecimalPlaces).HasDefaultValue(0);
             entity.Property(x => x.GraceThreshold).HasPrecision(5, 2).HasDefaultValue(0.00m);
         });
@@ -2129,12 +2129,12 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.IsDeleted).IsRequired();
             entity.HasQueryFilter(x => !x.IsDeleted);
 
-            entity.HasOne(x => x.Course)
+            entity.HasOne(x => x.CourseOffering)
                 .WithMany()
-                .HasForeignKey(x => x.CourseId)
+                .HasForeignKey(x => x.CourseOfferingId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => x.CourseId);
+            entity.HasIndex(x => x.CourseOfferingId);
             entity.HasIndex(x => x.DueDate);
         });
 

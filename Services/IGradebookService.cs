@@ -28,6 +28,8 @@ public interface IGradebookService
     Task<ErrorOr<int>> UpdateStudentGradeSummariesAsync(Guid courseOfferingId, UpdateStudentGradeSummaryRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradeUploadResultDto>> BulkUploadGradesAsync(Guid courseOfferingId, IFormFile excelFile, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradebookExcelTemplateDto>> GenerateExcelTemplateAsync(Guid courseOfferingId, CancellationToken ct = default);
+    Task<ErrorOr<GradebookExcelTemplateDto>> GenerateSenateResultTemplateAsync(Guid courseOfferingId, string? collegeName = null, CancellationToken ct = default);
+    Task<ErrorOr<GradebookExcelTemplateDto>> GenerateCollegeSenateResultAsync(Guid academicSessionId, Data.Enums.Semester semester, Guid collegeId, Guid levelId, CancellationToken ct = default);
     
     // Gradebook Summary & Analytics
     Task<ErrorOr<GradebookSummaryDto>> GetGradebookSummaryAsync(Guid courseOfferingId, Guid? userId, CancellationToken ct = default);

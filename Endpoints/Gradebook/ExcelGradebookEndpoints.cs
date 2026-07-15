@@ -1,7 +1,9 @@
 using FastEndpoints;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
 using LMS.Api.Security;
 using LMS.Api.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Gradebook;
 
@@ -168,5 +170,144 @@ public sealed class MigrateClassterResultsEndpoint : ApiEndpointWithoutRequest<G
         }
 
         await SendSuccessAsync(result.Value, ct, "Classter migration completed successfully");
+    }
+}
+
+public sealed class DownloadSenateResultEndpoint : ApiEndpointWithoutRequest<object>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly LmsDbContext _dbContext;
+    private readonly ICurrentUserContext _currentUser;
+
+    public DownloadSenateResultEndpoint(IGradebookService gradebookService, LmsDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        _gradebookService = gradebookService;
+        _dbContext = dbContext;
+        _currentUser = currentUser;
+    }
+
+    public override void Configure()
+    {
+        Get("gradebook/courses/{offeringId:guid}/senate-result");
+        Roles("SuperAdmin", "Admin", "Dean");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var offeringId = Route<Guid>("offeringId");
+        var userId     = await _currentUser.GetUserIdAsync(ct);
+
+        string? collegeName = null;
+
+        // Admin/SuperAdmin: accept optional collegeId query param
+        var collegeIdStr = Query<string?>("collegeId", isRequired: false);
+        if (!string.IsNullOrWhiteSpace(collegeIdStr) && Guid.TryParse(collegeIdStr, out var collegeId))
+        {
+            var faculty = await _dbContext.Faculties.FindAsync([collegeId], ct);
+            if (faculty != null)
+                collegeName = $"{faculty.Label.ToUpper()} OF {faculty.Name.ToUpper()}";
+        }
+        // Dean: auto-resolve their own college
+        else if (User.IsInRole("Dean") && userId.HasValue)
+        {
+            var deanFaculty = await _dbContext.Faculties
+                .FirstOrDefaultAsync(f => f.DeanId == userId.Value, ct);
+            if (deanFaculty != null)
+                collegeName = $"{deanFaculty.Label.ToUpper()} OF {deanFaculty.Name.ToUpper()}";
+        }
+
+        var result = await _gradebookService.GenerateSenateResultTemplateAsync(offeringId, collegeName, ct);
+
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        var template = result.Value;
+
+        HttpContext.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{template.FileName}\"";
+        HttpContext.Response.ContentType = template.ContentType;
+
+        await HttpContext.Response.Body.WriteAsync(template.FileContent, ct);
+        await HttpContext.Response.CompleteAsync();
+    }
+}
+
+public sealed class DownloadCollegeSenateResultEndpoint : ApiEndpointWithoutRequest<object>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly LmsDbContext _dbContext;
+    private readonly ICurrentUserContext _currentUser;
+
+    public DownloadCollegeSenateResultEndpoint(IGradebookService gradebookService, LmsDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        _gradebookService = gradebookService;
+        _dbContext = dbContext;
+        _currentUser = currentUser;
+    }
+
+    public override void Configure()
+    {
+        Get("gradebook/senate-result/college");
+        Roles("SuperAdmin", "Admin", "Dean");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await _currentUser.GetUserIdAsync(ct);
+        Guid resolvedCollegeId = Guid.Empty;
+
+        // Auto-resolve college if the user is a Dean
+        if (User.IsInRole("Dean") && userId.HasValue)
+        {
+            var deanFaculty = await _dbContext.Faculties
+                .FirstOrDefaultAsync(f => f.DeanId == userId.Value, ct);
+            if (deanFaculty != null)
+            {
+                resolvedCollegeId = deanFaculty.Id;
+            }
+        }
+
+        // Otherwise read collegeId query parameter
+        if (resolvedCollegeId == Guid.Empty)
+        {
+            var collegeIdStr = Query<string>("collegeId", isRequired: true);
+            if (!Guid.TryParse(collegeIdStr, out resolvedCollegeId))
+            {
+                await SendFailureAsync(400, "Invalid college ID", "INVALID_COLLEGE", "Please provide a valid college ID", ct);
+                return;
+            }
+        }
+
+        var sessionIdStr = Query<string>("academicSessionId", isRequired: true);
+        var semesterStr = Query<string>("semester", isRequired: true);
+        var levelIdStr = Query<string>("levelId", isRequired: true);
+
+        if (!Guid.TryParse(sessionIdStr, out var sessionId) ||
+            !Enum.TryParse<LMS.Api.Data.Enums.Semester>(semesterStr, ignoreCase: true, out var semester) ||
+            !Guid.TryParse(levelIdStr, out var levelId))
+        {
+            await SendFailureAsync(400, "Invalid query parameters", "INVALID_PARAMS", "Please provide valid session, semester, and level IDs", ct);
+            return;
+        }
+
+        var result = await _gradebookService.GenerateCollegeSenateResultAsync(sessionId, semester, resolvedCollegeId, levelId, ct);
+
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        var template = result.Value;
+
+        HttpContext.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{template.FileName}\"";
+        HttpContext.Response.ContentType = template.ContentType;
+
+        await HttpContext.Response.Body.WriteAsync(template.FileContent, ct);
+        await HttpContext.Response.CompleteAsync();
     }
 }
