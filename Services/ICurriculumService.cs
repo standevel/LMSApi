@@ -19,5 +19,6 @@ public interface ICurriculumService
     Task<ErrorOr<bool>> AddPrerequisiteAsync(Guid courseId, AddCoursePrerequisiteRequest request, CancellationToken ct = default);
     Task<ErrorOr<List<CurriculumHistoryDto>>> GetHistoryAsync(Guid curriculumId, CancellationToken ct = default);
     Task<ErrorOr<CurriculumDto>> RemoveLevelAsync(Guid curriculumId, Guid levelId, CancellationToken ct = default);
+    Task<ErrorOr<CurriculumDto>> RemoveCourseAsync(Guid curriculumId, Guid id, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> DeleteCurriculumAsync(Guid curriculumId, CancellationToken ct = default);
 }

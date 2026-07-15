@@ -424,4 +424,21 @@ public sealed class CurriculumService(
         var result = await curriculumRepository.GetByIdAsync(curriculumId, ct);
         return result!.ToDto();
     }
+
+    public async Task<ErrorOr<CurriculumDto>> RemoveCourseAsync(Guid curriculumId, Guid id, CancellationToken ct = default)
+    {
+        var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        var course = curriculum.Courses.FirstOrDefault(c => c.Id == id);
+        if (course is null) return Error.NotFound("CurriculumCourse.NotFound", "The curriculum course mapping was not found.");
+
+        await curriculumRepository.DeleteCourseAsync(course, ct);
+        await curriculumRepository.SaveChangesAsync(ct);
+
+        await LogActionAsync("RemoveCourse", "Curriculum", curriculumId.ToString(), $"Removed course {course.Course?.Code ?? course.CourseId.ToString()} from curriculum", ct);
+
+        var result = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        return result!.ToDto();
+    }
 }
