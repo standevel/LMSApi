@@ -61,7 +61,9 @@ public record AcademicProgramDto(
     int MinJambScore,
     int MaxAdmissions,
     string RequiredJambSubjectsJson,
-    string RequiredOLevelSubjectsJson);
+    string RequiredOLevelSubjectsJson,
+    Guid? ParentProgramId = null,
+    int? SpecializationStartYear = null);
 
 public record AcademicLevelDto(
     Guid Id,
@@ -87,7 +89,9 @@ public record CreateAcademicProgramRequest(
     int MinJambScore = 150,
     int MaxAdmissions = 100,
     string RequiredJambSubjectsJson = "[]",
-    string RequiredOLevelSubjectsJson = "[]");
+    string RequiredOLevelSubjectsJson = "[]",
+    Guid? ParentProgramId = null,
+    int? SpecializationStartYear = null);
 
 public record CreateAcademicLevelRequest(
     string Name,
@@ -121,7 +125,9 @@ public record UpdateAcademicProgramRequest(
     int MinJambScore,
     int MaxAdmissions,
     string RequiredJambSubjectsJson,
-    string RequiredOLevelSubjectsJson);
+    string RequiredOLevelSubjectsJson,
+    Guid? ParentProgramId = null,
+    int? SpecializationStartYear = null);
 
 public record EnrollStudentRequest(
     Guid StudentId,

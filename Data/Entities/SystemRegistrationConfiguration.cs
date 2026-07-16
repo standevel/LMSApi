@@ -18,6 +18,11 @@ public sealed class SystemRegistrationConfiguration
     /// Whether to dynamically calculate and enforce minimum credit hours from the curriculum
     /// </summary>
     public bool EnforceMinCredits { get; set; } = true;
+
+    /// <summary>
+    /// Global template for student matric numbers (defaults to "WU/{YY}/{PROGRAM}/{SEQ}")
+    /// </summary>
+    public string MatricNumberFormat { get; set; } = "WU/{YY}/{PROGRAM}/{SEQ}";
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

@@ -94,6 +94,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
       public DbSet<ScheduleAdjustmentRequest> ScheduleAdjustmentRequests => Set<ScheduleAdjustmentRequest>();
       public DbSet<PrerequisiteOverride> PrerequisiteOverrides => Set<PrerequisiteOverride>();
       public DbSet<ProgramSwitchRequest> ProgramSwitchRequests => Set<ProgramSwitchRequest>();
+      public DbSet<MajorDeclarationRequest> MajorDeclarationRequests => Set<MajorDeclarationRequest>();
       public DbSet<CourseAdviserAssignment> CourseAdviserAssignments => Set<CourseAdviserAssignment>();
       public DbSet<AdvisingNote> AdvisingNotes => Set<AdvisingNote>();
       public DbSet<RegistrationVerification> RegistrationVerifications => Set<RegistrationVerification>();
@@ -243,6 +244,11 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .WithMany(x => x.Programs)
                 .HasForeignKey(x => x.DepartmentId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.ParentProgram)
+                .WithMany(x => x.ChildPrograms)
+                .HasForeignKey(x => x.ParentProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Department>(entity =>
@@ -1902,6 +1908,37 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.StudentId);
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => new { x.StudentId, x.Status });
+        });
+
+        modelBuilder.Entity<MajorDeclarationRequest>(entity =>
+        {
+            entity.ToTable("MajorDeclarationRequests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.RejectionReason).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ParentProgram)
+                .WithMany()
+                .HasForeignKey(x => x.ParentProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.DeclaredProgram)
+                .WithMany()
+                .HasForeignKey(x => x.DeclaredProgramId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ApprovedBy)
+                .WithMany()
+                .HasForeignKey(x => x.ApprovedById)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.StudentId);
+            entity.HasIndex(x => x.Status);
         });
 
         // ===== Phase 5: Advanced Features =====

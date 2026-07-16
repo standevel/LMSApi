@@ -8,6 +8,7 @@ using LMS.Api.Data.Entities;
 using LMS.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ErrorOr;
 
 namespace LMS.Api.Services;
 
@@ -24,6 +25,8 @@ public interface ITimetableService
     Task<IEnumerable<LectureTimetableSlot>> GetWeekViewAsync(DateOnly weekStart);
     Task<IEnumerable<LectureTimetableSlot>> GetWeekViewAsync(Guid sessionId, int weekNumber, Guid? lecturerId = null);
     Task<IEnumerable<LectureTimetableSlot>> GetCourseOfferingTimetableAsync(Guid courseOfferingId);
+    Task<IEnumerable<StudentExamDto>> GetAdminExamsAsync(Guid sessionId, Guid? facultyId = null, Guid? departmentId = null, CancellationToken ct = default);
+    Task<ErrorOr<StudentExamDto>> ScheduleExamAsync(Guid courseOfferingId, string title, string? description, DateTime examDate, decimal maxMarks, double durationHours, CancellationToken ct = default);
 }
 
 public class TimeSlot
@@ -724,5 +727,199 @@ public class TimetableService : ITimetableService
                     sessionName);
             }
         }
+    }
+
+    public async Task<IEnumerable<StudentExamDto>> GetAdminExamsAsync(Guid sessionId, Guid? facultyId = null, Guid? departmentId = null, CancellationToken ct = default)
+    {
+        if (sessionId == Guid.Empty)
+        {
+            return new List<StudentExamDto>();
+        }
+
+        // Fetch course offerings for the session
+        var query = _context.CourseOfferings
+            .Include(co => co.Course).ThenInclude(c => c.Program).ThenInclude(p => p.Department)
+            .Where(co => co.AcademicSessionId == sessionId);
+
+        if (facultyId.HasValue && facultyId.Value != Guid.Empty)
+        {
+            query = query.Where(co => co.Course.Program.Department.FacultyId == facultyId.Value);
+        }
+
+        if (departmentId.HasValue && departmentId.Value != Guid.Empty)
+        {
+            query = query.Where(co => co.Course.Program.DepartmentId == departmentId.Value);
+        }
+
+        var offerings = await query.ToListAsync(ct);
+        if (offerings.Count == 0)
+        {
+            return new List<StudentExamDto>();
+        }
+
+        var offeringIds = offerings.Select(co => co.Id).ToList();
+
+        // Fetch assessments in exam category
+        var exams = await _context.Assessments
+            .Include(a => a.CourseOffering).ThenInclude(co => co.Course)
+            .Include(a => a.AssessmentCategory)
+            .Where(a => offeringIds.Contains(a.CourseOfferingId) && 
+                        (a.AssessmentCategory.IsExamCategory || a.AssessmentCategory.CategoryType == AssessmentCategoryType.Exam))
+            .ToListAsync(ct);
+
+        // Fetch quizzes for these course offerings to see if any matches
+        var quizzes = await _context.Quizzes
+            .Include(q => q.Setting)
+            .Include(q => q.AssessmentCategory)
+            .Where(q => offeringIds.Contains(q.CourseOfferingId))
+            .ToListAsync(ct);
+
+        var examDtos = new List<StudentExamDto>();
+
+        foreach (var exam in exams)
+        {
+            var matchingQuiz = quizzes.FirstOrDefault(q => q.CourseOfferingId == exam.CourseOfferingId && 
+                                                           q.Title.Equals(exam.Title, StringComparison.OrdinalIgnoreCase));
+            
+            bool isOnline = matchingQuiz != null;
+            Guid? quizId = matchingQuiz?.Id;
+            
+            string venue = "Main Hall";
+            if (isOnline && matchingQuiz != null)
+            {
+                bool isCbt = matchingQuiz.Setting != null && !string.IsNullOrWhiteSpace(matchingQuiz.Setting.AllowedCbtHallIdsJson) && matchingQuiz.Setting.AllowedCbtHallIdsJson != "[]";
+                venue = isCbt ? "CBT Exam" : "Online Exam";
+            }
+
+            examDtos.Add(new StudentExamDto(
+                exam.Id,
+                exam.CourseOfferingId,
+                exam.CourseOffering.Course?.Code ?? "Unknown",
+                exam.CourseOffering.Course?.Title ?? "Unknown",
+                exam.Title,
+                exam.Description,
+                exam.AssessmentDate,
+                venue,
+                exam.MaxMarks,
+                isOnline,
+                quizId
+            ));
+        }
+
+        // Include any quiz matching "exam" keywords in the title or having an exam category that is not already matched
+        foreach (var quiz in quizzes)
+        {
+            var isAlreadyMatched = examDtos.Any(e => e.QuizId == quiz.Id);
+            bool isExamCategory = quiz.AssessmentCategory != null && 
+                                 (quiz.AssessmentCategory.IsExamCategory || 
+                                  quiz.AssessmentCategory.CategoryType == AssessmentCategoryType.Exam);
+            
+            bool isExamQuiz = isExamCategory ||
+                              quiz.Title.Contains("exam", StringComparison.OrdinalIgnoreCase) || 
+                              quiz.Description.Contains("exam", StringComparison.OrdinalIgnoreCase);
+
+            if (!isAlreadyMatched && isExamQuiz)
+            {
+                var offering = offerings.FirstOrDefault(o => o.Id == quiz.CourseOfferingId);
+                var code = offering?.Course?.Code ?? "Unknown";
+                var title = offering?.Course?.Title ?? "Unknown";
+
+                bool isCbt = quiz.Setting != null && !string.IsNullOrWhiteSpace(quiz.Setting.AllowedCbtHallIdsJson) && quiz.Setting.AllowedCbtHallIdsJson != "[]";
+                string venue = isCbt ? "CBT Exam" : "Online Exam";
+                
+                DateTime? examDate = quiz.OpenDateUtc ?? quiz.Setting?.OpenDateUtc;
+
+                examDtos.Add(new StudentExamDto(
+                    quiz.Id,
+                    quiz.CourseOfferingId,
+                    code,
+                    title,
+                    quiz.Title,
+                    quiz.Description,
+                    examDate,
+                    venue,
+                    quiz.AssessmentCategory?.MaxMarks ?? 100m,
+                    true,
+                    quiz.Id
+                ));
+            }
+        }
+
+        return examDtos;
+    }
+
+    public async Task<ErrorOr<StudentExamDto>> ScheduleExamAsync(
+        Guid courseOfferingId,
+        string title,
+        string? description,
+        DateTime examDate,
+        decimal maxMarks,
+        double durationHours,
+        CancellationToken ct = default)
+    {
+        var offering = await _context.CourseOfferings
+            .Include(co => co.Course)
+            .FirstOrDefaultAsync(co => co.Id == courseOfferingId, ct);
+        if (offering == null)
+        {
+            return Error.NotFound("CourseOffering.NotFound", "Course offering not found");
+        }
+
+        // 1. Get or create the AssessmentCategory for Exam
+        var category = await _context.AssessmentCategories
+            .FirstOrDefaultAsync(c => c.CourseOfferingId == courseOfferingId && 
+                                      (c.IsExamCategory || c.CategoryType == AssessmentCategoryType.Exam), ct);
+        if (category == null)
+        {
+            // Fetch default exam weight
+            var sysConfig = await _context.SystemGradingConfigurations
+                .AsNoTracking()
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            var weight = sysConfig?.DefaultExamWeight ?? 55m;
+
+            category = new AssessmentCategory
+            {
+                CourseOfferingId = courseOfferingId,
+                CategoryType = AssessmentCategoryType.Exam,
+                CategoryName = "Exam",
+                Weight = weight,
+                MaxMarks = 100m,
+                IsExamCategory = true,
+                DisplayOrder = (int)AssessmentCategoryType.Exam
+            };
+            _context.AssessmentCategories.Add(category);
+            await _context.SaveChangesAsync(ct);
+        }
+
+        // 2. Create the Assessment
+        var assessment = new Assessment
+        {
+            CourseOfferingId = courseOfferingId,
+            AssessmentCategoryId = category.Id,
+            Title = title,
+            Description = description,
+            MaxMarks = maxMarks,
+            AssessmentDate = examDate,
+            DueDate = examDate.AddHours(durationHours)
+        };
+
+        _context.Assessments.Add(assessment);
+        await _context.SaveChangesAsync(ct);
+
+        return new StudentExamDto(
+            assessment.Id,
+            assessment.CourseOfferingId,
+            offering.Course?.Code ?? "Unknown",
+            offering.Course?.Title ?? "Unknown",
+            assessment.Title,
+            assessment.Description,
+            assessment.AssessmentDate,
+            "Main Hall",
+            assessment.MaxMarks,
+            false,
+            null
+        );
     }
 }

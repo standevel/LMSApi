@@ -441,4 +441,61 @@ public sealed class CurriculumService(
         var result = await curriculumRepository.GetByIdAsync(curriculumId, ct);
         return result!.ToDto();
     }
+
+    public async Task<ErrorOr<RemoveCourseConsequencesDto>> GetRemoveCourseConsequencesAsync(Guid curriculumId, Guid id, CancellationToken ct = default)
+    {
+        var curriculum = await curriculumRepository.GetByIdAsync(curriculumId, ct);
+        if (curriculum is null) return DomainErrors.Curriculum.NotFound;
+
+        var courseMapping = curriculum.Courses.FirstOrDefault(c => c.Id == id);
+        if (courseMapping is null) return Error.NotFound("CurriculumCourse.NotFound", "The curriculum course mapping was not found.");
+
+        // Check for active offerings
+        var offerings = await dbContext.CourseOfferings
+            .Where(co => co.CurriculumId == curriculumId && co.CourseId == courseMapping.CourseId)
+            .ToListAsync(ct);
+
+        var offeringIds = offerings.Select(o => o.Id).ToList();
+        var enrolledCount = 0;
+        var hasGrades = false;
+
+        if (offeringIds.Count > 0)
+        {
+            enrolledCount = await dbContext.CourseEnrollments
+                .CountAsync(ce => offeringIds.Contains(ce.CourseOfferingId) && ce.Status == "Registered", ct);
+
+            // Check if there are any grades for assessments in these offerings
+            hasGrades = await dbContext.Grades
+                .AnyAsync(g => dbContext.Assessments
+                    .Where(a => offeringIds.Contains(a.CourseOfferingId))
+                    .Select(a => a.Id)
+                    .Contains(g.AssessmentId), ct);
+        }
+
+        // Check if it is a prerequisite for other courses
+        var isPrerequisiteForOthers = await dbContext.CoursePrerequisites
+            .AnyAsync(cp => cp.PrerequisiteCourseId == courseMapping.CourseId, ct);
+
+        var dependentCourseNames = new List<string>();
+        if (isPrerequisiteForOthers)
+        {
+            var dependentCourseIds = await dbContext.CoursePrerequisites
+                .Where(cp => cp.PrerequisiteCourseId == courseMapping.CourseId)
+                .Select(cp => cp.CourseId)
+                .ToListAsync(ct);
+
+            dependentCourseNames = await dbContext.Courses
+                .Where(c => dependentCourseIds.Contains(c.Id))
+                .Select(c => $"{c.Code} - {c.Title}")
+                .ToListAsync(ct);
+        }
+
+        return new RemoveCourseConsequencesDto(
+            offerings.Count > 0,
+            offerings.Count,
+            enrolledCount,
+            hasGrades,
+            isPrerequisiteForOthers,
+            dependentCourseNames);
+    }
 }

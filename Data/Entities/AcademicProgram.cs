@@ -19,6 +19,15 @@ public sealed class AcademicProgram
     public int DurationYears { get; set; } = 4;
     public bool IsActive { get; set; } = true;
 
+    // Specialization / Sub-major options
+    public Guid? ParentProgramId { get; set; }
+    [JsonIgnore]
+    public AcademicProgram? ParentProgram { get; set; }
+    [JsonIgnore]
+    public ICollection<AcademicProgram> ChildPrograms { get; set; } = [];
+    public int? SpecializationStartYear { get; set; }
+
+
     // Admission Criteria
     public int MinJambScore { get; set; } = 150;
     public int MaxAdmissions { get; set; } = 100;

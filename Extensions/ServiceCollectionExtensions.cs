@@ -188,6 +188,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IAdviserService, AdviserService>();
         services.AddScoped<IProgramSwitchService, ProgramSwitchService>();
+        services.AddScoped<IMajorSelectionService, MajorSelectionService>();
         services.AddHttpClient<IEmailService, BrevoEmailService>();
         services.AddScoped<IActiveDirectoryService, EntraIdService>();
         services.AddScoped<IPdfService, OfferLetterPdfService>();

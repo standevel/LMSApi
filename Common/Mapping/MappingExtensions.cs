@@ -19,7 +19,9 @@ public static class MappingExtensions
         p.MinJambScore,
         p.MaxAdmissions,
         p.RequiredJambSubjectsJson,
-        p.RequiredOLevelSubjectsJson);
+        p.RequiredOLevelSubjectsJson,
+        p.ParentProgramId,
+        p.SpecializationStartYear);
 
     public static FacultyDto ToDto(this Faculty f) => new(
         f.Id,

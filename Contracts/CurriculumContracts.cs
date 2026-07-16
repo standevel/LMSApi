@@ -77,3 +77,12 @@ public record CurriculumHistoryDto(
     string? Changes,
     string? PerformedBy,
     DateTime Timestamp);
+
+public record RemoveCourseConsequencesDto(
+    bool HasOfferings,
+    int OfferingCount,
+    int EnrolledStudentsCount,
+    bool HasGrades,
+    bool IsPrerequisiteForOthers,
+    List<string> DependentCourses);
+

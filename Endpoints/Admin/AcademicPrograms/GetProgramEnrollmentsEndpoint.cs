@@ -27,23 +27,27 @@ public sealed class GetProgramEnrollmentsEndpoint(LmsDbContext dbContext)
     public override async Task HandleAsync(GetProgramEnrollmentsRequest req, CancellationToken ct)
     {
         var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
-        Guid.TryParse(sessionIdStr, out var sessionId);
-        var hasSession = sessionId != Guid.Empty;
+        var hasSession = Guid.TryParse(sessionIdStr, out var sessionId) && sessionId != Guid.Empty;
 
         var query = dbContext.Enrollments
             .Include(x => x.Level)
             .Include(x => x.User)
             .Include(x => x.AcademicSession)
+            .Include(x => x.Curriculum)
             .Where(x => x.ProgramId == req.Id);
 
+        // Only filter by session when an explicit session is requested.
+        // Without a filter, ALL enrollments (across all sessions) are returned
+        // so the list matches what the delete-guard checks.
         if (hasSession)
             query = query.Where(x => x.AcademicSessionId == sessionId);
 
         var enrollments = await query
+            .OrderByDescending(e => e.AcademicSession.StartDate)
             .Select(e => new EnrollmentDto(
                 e.Id,
                 e.ProgramId,
-                "", // Program name not needed if we are listing for a specific program
+                "", // Program name not needed when listing for a specific program
                 e.LevelId,
                 e.Level.Name,
                 e.UserId,

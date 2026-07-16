@@ -100,7 +100,9 @@ public sealed class AcademicProgramService(
             RequiredJambSubjectsJson = request.RequiredJambSubjectsJson,
             RequiredOLevelSubjectsJson = request.RequiredOLevelSubjectsJson,
             IsActive = true,
-            Levels = new List<AcademicLevel>()
+            Levels = new List<AcademicLevel>(),
+            ParentProgramId = request.ParentProgramId,
+            SpecializationStartYear = request.SpecializationStartYear
         };
 
         // Create levels and attach back-reference to the parent program so EF sets FK correctly
@@ -150,6 +152,8 @@ public sealed class AcademicProgramService(
         program.MaxAdmissions = request.MaxAdmissions;
         program.RequiredJambSubjectsJson = request.RequiredJambSubjectsJson;
         program.RequiredOLevelSubjectsJson = request.RequiredOLevelSubjectsJson;
+        program.ParentProgramId = request.ParentProgramId;
+        program.SpecializationStartYear = request.SpecializationStartYear;
 
         await programRepository.UpdateAsync(program, ct);
         await programRepository.SaveChangesAsync(ct);

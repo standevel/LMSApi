@@ -691,7 +691,7 @@ public sealed class CourseCatalogImportService(IServiceScopeFactory scopeFactory
             }
 
             if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(title)) continue;
-            code = code.Trim();
+            code = code.Trim().Replace("-", " ");
             title = title.Trim();
             if (!IsLikelyCourseCode(code)) continue;
 

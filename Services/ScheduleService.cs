@@ -197,6 +197,8 @@ public class ScheduleService : BaseService, IScheduleService
 
         // Fetch quizzes for these course offerings to see if any matches
         var quizzes = await _context.Quizzes
+            .Include(q => q.Setting)
+            .Include(q => q.AssessmentCategory)
             .Where(q => offeringIds.Contains(q.CourseOfferingId))
             .ToListAsync(ct);
 
@@ -210,6 +212,13 @@ public class ScheduleService : BaseService, IScheduleService
             
             bool isOnline = matchingQuiz != null;
             Guid? quizId = matchingQuiz?.Id;
+            
+            string venue = "Main Hall";
+            if (isOnline && matchingQuiz != null)
+            {
+                bool isCbt = matchingQuiz.Setting != null && !string.IsNullOrWhiteSpace(matchingQuiz.Setting.AllowedCbtHallIdsJson) && matchingQuiz.Setting.AllowedCbtHallIdsJson != "[]";
+                venue = isCbt ? "CBT Exam" : "Online Exam";
+            }
 
             examDtos.Add(new StudentExamDto(
                 exam.Id,
@@ -219,18 +228,23 @@ public class ScheduleService : BaseService, IScheduleService
                 exam.Title,
                 exam.Description,
                 exam.AssessmentDate,
-                isOnline ? "Online" : "Main Hall", // Venue fallback
+                venue, // Venue fallback
                 exam.MaxMarks,
                 isOnline,
                 quizId
             ));
         }
 
-        // Include any quiz matching "exam" keywords in the title that is not already matched
+        // Include any quiz matching "exam" keywords in the title or having an exam category that is not already matched
         foreach (var quiz in quizzes)
         {
             var isAlreadyMatched = examDtos.Any(e => e.QuizId == quiz.Id);
-            bool isExamQuiz = quiz.Title.Contains("exam", StringComparison.OrdinalIgnoreCase) || 
+            bool isExamCategory = quiz.AssessmentCategory != null && 
+                                 (quiz.AssessmentCategory.IsExamCategory || 
+                                  quiz.AssessmentCategory.CategoryType == AssessmentCategoryType.Exam);
+            
+            bool isExamQuiz = isExamCategory ||
+                              quiz.Title.Contains("exam", StringComparison.OrdinalIgnoreCase) || 
                               quiz.Description.Contains("exam", StringComparison.OrdinalIgnoreCase);
 
             if (!isAlreadyMatched && isExamQuiz)
@@ -239,6 +253,11 @@ public class ScheduleService : BaseService, IScheduleService
                 var code = enrollment?.CourseOffering?.Course?.Code ?? "Unknown";
                 var title = enrollment?.CourseOffering?.Course?.Title ?? "Unknown";
 
+                bool isCbt = quiz.Setting != null && !string.IsNullOrWhiteSpace(quiz.Setting.AllowedCbtHallIdsJson) && quiz.Setting.AllowedCbtHallIdsJson != "[]";
+                string venue = isCbt ? "CBT Exam" : "Online Exam";
+                
+                DateTime? examDate = quiz.OpenDateUtc ?? quiz.Setting?.OpenDateUtc;
+
                 examDtos.Add(new StudentExamDto(
                     quiz.Id,
                     quiz.CourseOfferingId,
@@ -246,9 +265,9 @@ public class ScheduleService : BaseService, IScheduleService
                     title,
                     quiz.Title,
                     quiz.Description,
-                    null, // Date TBD
-                    "Online",
-                    100m,
+                    examDate,
+                    venue,
+                    quiz.AssessmentCategory?.MaxMarks ?? 100m,
                     true,
                     quiz.Id
                 ));

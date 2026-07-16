@@ -214,3 +214,36 @@ public record ProgramSwitchRequestSummaryDto(
     string Status,
     bool HasJambDocument,
     DateTime CreatedAt);
+
+// ==================== MAJOR DECLARATION ====================
+
+public record MajorDeclarationRequestDto(
+    Guid Id,
+    Guid StudentId,
+    string StudentName,
+    string StudentNumber,
+    Guid ParentProgramId,
+    string ParentProgramName,
+    Guid DeclaredProgramId,
+    string DeclaredProgramName,
+    string Status,
+    string? ApprovedByName,
+    DateTime? ApprovedAt,
+    string? RejectionReason,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public record CreateMajorDeclarationRequest(
+    Guid TargetProgramId);
+
+public record ReviewMajorDeclarationRequest(
+    bool Approved,
+    string? RejectionReason);
+
+public record SpecializationOptionDto(
+    Guid Id,
+    string Name,
+    string Code,
+    string? Description,
+    int? SpecializationStartYear);
+

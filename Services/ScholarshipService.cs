@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
+using LMS.Api.Data.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Services;
@@ -23,7 +24,7 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
             SponsorOrganizationId = req.SponsorOrganizationId,
             MinJambScore = req.MinJambScore,
             MaxJambScore = req.MaxJambScore,
-            IsActive = req.IsActive
+            IsActive = true
         };
         db.Scholarships.Add(s);
         await db.SaveChangesAsync();
@@ -34,7 +35,7 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
     {
         var s = await db.Scholarships.FindAsync(id)
             ?? throw new KeyNotFoundException("Scholarship not found.");
-
+            
         s.Name = req.Name;
         s.Description = req.Description;
         s.Type = req.Type;
@@ -44,8 +45,7 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         s.MinJambScore = req.MinJambScore;
         s.MaxJambScore = req.MaxJambScore;
         s.IsActive = req.IsActive;
-        s.UpdatedAt = DateTime.UtcNow;
-
+        
         await db.SaveChangesAsync();
         return MapToDto(s);
     }
@@ -66,30 +66,30 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
 
     public async Task<StudentScholarshipDto> AssignScholarshipAsync(AssignScholarshipRequest req)
     {
-        var existing = await db.StudentScholarships
-            .FirstOrDefaultAsync(ss => ss.StudentId == req.StudentId && ss.ScholarshipId == req.ScholarshipId && ss.SessionId == req.SessionId);
-            
-        if (existing != null)
-            throw new InvalidOperationException("Scholarship is already assigned to this student for this session.");
-
         var ss = new StudentScholarship
         {
             StudentId = req.StudentId,
             ScholarshipId = req.ScholarshipId,
             SessionId = req.SessionId
         };
-        
         db.StudentScholarships.Add(ss);
         await db.SaveChangesAsync();
         
-        await db.Entry(ss).Reference(x => x.Scholarship).LoadAsync();
-        return MapToStudentScholarshipDto(ss);
+        // Reload with includes
+        var reloaded = await db.StudentScholarships
+            .Include(x => x.Student)
+            .Include(x => x.Scholarship)
+            .ThenInclude(s => s.SponsorOrganization)
+            .FirstAsync(x => x.Id == ss.Id);
+            
+        return MapToStudentScholarshipDto(reloaded);
     }
 
     public async Task RemoveScholarshipAssignmentAsync(Guid id)
     {
         var ss = await db.StudentScholarships.FindAsync(id)
-            ?? throw new KeyNotFoundException("Student scholarship assignment not found.");
+            ?? throw new KeyNotFoundException("Assignment not found.");
+            
         db.StudentScholarships.Remove(ss);
         await db.SaveChangesAsync();
     }
@@ -109,12 +109,13 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         var res = await query.ToListAsync();
         return res.Select(MapToStudentScholarshipDto);
     }
-    
+
     public async Task<IEnumerable<StudentScholarshipDto>> GetAllStudentScholarshipsAsync(int limit = 100)
     {
         var res = await db.StudentScholarships
-            .Include(ss => ss.Scholarship)
             .Include(ss => ss.Student)
+            .Include(ss => ss.Scholarship)
+            .ThenInclude(s => s.SponsorOrganization)
             .OrderByDescending(ss => ss.CreatedAt)
             .Take(limit)
             .ToListAsync();
@@ -122,14 +123,87 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         return res.Select(MapToStudentScholarshipDto);
     }
 
+    public static int ConvertDirectEntryToJambScore(DirectEntryQualification qual, decimal? points, string? gradeStr)
+    {
+        // 1. Points-based scale (A-Level, IJMB, IB, Cambridge)
+        if (points.HasValue && (
+            qual == DirectEntryQualification.ALevel ||
+            qual == DirectEntryQualification.IJMB ||
+            qual == DirectEntryQualification.IB ||
+            qual == DirectEntryQualification.CambridgeAdvanced ||
+            qual == DirectEntryQualification.AdvancedAdvanced))
+        {
+            var pts = points.Value;
+            if (pts >= 15) return 350;
+            if (pts >= 14) return 330;
+            if (pts >= 13) return 310;
+            if (pts >= 12) return 290;
+            if (pts >= 11) return 270;
+            if (pts >= 10) return 250;
+            if (pts >= 9) return 230;
+            if (pts >= 8) return 210;
+            if (pts >= 7) return 190;
+            if (pts >= 6) return 180;
+            return 160;
+        }
+
+        // 2. Class-based/grade-based qualifications (HND, ND, Diploma, BTEC)
+        if (!string.IsNullOrEmpty(gradeStr))
+        {
+            var g = gradeStr.Replace(" ", "").Replace("*", "").ToLowerInvariant();
+
+            if (g.Contains("firstclass") || g.Contains("distinction") || g.Contains("first"))
+                return 340;
+            if (g.Contains("secondclassupper") || g.Contains("uppercredit") || g.Contains("merit") || g.Contains("upper"))
+                return 290;
+            if (g.Contains("secondclasslower") || g.Contains("lowercredit") || g.Contains("lower"))
+                return 240;
+            if (g.Contains("thirdclass") || g.Contains("third"))
+                return 210;
+            if (g.Contains("pass"))
+                return 180;
+        }
+
+        // 3. Fallback based on points directly if none of the above matched
+        if (points.HasValue)
+        {
+            var pts = points.Value;
+            // ND/HND CGPA out of 4.0/5.0
+            if (pts >= 4.5m) return 340;
+            if (pts >= 3.5m) return 340;
+            if (pts >= 3.0m) return 290;
+            if (pts >= 2.5m) return 240;
+            if (pts >= 2.0m) return 200;
+        }
+
+        return 0;
+    }
+
     public async Task ApplyJambScholarshipsAsync(Guid studentId, Guid sessionId)
     {
-        var student = await db.Students.FindAsync(studentId)
+        var student = await db.Students
+            .Include(s => s.AcademicSession)
+            .FirstOrDefaultAsync(s => s.Id == studentId)
             ?? throw new KeyNotFoundException("Student not found.");
             
-        if (!student.JambScore.HasValue) return;
+        int? score = student.JambScore;
 
-        var score = student.JambScore.Value;
+        if (!score.HasValue && student.AdmissionApplicationId.HasValue)
+        {
+            var app = await db.AdmissionApplications.FindAsync(student.AdmissionApplicationId.Value);
+            if (app != null && app.ApplicantType == ApplicantType.DirectEntry)
+            {
+                var convertedScore = ConvertDirectEntryToJambScore(app.DirectEntryQualification, app.DirectEntryPoints, app.DirectEntryGrade);
+                if (convertedScore > 0)
+                {
+                    score = convertedScore;
+                }
+            }
+        }
+
+        if (!score.HasValue) return;
+
+        var actualScore = score.Value;
 
         // Find applicable JAMB scholarships based on score tiers
         var jambScholarships = await db.Scholarships
@@ -137,8 +211,8 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
             .ToListAsync();
 
         var applicable = jambScholarships.Where(s => 
-            (!s.MinJambScore.HasValue || score >= s.MinJambScore.Value) &&
-            (!s.MaxJambScore.HasValue || score <= s.MaxJambScore.Value)
+            (!s.MinJambScore.HasValue || actualScore >= s.MinJambScore.Value) &&
+            (!s.MaxJambScore.HasValue || actualScore <= s.MaxJambScore.Value)
         )
         .OrderByDescending(s => s.PercentageCovered)
         .Take(1)
@@ -181,9 +255,13 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
 
     public async Task ApplyJambScholarshipsForAdmissionSessionAsync(Guid admissionSessionId)
     {
-        // Get all students admitted in this session who have a JAMB score
+        // Get all students admitted in this session who have a JAMB score or are Direct Entry
         var students = await db.Students
-            .Where(s => s.AcademicSessionId == admissionSessionId && s.JambScore.HasValue)
+            .Include(s => s.AdmissionApplication)
+            .Where(s => s.AcademicSessionId == admissionSessionId && (
+                s.JambScore.HasValue ||
+                (s.AdmissionApplicationId.HasValue && s.AdmissionApplication.ApplicantType == ApplicantType.DirectEntry)
+            ))
             .ToListAsync();
 
         if (!students.Any()) return;

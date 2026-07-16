@@ -9,8 +9,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Admin.RegistrationConfig;
 
-public record RegistrationConfigDto(string Strategy, bool EnforceMinCredits);
-public record UpdateRegistrationConfigRequest(string Strategy, bool EnforceMinCredits);
+public record RegistrationConfigDto(string Strategy, bool EnforceMinCredits, string MatricNumberFormat);
+public record UpdateRegistrationConfigRequest(string Strategy, bool EnforceMinCredits, string MatricNumberFormat);
 
 public sealed class GetRegistrationConfigEndpoint(LmsDbContext context)
     : ApiEndpointWithoutRequest<RegistrationConfigDto>
@@ -28,14 +28,14 @@ public sealed class GetRegistrationConfigEndpoint(LmsDbContext context)
         if (config is null)
         {
             // Seed a default config dynamically if missing
-            var newConfig = new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
+            var newConfig = new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true, MatricNumberFormat = "WU/{YY}/{PROGRAM}/{SEQ}" };
             context.SystemRegistrationConfigurations.Add(newConfig);
             await context.SaveChangesAsync(ct);
-            await SendAsync(new RegistrationConfigDto(newConfig.Strategy, newConfig.EnforceMinCredits), ct);
+            await SendAsync(new RegistrationConfigDto(newConfig.Strategy, newConfig.EnforceMinCredits, newConfig.MatricNumberFormat), ct);
             return;
         }
 
-        await SendAsync(new RegistrationConfigDto(config.Strategy, config.EnforceMinCredits), ct);
+        await SendAsync(new RegistrationConfigDto(config.Strategy, config.EnforceMinCredits, config.MatricNumberFormat ?? "WU/{YY}/{PROGRAM}/{SEQ}"), ct);
     }
 }
 
@@ -57,6 +57,18 @@ public sealed class UpdateRegistrationConfigEndpoint(LmsDbContext context)
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(req.MatricNumberFormat))
+        {
+            await SendFailureAsync(400, "Matric number format template is required.", "INVALID_FORMAT_TEMPLATE", "Invalid Format Template", ct);
+            return;
+        }
+
+        if (!req.MatricNumberFormat.Contains("{SEQ}"))
+        {
+            await SendFailureAsync(400, "Matric number format template must contain the '{SEQ}' placeholder.", "INVALID_FORMAT_TEMPLATE", "Invalid Format Template", ct);
+            return;
+        }
+
         var config = await context.SystemRegistrationConfigurations.FirstOrDefaultAsync(ct);
         if (config is null)
         {
@@ -66,9 +78,10 @@ public sealed class UpdateRegistrationConfigEndpoint(LmsDbContext context)
 
         config.Strategy = req.Strategy;
         config.EnforceMinCredits = req.EnforceMinCredits;
+        config.MatricNumberFormat = req.MatricNumberFormat.Trim();
         config.UpdatedAt = System.DateTime.UtcNow;
 
         await context.SaveChangesAsync(ct);
-        await SendAsync(new RegistrationConfigDto(config.Strategy, config.EnforceMinCredits), ct);
+        await SendAsync(new RegistrationConfigDto(config.Strategy, config.EnforceMinCredits, config.MatricNumberFormat), ct);
     }
 }

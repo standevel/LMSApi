@@ -436,7 +436,7 @@ public sealed class AdmissionService(
     {
         return await dbContext.Programs
             .AsNoTracking()
-            .Where(p => p.Department.FacultyId == facultyId)
+            .Where(p => p.Department.FacultyId == facultyId && p.ParentProgramId == null)
             .OrderBy(p => p.Name)
             .ToListAsync();
     }
@@ -455,7 +455,7 @@ public sealed class AdmissionService(
     {
         return await dbContext.Programs
             .AsNoTracking()
-            .Where(p => p.DepartmentId == departmentId)
+            .Where(p => p.DepartmentId == departmentId && p.ParentProgramId == null)
             .OrderBy(p => p.Name)
             .ToListAsync();
     }

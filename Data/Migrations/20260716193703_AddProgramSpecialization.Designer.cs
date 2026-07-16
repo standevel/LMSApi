@@ -4,6 +4,7 @@ using LMS.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace LMS.Api.Data.Migrations
 {
     [DbContext(typeof(LmsDbContext))]
-    partial class LmsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260716193703_AddProgramSpecialization")]
+    partial class AddProgramSpecialization
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -5459,10 +5462,6 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<bool>("EnforceMinCredits")
                         .HasColumnType("bit");
-
-                    b.Property<string>("MatricNumberFormat")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Strategy")
                         .IsRequired()

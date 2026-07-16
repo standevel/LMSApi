@@ -56,20 +56,24 @@ public sealed class CourseService(
         if (resolvedProgramId == Guid.Empty)
             return Error.Validation("Course.ProgramRequired", "A program must be selected for the course.");
 
+        var sanitizedCode = request.Code?.Replace("-", " ") ?? string.Empty;
+
         // Check for duplicate course code within the same program
         var existingCourse = await dbContext.Courses
-            .FirstOrDefaultAsync(c => c.ProgramId == resolvedProgramId && c.Code == request.Code, ct);
+            .FirstOrDefaultAsync(c => c.ProgramId == resolvedProgramId && c.Code == sanitizedCode, ct);
         if (existingCourse != null)
         {
-            return Error.Conflict("Course.DuplicateCode", $"Course code '{request.Code}' already exists for the selected program.");
+            return Error.Conflict("Course.DuplicateCode", $"Course code '{sanitizedCode}' already exists for the selected program.");
         }
 
         var course = new Course
         {
             ProgramId   = resolvedProgramId,
-            Code        = request.Code,
+            Code        = sanitizedCode,
             Title       = request.Title,
-            Description = request.Description,
+            Description = string.IsNullOrWhiteSpace(request.Description)
+                ? $"A comprehensive {request.CreditUnits}-unit course on {request.Title} ({sanitizedCode})."
+                : request.Description,
             CreditUnits = request.CreditUnits,
             LevelId     = request.LevelId,
             Semester    = request.Semester,
@@ -107,9 +111,11 @@ public sealed class CourseService(
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course == null) return DomainErrors.Course.NotFound;
 
-        course.Code        = request.Code;
+        course.Code        = request.Code?.Replace("-", " ") ?? string.Empty;
         course.Title       = request.Title;
-        course.Description = request.Description;
+        course.Description = string.IsNullOrWhiteSpace(request.Description)
+            ? $"A comprehensive {request.CreditUnits}-unit course on {request.Title} ({course.Code})."
+            : request.Description;
         course.CreditUnits = request.CreditUnits;
         course.LevelId     = request.LevelId;
         course.Semester    = request.Semester;

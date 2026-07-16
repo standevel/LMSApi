@@ -1,6 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Text.Json;
 using FastEndpoints;
 using LMS.Api.Data;
 using LMS.Api.Data.Entities;
+using LMS.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Admin.AdmissionConfig;
@@ -23,7 +30,10 @@ public sealed class ListGradingScalesEndpoint(LmsDbContext dbContext)
 
         var response = scales.Select(s => new GradingScaleDto(
             s.Id, s.Name, s.CountryCode, s.QualificationType,
-            s.GradesJson, s.IsActive, s.CreatedAt, s.UpdatedAt));
+            string.IsNullOrEmpty(s.GradesJson)
+                ? new List<GradingScaleGradeEntry>()
+                : JsonSerializer.Deserialize<List<GradingScaleGradeEntry>>(s.GradesJson) ?? new List<GradingScaleGradeEntry>(),
+            s.IsActive, s.CreatedAt, s.UpdatedAt));
 
         await SendSuccessAsync(response, ct);
     }
@@ -34,7 +44,7 @@ public record GradingScaleDto(
     string Name,
     string? CountryCode,
     string? QualificationType,
-    string GradesJson,
+    List<GradingScaleGradeEntry> Grades,
     bool IsActive,
     DateTime CreatedAt,
     DateTime? UpdatedAt);
@@ -50,12 +60,19 @@ public sealed class CreateGradingScaleEndpoint(LmsDbContext dbContext)
 
     public override async Task HandleAsync(CreateGradingScaleRequest req, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(req.Name))
+        {
+            AddError(r => r.Name, "Scale Name is required.");
+        }
+        ThrowIfAnyErrors();
+
+        var gradesSerialized = JsonSerializer.Serialize(req.Grades ?? new List<GradingScaleGradeEntry>());
         var scale = new GradingScale
         {
             Name = req.Name,
             CountryCode = req.CountryCode,
             QualificationType = req.QualificationType,
-            GradesJson = req.GradesJson,
+            GradesJson = gradesSerialized,
             IsActive = req.IsActive
         };
         dbContext.GradingScales.Add(scale);
@@ -63,7 +80,7 @@ public sealed class CreateGradingScaleEndpoint(LmsDbContext dbContext)
 
         await SendSuccessAsync(new GradingScaleDto(
             scale.Id, scale.Name, scale.CountryCode, scale.QualificationType,
-            scale.GradesJson, scale.IsActive, scale.CreatedAt, scale.UpdatedAt), ct);
+            req.Grades ?? new List<GradingScaleGradeEntry>(), scale.IsActive, scale.CreatedAt, scale.UpdatedAt), ct);
     }
 }
 
@@ -78,21 +95,34 @@ public sealed class UpdateGradingScaleEndpoint(LmsDbContext dbContext)
 
     public override async Task HandleAsync(UpdateGradingScaleRequest req, CancellationToken ct)
     {
+        if (req.Name != null && string.IsNullOrWhiteSpace(req.Name))
+        {
+            AddError(r => r.Name, "Scale Name cannot be empty.");
+        }
+        ThrowIfAnyErrors();
+
         var scale = await dbContext.GradingScales.FindAsync([req.Id], ct)
             ?? throw new KeyNotFoundException("Grading scale not found");
 
         scale.Name = req.Name ?? scale.Name;
         scale.CountryCode = req.CountryCode ?? scale.CountryCode;
         scale.QualificationType = req.QualificationType ?? scale.QualificationType;
-        scale.GradesJson = req.GradesJson ?? scale.GradesJson;
+        if (req.Grades != null)
+        {
+            scale.GradesJson = JsonSerializer.Serialize(req.Grades);
+        }
         scale.IsActive = req.IsActive ?? scale.IsActive;
         scale.UpdatedAt = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(ct);
 
+        var deserializedGrades = string.IsNullOrEmpty(scale.GradesJson)
+            ? new List<GradingScaleGradeEntry>()
+            : JsonSerializer.Deserialize<List<GradingScaleGradeEntry>>(scale.GradesJson) ?? new List<GradingScaleGradeEntry>();
+
         await SendSuccessAsync(new GradingScaleDto(
             scale.Id, scale.Name, scale.CountryCode, scale.QualificationType,
-            scale.GradesJson, scale.IsActive, scale.CreatedAt, scale.UpdatedAt), ct);
+            deserializedGrades, scale.IsActive, scale.CreatedAt, scale.UpdatedAt), ct);
     }
 }
 
@@ -121,7 +151,7 @@ public record CreateGradingScaleRequest(
     string Name,
     string? CountryCode,
     string? QualificationType,
-    string GradesJson,
+    List<GradingScaleGradeEntry> Grades,
     bool IsActive = true);
 
 public record UpdateGradingScaleRequest(
@@ -129,7 +159,7 @@ public record UpdateGradingScaleRequest(
     string? Name,
     string? CountryCode,
     string? QualificationType,
-    string? GradesJson,
+    List<GradingScaleGradeEntry>? Grades,
     bool? IsActive);
 
 public record DeleteGradingScaleRequest(Guid Id);

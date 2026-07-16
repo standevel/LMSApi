@@ -8,7 +8,12 @@ public sealed class Course
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProgramId { get; set; } // The program that hosts/owns this course
-    public string Code { get; set; } = string.Empty; // e.g., CSC101
+    private string _code = string.Empty;
+    public string Code
+    {
+        get => _code;
+        set => _code = value?.Replace("-", " ") ?? string.Empty;
+    } // e.g., CSC 101
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
     public int CreditUnits { get; set; }

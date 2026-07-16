@@ -38,11 +38,17 @@ public sealed class AssignMatricNumberEndpoint(LmsDbContext dbContext, ILogger<A
         // Normalize matric number (uppercase, trim)
         var normalizedMatric = req.MatricNumber.Trim().ToUpperInvariant();
 
-        // Basic format validation: should start with WU followed by digits and letters
-        if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, @"^WU\d{2}[A-Z]{3}\d{4}$"))
+        // Load configured format
+        var config = await dbContext.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct);
+        var format = config?.MatricNumberFormat ?? "WU/{YY}/{PROGRAM}/{SEQ}";
+
+        // Build dynamic regex pattern from template format
+        var pattern = BuildRegexFromTemplate(format);
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, pattern))
         {
             await SendFailureAsync(400, "Invalid matric number format", "INVALID_FORMAT", 
-                "Matric number must follow format: WU{YY}{PROGRAM}{####} (e.g., WU25CSC0001)", ct);
+                $"Matric number must follow the configured format: {format}", ct);
             return;
         }
 
@@ -95,5 +101,16 @@ public sealed class AssignMatricNumberEndpoint(LmsDbContext dbContext, ILogger<A
             normalizedMatric, 
             $"Matric number '{normalizedMatric}' successfully assigned to {student.FirstName} {student.LastName}"
         ), ct);
+    }
+
+    private static string BuildRegexFromTemplate(string template)
+    {
+        var pattern = System.Text.RegularExpressions.Regex.Escape(template);
+        pattern = pattern
+            .Replace(@"\{YYYY\}", @"\d{4}")
+            .Replace(@"\{YY\}", @"\d{2}")
+            .Replace(@"\{PROGRAM\}", @"[A-Z0-9]{2,4}")
+            .Replace(@"\{SEQ\}", @"\d{4}");
+        return $"^{pattern}$";
     }
 }
