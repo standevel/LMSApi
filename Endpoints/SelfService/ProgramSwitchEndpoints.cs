@@ -19,7 +19,7 @@ public sealed class CreateProgramSwitchEndpoint(
     public override void Configure()
     {
         Post("self-service/program-switch");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("ProgramSwitch");
         Description(d => d
             .WithName("CreateProgramSwitchRequest")
@@ -60,7 +60,7 @@ public sealed class UploadProgramSwitchDocumentEndpoint(
     public override void Configure()
     {
         Post("self-service/program-switch/{id}/upload-document");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         AllowFileUploads();
         Tags("ProgramSwitch");
         Description(d => d
@@ -110,7 +110,7 @@ public sealed class GetMyProgramSwitchRequestsEndpoint(
     public override void Configure()
     {
         Get("self-service/program-switch/my-requests");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("ProgramSwitch");
         Description(d => d
             .WithName("GetMyProgramSwitchRequests")

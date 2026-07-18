@@ -226,7 +226,7 @@ public sealed class GetMyBillEndpoint(IFeeService feeService, LmsDbContext db)
     public override void Configure()
     {
         Get("fees/my-bill");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("Fees");
     }
 

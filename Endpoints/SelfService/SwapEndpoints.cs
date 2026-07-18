@@ -13,7 +13,7 @@ public sealed class GetCourseSwapOptionsEndpoint(IRegistrationService registrati
     public override void Configure()
     {
         Get("self-service/swap-options");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -37,7 +37,7 @@ public sealed class RequestCourseSwapEndpoint(IRegistrationService registrationS
     public override void Configure()
     {
         Post("self-service/swap");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 

@@ -52,9 +52,29 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
             .Distinct()
             .ToListAsync(ct);
 
+        var publishedOfferingIds = await _dbContext.GradePublications
+            .Where(gp => gp.IsVisibleToStudents && offerings.Select(o => o.Id).Contains(gp.CourseOfferingId))
+            .Select(gp => gp.CourseOfferingId)
+            .ToListAsync(ct);
+
         var courseRecords = new List<TranscriptCourseRecord>();
         foreach (var offering in offerings)
         {
+            if (!publishedOfferingIds.Contains(offering.Id))
+            {
+                courseRecords.Add(new TranscriptCourseRecord(
+                    offering.Id,
+                    offering.Course?.Code ?? "N/A",
+                    offering.Course?.Title ?? "N/A",
+                    offering.Course?.CreditUnits ?? 0,
+                    (int)offering.Semester,
+                    offering.AcademicSession?.Name ?? "N/A",
+                    null,
+                    null,
+                    await CalculateAttendancePercentage(offering.Id, studentId, ct)));
+                continue;
+            }
+
             // Fetch assessments for this course offering
             var assessments = await _dbContext.Assessments
                 .Where(a => a.CourseOfferingId == offering.Id)

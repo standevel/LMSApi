@@ -17,6 +17,12 @@ public sealed class BrevoEmailService(
     private readonly string _senderEmail = configuration["Brevo:SenderEmail"] ?? "no-reply@wigweuniversity.edu.ng";
     private readonly string _senderName = configuration["Brevo:SenderName"] ?? "Wigwe University Admissions";
 
+    private static string FormatName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(name.ToLower());
+    }
+
     private async Task SendEmailAsync(string toEmail, string subject, string htmlContent, object? attachment = null)
     {
         if (string.IsNullOrEmpty(_apiKey))
@@ -64,6 +70,7 @@ public sealed class BrevoEmailService(
 
     public Task SendApplicationSubmittedEmailAsync(string toEmail, string studentName)
     {
+        studentName = FormatName(studentName);
         var subject = "Application Received - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -86,6 +93,7 @@ public sealed class BrevoEmailService(
         byte[]? secondAttachment = null,
         string? secondFileName = null)
     {
+        studentName = FormatName(studentName);
         var subject = "Admission Offer - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -115,6 +123,7 @@ public sealed class BrevoEmailService(
 
     public Task SendPaymentInstructionsEmailAsync(string toEmail, string studentName, decimal amountDue, string paymentPageUrl)
     {
+        studentName = FormatName(studentName);
         var subject = "Payment Instructions - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -134,6 +143,7 @@ public sealed class BrevoEmailService(
 
     public Task SendStudentCredentialsEmailAsync(string toEmail, string studentName, string officialEmail, string temporaryPassword)
     {
+        studentName = FormatName(studentName);
         var subject = "Welcome to Wigwe University - Your Official Credentials";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -153,6 +163,7 @@ public sealed class BrevoEmailService(
 
     public Task SendOfferAcceptedConfirmationAsync(string toEmail, string studentName, string programName)
     {
+        studentName = FormatName(studentName);
         var subject = "Offer Accepted - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -175,6 +186,7 @@ public sealed class BrevoEmailService(
 
     public Task SendExistingAccountNotificationAsync(string toEmail, string studentName, string officialEmail)
     {
+        studentName = FormatName(studentName);
         var subject = "Wigwe University - Your Student Account Information";
         var content = $@"
             <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
@@ -207,6 +219,7 @@ public sealed class BrevoEmailService(
 
     public async Task SendApplicationReminderEmailAsync(string toEmail, string studentName, string applicationNumber, AdmissionStatus status)
     {
+        studentName = FormatName(studentName);
         var subject = "Action Required: Complete Your Admission Process - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
@@ -248,6 +261,8 @@ public sealed class BrevoEmailService(
 
     public Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, bool isNewAccount)
     {
+        guardianName = FormatName(guardianName);
+        studentName = FormatName(studentName);
         var subject = "Wigwe University - Parent/Guardian Portal Access";
 
         string body;
@@ -301,6 +316,7 @@ public sealed class BrevoEmailService(
 
     public Task SendCourseAssignmentEmailAsync(string toEmail, string lecturerName, string courseCode, string courseTitle, string sessionName)
     {
+        lecturerName = FormatName(lecturerName);
         var subject = $"Course Assignment: {courseCode} - Wigwe University";
         var content = $@"
             <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>

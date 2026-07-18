@@ -130,20 +130,25 @@ public sealed class UserProvisioningMiddleware(RequestDelegate next)
 
                             if (!hasEnrollment)
                             {
-                                // Find curriculum for this program (or default to Guid.Empty)
+                                // Find curriculum for this program
                                 var curriculum = await dbContext.Curricula.FirstOrDefaultAsync(c => c.ProgramId == student.AcademicProgramId.Value);
-                                var curriculumId = curriculum?.Id ?? Guid.Empty;
-
-                                dbContext.Enrollments.Add(new ProgramEnrollment
+                                if (curriculum is not null)
                                 {
-                                    ProgramId = student.AcademicProgramId.Value,
-                                    LevelId = student.LevelId.Value,
-                                    UserId = user.Id,
-                                    AcademicSessionId = activeSession.Id,
-                                    CurriculumId = curriculumId,
-                                    EnrolledAtUtc = now
-                                });
-                                Console.WriteLine($"[Auth-Diagnostic] Auto-provisioned ProgramEnrollment for user {email} in active session {activeSession.Name}");
+                                    dbContext.Enrollments.Add(new ProgramEnrollment
+                                    {
+                                        ProgramId = student.AcademicProgramId.Value,
+                                        LevelId = student.LevelId.Value,
+                                        UserId = user.Id,
+                                        AcademicSessionId = activeSession.Id,
+                                        CurriculumId = curriculum.Id,
+                                        EnrolledAtUtc = now
+                                    });
+                                    Console.WriteLine($"[Auth-Diagnostic] Auto-provisioned ProgramEnrollment for user {email} in active session {activeSession.Name}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"[Auth-Diagnostic] Skipped ProgramEnrollment for {email}: No Curriculum found for Program {student.AcademicProgramId.Value}");
+                                }
                             }
                         }
                     }

@@ -13,7 +13,7 @@ public sealed class RegisterForCourseEndpoint(IRegistrationService registrationS
     public override void Configure()
     {
         Post("self-service/register");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -43,7 +43,7 @@ public sealed class DropCourseEndpoint(IRegistrationService registrationService,
     public override void Configure()
     {
         Delete("self-service/register/{EnrollmentId}");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -76,7 +76,7 @@ public sealed class GetRegistrationSummaryEndpoint(IRegistrationService registra
     public override void Configure()
     {
         Get("self-service/registration-summary");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -105,7 +105,7 @@ public sealed class BulkRegisterEndpoint(IRegistrationService registrationServic
     public override void Configure()
     {
         Post("self-service/register/bulk");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 

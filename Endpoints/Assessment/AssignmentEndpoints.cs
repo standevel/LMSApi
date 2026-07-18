@@ -103,7 +103,7 @@ public sealed class SubmitAssignmentEndpoint(IAssignmentService service, ICurren
     public override void Configure()
     {
         Post("assignments/submissions");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("Assignments");
     }
 

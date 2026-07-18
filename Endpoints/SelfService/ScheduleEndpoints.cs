@@ -13,7 +13,7 @@ public sealed class RequestScheduleAdjustmentEndpoint(IScheduleService scheduleS
     public override void Configure()
     {
         Post("self-service/schedule/adjust");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -41,7 +41,7 @@ public sealed class GetStudentScheduleEndpoint(IScheduleService scheduleService,
     public override void Configure()
     {
         Get("self-service/schedule");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -73,7 +73,7 @@ public sealed class GetRegistrationHistoryEndpoint(IRegistrationService registra
     public override void Configure()
     {
         Get("self-service/registration-history");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -99,7 +99,7 @@ public sealed class RequestPrerequisiteOverrideEndpoint(IPrerequisiteValidationS
     public override void Configure()
     {
         Post("self-service/prerequisite-override");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -127,7 +127,7 @@ public sealed class CheckPrerequisitesEndpoint(IPrerequisiteValidationService pr
     public override void Configure()
     {
         Get("self-service/prerequisite-override/check");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -158,7 +158,7 @@ public sealed class GetStudentExamsEndpoint(IScheduleService scheduleService, IC
     public override void Configure()
     {
         Get("self-service/schedule/exams");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 

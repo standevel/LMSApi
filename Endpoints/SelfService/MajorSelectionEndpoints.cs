@@ -18,7 +18,7 @@ public sealed class GetSpecializationOptionsEndpoint(
     public override void Configure()
     {
         Get("self-service/major-selection/options");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("MajorSelection");
         Description(d => d
             .WithName("GetSpecializationOptions")
@@ -54,7 +54,7 @@ public sealed class CreateMajorDeclarationRequestEndpoint(
     public override void Configure()
     {
         Post("self-service/major-selection/request");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("MajorSelection");
         Description(d => d
             .WithName("CreateMajorDeclarationRequest")
@@ -91,7 +91,7 @@ public sealed class GetMyMajorDeclarationsEndpoint(
     public override void Configure()
     {
         Get("self-service/major-selection/my-requests");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("MajorSelection");
         Description(d => d
             .WithName("GetMyMajorDeclarations")

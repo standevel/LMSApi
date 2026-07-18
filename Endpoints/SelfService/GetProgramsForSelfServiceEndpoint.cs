@@ -15,7 +15,7 @@ public sealed class GetProgramsForSelfServiceEndpoint(LmsDbContext db)
     public override void Configure()
     {
         Get("self-service/programs");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("ProgramSwitch");
         Description(d => d
             .WithName("GetProgramsForSelfService")

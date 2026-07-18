@@ -2341,6 +2341,7 @@ public sealed class GradebookService : IGradebookService
             }
 
             var columnMap = BuildColumnMap(headerRow);
+            var categoryMapping = BuildCategoryMapping(columnMap);
             var dataRows = worksheet.RowsUsed().Where(r => r.RowNumber() > headerRow.RowNumber());
 
             foreach (var row in dataRows)
@@ -2357,10 +2358,53 @@ public sealed class GradebookService : IGradebookService
                     totalRecords++;
                     upload.TotalRows++;
 
-                    var quizScore = TryGetDecimalCellValue(row, columnMap, new[] { "quiz" }, out var quiz) ? quiz : (decimal?)null;
-                    var assignmentScore = TryGetDecimalCellValue(row, columnMap, new[] { "assignment" }, out var assignment) ? assignment : (decimal?)null;
-                    var midsemesterScore = TryGetDecimalCellValue(row, columnMap, new[] { "midsemester test", "mid-semester test", "mid semester test" }, out var midsemester) ? midsemester : (decimal?)null;
-                    var examScore = TryGetDecimalCellValue(row, columnMap, new[] { "exam", "examination" }, out var exam) ? exam : (decimal?)null;
+                    (decimal TotalRaw, decimal TotalMax, bool HasVal) GetRawMarks(AssessmentCategoryType type)
+                    {
+                        if (!categoryMapping.TryGetValue(type, out var cols)) return (0, 0, false);
+                        decimal totalRaw = 0;
+                        decimal totalMax = 0;
+                        bool hasVal = false;
+                        foreach (var colInfo in cols)
+                        {
+                            var cellVal = row.Cell(colInfo.ColumnNumber).Value.ToString()?.Trim();
+                            if (decimal.TryParse(cellVal, NumberStyles.Float, CultureInfo.InvariantCulture, out var m))
+                            {
+                                if (colInfo.MaxScore.HasValue && colInfo.MaxScore.Value > 0)
+                                {
+                                    totalRaw += m;
+                                    totalMax += colInfo.MaxScore.Value;
+                                }
+                                else
+                                {
+                                    totalRaw += m;
+                                    totalMax += 100m; // Default implicit max
+                                }
+                                hasVal = true;
+                            }
+                        }
+                        return (totalRaw, totalMax, hasVal);
+                    }
+                    
+                    decimal ScaleMarks(decimal totalRaw, decimal totalMax, decimal targetMaxMarks)
+                    {
+                        if (totalMax > 0)
+                        {
+                            return Math.Round((totalRaw / totalMax) * targetMaxMarks, 2);
+                        }
+                        return Math.Min(totalRaw, targetMaxMarks);
+                    }
+                    
+                    decimal? GetDefaultScaledMarks(AssessmentCategoryType type)
+                    {
+                        var raw = GetRawMarks(type);
+                        if (!raw.HasVal) return null;
+                        return ScaleMarks(raw.TotalRaw, raw.TotalMax, 100m); 
+                    }
+
+                    var quizScore = GetDefaultScaledMarks(AssessmentCategoryType.CA1);
+                    var assignmentScore = GetDefaultScaledMarks(AssessmentCategoryType.CA2);
+                    var midsemesterScore = GetDefaultScaledMarks(AssessmentCategoryType.CA3);
+                    var examScore = GetDefaultScaledMarks(AssessmentCategoryType.Exam);
 
                     var rowFingerprint = BuildFingerprint(upload.UploadId, identityNumber, firstName, lastName, quizScore, assignmentScore, midsemesterScore, examScore);
                     var rawPayload = JsonSerializer.Serialize(new
@@ -2404,7 +2448,7 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = "Missing identity number";
-                        failedRows++;
+                        AddRowError(rowNumber, rowEntity.MappingReason);
                         upload.FailedRows++;
                         upload.ProcessedRows++;
                         await _dbContext.SaveChangesAsync(ct);
@@ -2417,7 +2461,7 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Duplicate";
                         rowEntity.MappingReason = "Duplicate row detected in the same upload";
-                        failedRows++;
+                        AddRowError(rowNumber, rowEntity.MappingReason);
                         upload.FailedRows++;
                         upload.ProcessedRows++;
                         await _dbContext.SaveChangesAsync(ct);
@@ -2429,7 +2473,7 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = $"Student not found (identity: {identityNumber})";
-                        failedRows++;
+                        AddRowError(rowNumber, rowEntity.MappingReason);
                         upload.FailedRows++;
                         upload.ProcessedRows++;
                         await _dbContext.SaveChangesAsync(ct);
@@ -2441,7 +2485,7 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = $"Could not provision user for student (identity: {identityNumber})";
-                        failedRows++;
+                        AddRowError(rowNumber, rowEntity.MappingReason);
                         upload.FailedRows++;
                         upload.ProcessedRows++;
                         await _dbContext.SaveChangesAsync(ct);
@@ -2456,7 +2500,7 @@ public sealed class GradebookService : IGradebookService
                     {
                         rowEntity.MappingStatus = "Failed";
                         rowEntity.MappingReason = "Could not create course offering for student";
-                        failedRows++;
+                        AddRowError(rowNumber, rowEntity.MappingReason);
                         upload.FailedRows++;
                         upload.ProcessedRows++;
                         await _dbContext.SaveChangesAsync(ct);
@@ -2465,31 +2509,25 @@ public sealed class GradebookService : IGradebookService
 
                     rowEntity.CourseOfferingId = courseOffering.Id;
 
-                    var (enrollment, enrollmentCreated) = await ProvisionEnrollmentAsync(student, courseOffering, ct);
+                    var (enrollment, enrollmentCreated) = await ProvisionEnrollmentAsync(student, appUser, courseOffering, ct);
                     if (enrollmentCreated)
                         provisionedEnrollments++;
 
-                    var (courseEnrollment, courseEnrollmentCreated) = await ProvisionCourseEnrollmentAsync(student, courseOffering, userId, ct);
+                    var (courseEnrollment, courseEnrollmentCreated) = await ProvisionCourseEnrollmentAsync(appUser, courseOffering, userId, ct);
                     if (courseEnrollmentCreated)
                         provisionedCourseEnrollments++;
 
                     var categories = await EnsureAssessmentCategoriesAsync(courseOffering.Id, ct);
                     var assessments = await EnsureAssessmentsAsync(courseOffering.Id, categories, ct);
 
-                    var gradeColumnAliases = new Dictionary<AssessmentCategoryType, string[]>
-                    {
-                        { AssessmentCategoryType.CA1, new[] { "quiz" } },
-                        { AssessmentCategoryType.CA2, new[] { "assignment" } },
-                        { AssessmentCategoryType.CA3, new[] { "midsemester test", "mid-semester test", "mid semester test" } },
-                        { AssessmentCategoryType.Exam, new[] { "exam", "examination" } }
-                    };
-
                     var rowGradeUploads = 0;
-                    foreach (var kvp in gradeColumnAliases)
+                    foreach (var kvp in categoryMapping)
                     {
-                        if (TryGetDecimalCellValue(row, columnMap, kvp.Value, out var marks))
+                        var categoryType = kvp.Key;
+                        var raw = GetRawMarks(categoryType);
+                        
+                        if (raw.HasVal)
                         {
-                            var categoryType = kvp.Key;
                             var category = categories.FirstOrDefault(c => c.CategoryType == categoryType);
                             var assessment = category == null
                                 ? null
@@ -2497,6 +2535,8 @@ public sealed class GradebookService : IGradebookService
 
                             if (assessment != null)
                             {
+                                var scaledMarks = ScaleMarks(raw.TotalRaw, raw.TotalMax, assessment.MaxMarks);
+                                
                                 var existingGrade = await _dbContext.Grades
                                     .FirstOrDefaultAsync(g => g.AssessmentId == assessment.Id && g.StudentId == appUser.Id, ct);
 
@@ -2506,7 +2546,7 @@ public sealed class GradebookService : IGradebookService
                                     {
                                         AssessmentId = assessment.Id,
                                         StudentId = appUser.Id,
-                                        MarksObtained = marks,
+                                        MarksObtained = scaledMarks,
                                         CreatedById = userId,
                                         UpdatedById = userId
                                     };
@@ -2515,7 +2555,7 @@ public sealed class GradebookService : IGradebookService
                                 }
                                 else if (!existingGrade.IsLocked)
                                 {
-                                    existingGrade.MarksObtained = marks;
+                                    existingGrade.MarksObtained = scaledMarks;
                                     existingGrade.UpdatedById = userId;
                                     existingGrade.UpdatedAt = DateTime.UtcNow;
                                     rowGradeUploads++;
@@ -2653,35 +2693,133 @@ public sealed class GradebookService : IGradebookService
         return string.Empty;
     }
 
-    private bool TryGetDecimalCellValue(IXLRow row, Dictionary<string, int> columnMap, string[] columnAliases, out decimal value)
+    private decimal? ExtractMaxScore(string header)
     {
-        foreach (var alias in columnAliases)
+        var parts = header.Split(new[] { '/', '-', '_', '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 1)
         {
-            var cellValue = GetCellValue(row, columnMap, alias);
-            if (decimal.TryParse(cellValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-                return true;
+            var lastPart = parts.Last().Trim();
+            if (decimal.TryParse(lastPart, out var max) && max > 0)
+                return max;
         }
+        return null;
+    }
 
-        // Fallback: partial matching against all header cells.
-        // Classter Excel exports often have headers like "CA1 Score", "CA2 Score", "CA3 Score", "Exam Result"
-        // which won't match exact aliases like "ca1", "ca2", "ca3", "exam".
-        foreach (var alias in columnAliases)
+    private Dictionary<AssessmentCategoryType, List<(int ColumnNumber, decimal? MaxScore)>> BuildCategoryMapping(Dictionary<string, int> columnMap)
+    {
+        var mapping = new Dictionary<AssessmentCategoryType, List<(int ColumnNumber, decimal? MaxScore)>>();
+        
+        var exactCa1 = FindColumnByPrefix(columnMap, new[] { "quiz", "ca1" });
+        var exactCa2 = FindColumnByPrefix(columnMap, new[] { "assignment", "ca2" });
+        var exactCa3 = FindColumnByPrefix(columnMap, new[] { "midsemester test", "mid-semester test", "mid semester test", "ca3" });
+        
+        var examCol = FindColumnByPrefix(columnMap, new[] { "exam", "examination" });
+        if (examCol == null)
         {
-            var normalizedAlias = alias.ToLowerInvariant().Trim();
-            foreach (var kvp in columnMap)
+            var pCol = FindPartialColumn(columnMap, new[] { "exam", "examination" });
+            if (pCol != null)
             {
-                if (kvp.Key.Contains(normalizedAlias))
+                var pKey = columnMap.FirstOrDefault(x => x.Value == pCol.Value).Key;
+                examCol = (pCol.Value, ExtractMaxScore(pKey));
+            }
+        }
+        
+        if (examCol != null) mapping[AssessmentCategoryType.Exam] = new List<(int, decimal?)> { examCol.Value };
+
+        bool hasExactCa1 = exactCa1.HasValue;
+        bool hasExactCa2 = exactCa2.HasValue;
+        bool hasExactCa3 = exactCa3.HasValue;
+
+        if (hasExactCa1) mapping[AssessmentCategoryType.CA1] = new List<(int, decimal?)> { exactCa1!.Value };
+        if (hasExactCa2) mapping[AssessmentCategoryType.CA2] = new List<(int, decimal?)> { exactCa2!.Value };
+        if (hasExactCa3) mapping[AssessmentCategoryType.CA3] = new List<(int, decimal?)> { exactCa3!.Value };
+
+        var allCaKeywords = new[] { "quiz", "assignment", "test", "practical", "ca1", "ca2", "ca3", "assessment" };
+        var genericCaCols = new List<(int ColumnNumber, decimal? MaxScore)>();
+        
+        foreach (var kvp in columnMap)
+        {
+            if (exactCa1?.ColumnNumber == kvp.Value || exactCa2?.ColumnNumber == kvp.Value || exactCa3?.ColumnNumber == kvp.Value || examCol?.ColumnNumber == kvp.Value)
+                continue;
+                
+            if (allCaKeywords.Any(k => kvp.Key.Contains(k)))
+            {
+                genericCaCols.Add((kvp.Value, ExtractMaxScore(kvp.Key)));
+            }
+        }
+        
+        if (genericCaCols.Any())
+        {
+            if (!hasExactCa1) 
+            {
+                if (hasExactCa2 || hasExactCa3)
                 {
-                    var colNum = kvp.Value;
-                    var cellValue = row.Cell(colNum).Value.ToString();
-                    if (decimal.TryParse(cellValue, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-                        return true;
+                    mapping[AssessmentCategoryType.CA1] = new List<(int, decimal?)>(genericCaCols);
+                }
+                else
+                {
+                    var availableTypes = new[] { AssessmentCategoryType.CA1, AssessmentCategoryType.CA2, AssessmentCategoryType.CA3 };
+                    int typeIdx = 0;
+                    
+                    foreach (var colInfo in genericCaCols)
+                    {
+                        if (typeIdx < availableTypes.Length)
+                        {
+                            mapping[availableTypes[typeIdx]] = new List<(int, decimal?)> { colInfo };
+                            typeIdx++;
+                        }
+                        else
+                        {
+                            mapping[AssessmentCategoryType.CA3].Add(colInfo);
+                        }
+                    }
                 }
             }
         }
+        
+        return mapping;
+    }
 
-        value = 0;
-        return false;
+    private (int ColumnNumber, decimal? MaxScore)? FindColumnByPrefix(Dictionary<string, int> columnMap, string[] aliases)
+    {
+        foreach (var alias in aliases)
+        {
+            var normalized = alias.ToLowerInvariant().Trim();
+            
+            if (columnMap.TryGetValue(normalized, out var colNum))
+                return (colNum, ExtractMaxScore(normalized));
+                
+            foreach (var kvp in columnMap)
+            {
+                var key = kvp.Key;
+                if (key.StartsWith(normalized))
+                {
+                    if (key.Length == normalized.Length)
+                        return (kvp.Value, ExtractMaxScore(key));
+                        
+                    char nextChar = key[normalized.Length];
+                    if (!char.IsLetterOrDigit(nextChar))
+                    {
+                        return (kvp.Value, ExtractMaxScore(key));
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private int? FindPartialColumn(Dictionary<string, int> columnMap, string[] aliases)
+    {
+        foreach (var alias in aliases)
+        {
+            var normalized = alias.ToLowerInvariant().Trim();
+            foreach (var kvp in columnMap)
+            {
+                if (kvp.Key.Contains(normalized))
+                    return kvp.Value;
+            }
+        }
+        return null;
     }
 
     private static bool IsRepeatedHeaderRow(string identityNumber, string firstName, string lastName)
@@ -2701,8 +2839,36 @@ public sealed class GradebookService : IGradebookService
 
         if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(lastName))
         {
-            student = await _dbContext.Students
-                .FirstOrDefaultAsync(s => s.FirstName.ToLower() == firstName.ToLower() && s.LastName.ToLower() == lastName.ToLower(), ct);
+            var matchedStudents = await _dbContext.Students
+                .Where(s => s.FirstName.ToLower() == firstName.ToLower() && s.LastName.ToLower() == lastName.ToLower())
+                .ToListAsync(ct);
+
+            if (matchedStudents.Count == 1)
+            {
+                student = matchedStudents.First();
+
+                if (string.IsNullOrWhiteSpace(student.StudentNumber) && !string.IsNullOrWhiteSpace(identityNumber))
+                {
+                    student.StudentNumber = identityNumber;
+                    
+                    var auditLog = new AuditLog
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = null,
+                        Action = "AutoAssignMatricNumber",
+                        EntityName = "Student",
+                        EntityId = student.Id.ToString(),
+                        Changes = $"System auto-assigned Matric Number '{identityNumber}' to student '{student.FirstName} {student.LastName}' during result upload.",
+                        Timestamp = DateTime.UtcNow
+                    };
+                    _dbContext.AuditLogs.Add(auditLog);
+                }
+            }
+            else if (matchedStudents.Count > 1)
+            {
+                // Unsafe to assume a match when multiple students share the exact same First and Last Name.
+                student = null;
+            }
         }
 
         return student;
@@ -2710,33 +2876,58 @@ public sealed class GradebookService : IGradebookService
 
     private async Task<(AppUser? User, bool Created)> ProvisionAppUserAsync(Student student, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
+        var existingUser = await _dbContext.Users.FindAsync(new object[] { student.Id }, ct);
+        if (existingUser != null)
+            return (existingUser, false);
+
+        if (!string.IsNullOrWhiteSpace(student.StudentNumber))
         {
-            var existingByEntra = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId, ct);
-            if (existingByEntra != null)
-                return (existingByEntra, false);
+            existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Username == student.StudentNumber, ct);
+            if (existingUser != null)
+            {
+                // Ensure IDs match if possible, or just return existing
+                if (student.Id == Guid.Empty) student.Id = existingUser.Id;
+                return (existingUser, false);
+            }
         }
 
-        var existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == student.OfficialEmail, ct);
-        if (existingUser != null)
+        if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
         {
-            if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
-                existingUser.EntraObjectId = student.EntraObjectId;
-            existingUser.DisplayName = $"{student.FirstName} {student.LastName}";
-            existingUser.UpdatedUtc = DateTime.UtcNow;
-            return (existingUser, false);
+            existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.EntraObjectId == student.EntraObjectId, ct);
+            if (existingUser != null)
+            {
+                if (student.Id == Guid.Empty) student.Id = existingUser.Id;
+                return (existingUser, false);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(student.OfficialEmail))
+        {
+            existingUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == student.OfficialEmail, ct);
+            if (existingUser != null)
+            {
+                if (!string.IsNullOrWhiteSpace(student.EntraObjectId))
+                    existingUser.EntraObjectId = student.EntraObjectId;
+                existingUser.DisplayName = $"{student.FirstName} {student.LastName}";
+                existingUser.UpdatedUtc = DateTime.UtcNow;
+
+                if (student.Id == Guid.Empty) student.Id = existingUser.Id;
+                return (existingUser, false);
+            }
         }
 
         var appUser = new AppUser
         {
-            Id = student.Id,
+            Id = student.Id != Guid.Empty ? student.Id : Guid.NewGuid(),
             EntraObjectId = student.EntraObjectId ?? $"student:{student.Id}",
+            Username = student.StudentNumber,
             Email = student.OfficialEmail,
             DisplayName = $"{student.FirstName} {student.LastName}",
             IsActive = true,
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         };
+        student.Id = appUser.Id;
 
         _dbContext.Users.Add(appUser);
         return (appUser, true);
@@ -2833,15 +3024,9 @@ public sealed class GradebookService : IGradebookService
         return offering;
     }
 
-    private async Task<(ProgramEnrollment? Enrollment, bool Created)> ProvisionEnrollmentAsync(Student student, CourseOffering offering, CancellationToken ct)
+    private async Task<(ProgramEnrollment? Enrollment, bool Created)> ProvisionEnrollmentAsync(Student student, AppUser appUser, CourseOffering offering, CancellationToken ct)
     {
         if (!offering.CurriculumId.HasValue)
-            return (null, false);
-
-        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u =>
-            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
-            || u.Email == student.OfficialEmail, ct);
-        if (appUser == null)
             return (null, false);
 
         // Find program enrollment via offering programs
@@ -2854,7 +3039,7 @@ public sealed class GradebookService : IGradebookService
             return (null, false);
 
         var enrollment = await _dbContext.Enrollments
-            .FirstOrDefaultAsync(e => e.UserId == appUser.Id && e.ProgramId == offeringProgramId.Value && e.AcademicSessionId == offering.AcademicSessionId, ct);
+            .FirstOrDefaultAsync(e => e.UserId == appUser.Id && e.AcademicSessionId == offering.AcademicSessionId, ct);
 
         if (enrollment == null)
         {
@@ -2883,16 +3068,11 @@ public sealed class GradebookService : IGradebookService
     }
 
     private async Task<(CourseEnrollment? Enrollment, bool Created)> ProvisionCourseEnrollmentAsync(
-        Student student,
+        AppUser appUser,
         CourseOffering offering,
         Guid userId,
         CancellationToken ct)
     {
-        var appUser = await _dbContext.Users.FirstOrDefaultAsync(u =>
-            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
-            || u.Email == student.OfficialEmail, ct);
-        if (appUser == null)
-            return (null, false);
 
         var enrollment = await _dbContext.CourseEnrollments
             .FirstOrDefaultAsync(ce => ce.StudentId == appUser.Id && ce.CourseOfferingId == offering.Id, ct);

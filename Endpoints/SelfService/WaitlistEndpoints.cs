@@ -13,7 +13,7 @@ public sealed class JoinWaitlistEndpoint(IWaitlistService waitlistService, ICurr
     public override void Configure()
     {
         Post("self-service/waitlist/{courseOfferingId:guid}");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -43,7 +43,7 @@ public sealed class LeaveWaitlistEndpoint(IWaitlistService waitlistService)
     public override void Configure()
     {
         Delete("self-service/waitlist/{WaitlistId}");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 
@@ -60,7 +60,7 @@ public sealed class GetStudentWaitlistsEndpoint(IWaitlistService waitlistService
     public override void Configure()
     {
         Get("self-service/waitlist");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("SelfService");
     }
 

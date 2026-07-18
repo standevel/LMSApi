@@ -440,10 +440,34 @@ public sealed class FeeService(
         var evt = doc.RootElement.GetProperty("event").GetString();
         if (evt != "charge.success") return; // Only handle successful charges
 
-        var reference = doc.RootElement
-            .GetProperty("data")
-            .GetProperty("reference").GetString() ?? "";
+        var data = doc.RootElement.GetProperty("data");
 
+        if (data.TryGetProperty("metadata", out var metadata) && metadata.ValueKind == JsonValueKind.Object)
+        {
+            if (metadata.TryGetProperty("transcriptRequestId", out var trIdProp) && trIdProp.TryGetGuid(out var trId))
+            {
+                var tr = await db.TranscriptRequests.FindAsync(trId);
+                if (tr != null && !tr.FeePaid)
+                {
+                    tr.FeePaid = true;
+                    await db.SaveChangesAsync();
+                }
+                return;
+            }
+
+            if (metadata.TryGetProperty("certificateRequestId", out var crIdProp) && crIdProp.TryGetGuid(out var crId))
+            {
+                var cr = await db.CertificateRequests.FindAsync(crId);
+                if (cr != null && !cr.FeePaid)
+                {
+                    cr.FeePaid = true;
+                    await db.SaveChangesAsync();
+                }
+                return;
+            }
+        }
+
+        var reference = data.GetProperty("reference").GetString() ?? "";
         await ConfirmPaymentByGatewayReferenceAsync(reference, "Gateway:Paystack");
     }
 

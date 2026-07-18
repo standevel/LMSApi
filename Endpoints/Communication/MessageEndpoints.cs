@@ -41,7 +41,7 @@ public sealed class SendCourseLecturerMessageEndpoint(
     public override void Configure()
     {
         Post("student/courses/{CourseOfferingId:guid}/lecturer/messages");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("Communication", "Student");
     }
 

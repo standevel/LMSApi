@@ -27,7 +27,7 @@ public sealed class GetMyAssignmentGroupEndpoint(IAssignmentGroupService service
     public override void Configure()
     {
         Get("assignments/{AssignmentId}/groups/mine");
-        Roles("Student");
+        Roles("Student", "SuperAdmin");
         Tags("AssignmentGroups");
     }
 

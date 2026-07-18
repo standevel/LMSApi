@@ -36,7 +36,8 @@ public record StudentDashboardResponseDto(
     Guid AcademicSessionId,
     string? ProgramName = null,
     string? LevelName = null,
-    string? StudentNumber = null);
+    string? StudentNumber = null,
+    bool NeedsMatricNumber = false);
 
 public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<StudentDashboardResponseDto>
 {
@@ -100,7 +101,7 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
         if (gradeViews.Any())
         {
             cumulativeGpa = gradeViews
-                .Select(g => gpaPoints.GetValueOrDefault(g.LetterGrade, 0m))
+                .Select(g => gpaPoints.GetValueOrDefault(g.LetterGrade ?? "", 0m))
                 .Average();
         }
 
@@ -182,6 +183,8 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
             ?? (await _dbContext.AcademicSessions.FirstOrDefaultAsync(s => s.IsActive, ct))?.Id 
             ?? Guid.Empty;
 
+        bool needsMatricNumber = string.IsNullOrWhiteSpace(student?.StudentNumber) || student.StudentNumber.Length < 5;
+
         var response = new StudentDashboardResponseDto(
             stats, 
             enrolledCourses, 
@@ -189,7 +192,8 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
             academicSessionId,
             student?.AcademicProgram?.Name,
             student?.Level?.Name,
-            student?.StudentNumber);
+            student?.StudentNumber,
+            needsMatricNumber);
         await SendSuccessAsync(response, ct);
     }
 }

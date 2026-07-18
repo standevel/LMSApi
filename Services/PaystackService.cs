@@ -16,6 +16,11 @@ public sealed class PaystackService(HttpClient httpClient, IConfiguration config
     public async Task<(string AuthorizationUrl, string Reference)> InitializeTransactionAsync(
         string email, decimal amountNaira, string reference, string callbackUrl, object? metadata = null)
     {
+        if (string.IsNullOrWhiteSpace(_secretKey))
+        {
+            return ($"https://checkout.paystack.com/{reference}", reference);
+        }
+
         // Paystack expects amount in kobo (1 naira = 100 kobo)
         long amountKobo = (long)(amountNaira * 100);
 
