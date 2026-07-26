@@ -465,20 +465,37 @@ public sealed class CourseService(
                 .OrderBy(co => co.Course.Code)
                 .ToListAsync(ct);
 
+            var allOfferingIds = allOfferings.Select(co => co.Id).ToList();
+            var publishedIds = (await dbContext.GradePublications
+                .Where(gp => allOfferingIds.Contains(gp.CourseOfferingId) && gp.IsVisibleToStudents)
+                .Select(gp => gp.CourseOfferingId)
+                .ToListAsync(ct)).ToHashSet();
+
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+            var studentCounts = await dbContext.CourseEnrollments
+                .Where(e => allOfferingIds.Contains(e.CourseOfferingId) && e.Status == "Registered")
+                .GroupBy(e => e.CourseOfferingId)
+                .Select(g => new { OfferingId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.OfferingId, x => x.Count, ct);
+
+            var sessionCounts = await dbContext.LectureSessions
+                .Where(ls => allOfferingIds.Contains(ls.CourseOfferingId) && ls.SessionDate >= today)
+                .GroupBy(ls => ls.CourseOfferingId)
+                .Select(g => new { OfferingId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.OfferingId, x => x.Count, ct);
+
             var offeringDtos = new List<LecturerCourseOfferingDto>();
             int totalStudents = 0;
 
             foreach (var co in allOfferings)
             {
-                var studentCount = await dbContext.CourseEnrollments
-                    .CountAsync(e => e.CourseOfferingId == co.Id && e.Status == "Registered", ct);
-                var sessionCount = await dbContext.LectureSessions
-                    .CountAsync(ls => ls.CourseOfferingId == co.Id
-                        && ls.SessionDate >= DateOnly.FromDateTime(DateTime.UtcNow), ct);
+                var studentCount = studentCounts.GetValueOrDefault(co.Id, 0);
+                var sessionCount = sessionCounts.GetValueOrDefault(co.Id, 0);
                 totalStudents += studentCount;
 
                 offeringDtos.Add(BuildLecturerCourseOfferingDto(
-                    co, CourseLecturerRole.Main, studentCount, sessionCount));
+                    co, CourseLecturerRole.Main, studentCount, sessionCount, publishedIds.Contains(co.Id)));
             }
 
             return new LecturerCoursesResponse(offeringDtos, offeringDtos.Count, totalStudents);
@@ -488,17 +505,34 @@ public sealed class CourseService(
         var dtos = new List<LecturerCourseOfferingDto>();
         int lecturerTotalStudents = 0;
 
+        var lecturerOfferingIds = lecturerRows.Select(r => r.CourseOffering.Id).Distinct().ToList();
+        var lecturerPublishedIds = (await dbContext.GradePublications
+            .Where(gp => lecturerOfferingIds.Contains(gp.CourseOfferingId) && gp.IsVisibleToStudents)
+            .Select(gp => gp.CourseOfferingId)
+            .ToListAsync(ct)).ToHashSet();
+
+        var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var lecturerStudentCounts = await dbContext.CourseEnrollments
+            .Where(e => lecturerOfferingIds.Contains(e.CourseOfferingId) && e.Status == "Registered")
+            .GroupBy(e => e.CourseOfferingId)
+            .Select(g => new { OfferingId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.OfferingId, x => x.Count, ct);
+
+        var lecturerSessionCounts = await dbContext.LectureSessions
+            .Where(ls => lecturerOfferingIds.Contains(ls.CourseOfferingId) && ls.SessionDate >= todayDate)
+            .GroupBy(ls => ls.CourseOfferingId)
+            .Select(g => new { OfferingId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.OfferingId, x => x.Count, ct);
+
         foreach (var row in lecturerRows)
         {
             var co = row.CourseOffering;
-            var studentCount = await dbContext.CourseEnrollments
-                .CountAsync(e => e.CourseOfferingId == co.Id && e.Status == "Registered", ct);
-            var sessionCount = await dbContext.LectureSessions
-                .CountAsync(ls => ls.CourseOfferingId == co.Id
-                    && ls.SessionDate >= DateOnly.FromDateTime(DateTime.UtcNow), ct);
+            var studentCount = lecturerStudentCounts.GetValueOrDefault(co.Id, 0);
+            var sessionCount = lecturerSessionCounts.GetValueOrDefault(co.Id, 0);
             lecturerTotalStudents += studentCount;
 
-            dtos.Add(BuildLecturerCourseOfferingDto(co, row.Role, studentCount, sessionCount));
+            dtos.Add(BuildLecturerCourseOfferingDto(co, row.Role, studentCount, sessionCount, lecturerPublishedIds.Contains(co.Id)));
         }
 
         return new LecturerCoursesResponse(dtos, dtos.Count, lecturerTotalStudents);
@@ -688,9 +722,12 @@ public sealed class CourseService(
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.CourseOfferingId == offeringId
                                    && e.StudentId == studentId
-                                   && e.Status == "Registered", ct);
+                                   && e.Status != "Dropped", ct);
 
-        if (enrollment == null)
+        var hasGrades = await dbContext.Grades
+            .AnyAsync(g => g.StudentId == studentId && g.Assessment.CourseOfferingId == offeringId, ct);
+
+        if (enrollment == null && !hasGrades)
             return Error.Forbidden("Enrollment.Forbidden", "You are not enrolled in this course.");
 
         var offering = await OfferingsWithNavigations()
@@ -920,7 +957,7 @@ public sealed class CourseService(
     }
 
     private static LecturerCourseOfferingDto BuildLecturerCourseOfferingDto(
-        CourseOffering co, CourseLecturerRole role, int studentCount, int sessionCount)
+        CourseOffering co, CourseLecturerRole role, int studentCount, int sessionCount, bool isPublished = false)
     {
         var programNames = string.Join(", ", co.Programs.Select(p => p.Program?.Name).Distinct());
         var levelNames   = string.Join(", ", co.Programs.Select(p => p.Level?.Name).Distinct());
@@ -938,6 +975,7 @@ public sealed class CourseService(
             (int)co.Semester,
             role,
             studentCount,
-            sessionCount);
+            sessionCount,
+            isPublished);
     }
 }

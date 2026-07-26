@@ -1,4 +1,5 @@
 using FastEndpoints;
+using LMS.Api.Security;
 using LMS.Api.Services;
 
 namespace LMS.Api.Endpoints.Timetable;
@@ -18,7 +19,7 @@ public class UpdateLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Put("timetable/slots/{SlotId}");
-        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
+        Policies(PermissionPolicy.Build(LmsPermissions.TimetableManage));
         Description(d => d
             .WithName("UpdateLectureTimetableSlot")
             .WithTags("Timetable")

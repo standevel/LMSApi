@@ -71,6 +71,11 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
                 user = await userRepository.GetByEntraObjectIdAsync(objectId, ct);
             }
 
+            if (user is null && !string.IsNullOrEmpty(email))
+            {
+                user = await userRepository.GetActiveByUsernameAsync(email, ct);
+            }
+
             if (user is null && !string.IsNullOrEmpty(subjectId) && Guid.TryParse(subjectId, out var subjectGuid))
             {
                 user = await userRepository.GetByIdAsync(subjectGuid, ct);
@@ -142,9 +147,9 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
             dbUserId = parsedGuid;
         }
 
-        var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId);
+        var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId, user?.ThemePreference);
         await Send.OkAsync(ApiResponse<MeResponse>.Ok(data), ct);
     }
 }
 
-public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles, Guid? DepartmentId = null, Guid? FacultyId = null);
+public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles, Guid? DepartmentId = null, Guid? FacultyId = null, string? ThemePreference = null);

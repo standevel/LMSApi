@@ -16,6 +16,14 @@ public static class LmsPermissions
     public const string AdvisingAccess = "advising.access";
     public const string ProfileView = "profile.view";
     public const string UsersSwitch = "users.switch";
+    public const string AdmissionsManage = "admissions.manage";
+    public const string FeesManage = "fees.manage";
+    public const string HostelsManage = "hostels.manage";
+    public const string HostelsView = "hostels.view";
+    public const string HostelsExeatManage = "hostels.exeat.manage";
+    public const string TimetableManage = "timetable.manage";
+    public const string IntegrationsManage = "integrations.manage";
+    public const string QuizzesManage = "quizzes.manage";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -32,6 +40,14 @@ public static class LmsPermissions
         AdvisingManage,
         AdvisingAccess,
         ProfileView,
-        UsersSwitch
+        UsersSwitch,
+        AdmissionsManage,
+        FeesManage,
+        HostelsManage,
+        HostelsView,
+        HostelsExeatManage,
+        TimetableManage,
+        IntegrationsManage,
+        QuizzesManage
     ];
 }

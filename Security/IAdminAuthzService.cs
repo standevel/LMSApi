@@ -17,6 +17,9 @@ public interface IAdminAuthzService
         DateTime? expiresUtc,
         CancellationToken ct = default);
     Task<GetEffectivePermissionsResult> GetEffectivePermissionsAsync(string entraObjectId, CancellationToken ct = default);
+    Task<ListRolesWithPermissionsResult> ListRolesWithPermissionsAsync(CancellationToken ct = default);
+    Task<CreateCustomRoleResult> CreateCustomRoleAsync(string roleName, string? description, CancellationToken ct = default);
+    Task<UpdateRolePermissionsResult> UpdateRolePermissionsAsync(string roleName, List<string> permissionCodes, CancellationToken ct = default);
 }
 
 public sealed record ManagedUserSummary(
@@ -33,6 +36,35 @@ public sealed record ManagedUserSummary(
     string? DepartmentName,
     bool IsStudent,
     bool IsLecturer);
+
+public sealed record RolePermissionSummary(
+    Guid Id,
+    string Name,
+    string? Description,
+    bool IsSystemRole,
+    IReadOnlyCollection<string> Permissions);
+
+public sealed record ListRolesWithPermissionsResult(
+    bool Success,
+    IReadOnlyCollection<RolePermissionSummary>? Roles = null,
+    string? ErrorCode = null,
+    string? ErrorMessage = null,
+    int StatusCode = StatusCodes.Status400BadRequest);
+
+public sealed record CreateCustomRoleResult(
+    bool Success,
+    RolePermissionSummary? Role = null,
+    string? ErrorCode = null,
+    string? ErrorMessage = null,
+    int StatusCode = StatusCodes.Status400BadRequest);
+
+public sealed record UpdateRolePermissionsResult(
+    bool Success,
+    string? RoleName = null,
+    IReadOnlyCollection<string>? Permissions = null,
+    string? ErrorCode = null,
+    string? ErrorMessage = null,
+    int StatusCode = StatusCodes.Status400BadRequest);
 
 public sealed record ManagedUserPermissionOverride(
     string PermissionCode,

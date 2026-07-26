@@ -20,7 +20,7 @@ public sealed class GetRateLimitStatusEndpoint(IRateLimitingService rateLimiting
     public override void Configure()
     {
         Get("rate-limit/status");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("RateLimiting");
     }
 

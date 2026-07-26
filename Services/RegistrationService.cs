@@ -412,7 +412,7 @@ public class RegistrationService : BaseService, IRegistrationService
             {
                 var blockers = await GetBlockersAsync(studentId, offering, ct);
                 emptyOptionDtos.Add(new RegistrationOfferingDto(
-                    offering.Id, offering.Course.Code, offering.Course.Title, offering.Course.CreditUnits,
+                    offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty, offering.Course?.CreditUnits ?? 0,
                     (int)offering.Semester, "To be announced",
                     emptySlots.Where(s => s.CourseOfferingId == offering.Id)
                         .Select(s => $"{s.DayOfWeek} {s.StartTime:HH\\:mm}–{s.EndTime:HH\\:mm}").ToList(),
@@ -517,7 +517,7 @@ public class RegistrationService : BaseService, IRegistrationService
 
         var registeredDtos = registrations.Select(x => 
         {
-            var credits = curriculumCreditMap.TryGetValue(x.CourseOffering.CourseId, out var cVal) ? cVal : x.CourseOffering.Course.CreditUnits;
+            var credits = curriculumCreditMap.TryGetValue(x.CourseOffering.CourseId, out var cVal) ? cVal : (x.CourseOffering.Course?.CreditUnits ?? 0);
             return MapRegistration(x, x.CourseOffering, credits);
         }).ToList();
 
@@ -529,10 +529,10 @@ public class RegistrationService : BaseService, IRegistrationService
                 ? new List<RegistrationBlockerDto> { new("Registration.AlreadyRegistered", "Already registered.") }
                 : await GetBlockersAsync(studentId, offering, ct);
 
-            var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : offering.Course.CreditUnits;
+            var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
 
             optionDtos.Add(new RegistrationOfferingDto(
-                offering.Id, offering.Course.Code, offering.Course.Title, credits,
+                offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty, credits,
                 (int)offering.Semester,
                 offering.Lecturers.FirstOrDefault(l => l.Role == Data.Enums.CourseLecturerRole.Main)?.Lecturer?.DisplayName ?? "To be announced",
                 slots.Where(x => x.CourseOfferingId == offering.Id)
@@ -598,7 +598,7 @@ public class RegistrationService : BaseService, IRegistrationService
             return blockers;
         }
 
-        if (!offering.AcademicSession.IsActive)
+        if (offering.AcademicSession == null || !offering.AcademicSession.IsActive)
             blockers.Add(new("Registration.InactiveSession", "Registration is limited to the active academic session."));
 
         if (await _context.CourseEnrollments.AnyAsync(x => x.StudentId == studentId &&
@@ -630,7 +630,7 @@ public class RegistrationService : BaseService, IRegistrationService
             {
                 blockers.Add(new("Registration.NotInCurriculum", "This course is not in your assigned curriculum."));
             }
-            else if (curriculumCourseSemesters.TryGetValue(offering.CourseId, out var mappedSem) && mappedSem != offering.AcademicSession.ActiveSemester)
+            else if (offering.AcademicSession != null && curriculumCourseSemesters.TryGetValue(offering.CourseId, out var mappedSem) && mappedSem != offering.AcademicSession.ActiveSemester)
             {
                 blockers.Add(new("Registration.WrongSemester", $"This course is scheduled for {mappedSem} semester in your curriculum."));
             }
@@ -643,11 +643,11 @@ public class RegistrationService : BaseService, IRegistrationService
         var enrolledOfferings = await _context.CourseEnrollments.AsNoTracking()
             .Where(x => x.StudentId == studentId && x.Status == "Registered" &&
                 x.CourseOffering.AcademicSessionId == offering.AcademicSessionId && x.CourseOffering.Semester == offering.Semester)
-            .Select(x => x.CourseOffering)
+            .Select(x => new { x.CourseOffering.CourseId, CreditUnits = x.CourseOffering.Course != null ? x.CourseOffering.Course.CreditUnits : 0 })
             .ToListAsync(ct);
 
-        var currentCredits = enrolledOfferings.Sum(x => curriculumCreditMap.TryGetValue(x.CourseId, out var c) ? c : x.Course.CreditUnits);
-        var offeringCredits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : offering.Course.CreditUnits;
+        var currentCredits = enrolledOfferings.Sum(x => curriculumCreditMap.TryGetValue(x.CourseId, out var c) ? c : x.CreditUnits);
+        var offeringCredits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
 
         if (currentCredits + offeringCredits > maxCredits)
             blockers.Add(new("Registration.CreditLimitExceeded", $"Adding this course would exceed the {maxCredits}-credit limit."));
@@ -748,7 +748,7 @@ public class RegistrationService : BaseService, IRegistrationService
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     private static CourseRegistrationDto MapRegistration(CourseEnrollment enrollment, CourseOffering offering, int creditUnits) =>
-        new(enrollment.Id, enrollment.StudentId, offering.Id, offering.Course.Code, offering.Course.Title,
+        new(enrollment.Id, enrollment.StudentId, offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty,
             enrollment.RegisteredAtUtc, enrollment.DroppedAtUtc, enrollment.Status, creditUnits);
 
     private async Task<Guid> GetProgramIdFromOffering(Guid courseOfferingId, CancellationToken ct)
@@ -1029,7 +1029,7 @@ public class RegistrationService : BaseService, IRegistrationService
                     var missing = prerequisiteIds.Where(x => !passed.Contains(x)).ToList();
                     if (missing.Count > 0)
                     {
-                        return Error.Validation("Registration.PrerequisitesNotMet", $"Prerequisites not met for {offering.Course.Code}.");
+                        return Error.Validation("Registration.PrerequisitesNotMet", $"Prerequisites not met for {offering.Course?.Code ?? "this course"}.");
                     }
                 }
             }

@@ -240,3 +240,49 @@ public record CourseOfferingSummaryDto(
     bool IsPublished,
     string? LecturerName,
     bool IsSessionActive);
+
+// ==================== BULK PUBLICATION ====================
+
+public record BulkPublishGradesRequest(
+    Guid? AcademicSessionId,
+    int? Semester,
+    Guid? FacultyId,
+    Guid? DepartmentId,
+    Guid? ProgramId,
+    string? PublicationNotes,
+    bool ForcePublish = false);
+
+public record BulkPublishResultDto(
+    int TotalProcessed,
+    int TotalPublished,
+    int TotalSkipped,
+    List<BulkPublishDetailDto> Details);
+
+public record BulkPublishDetailDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    bool Succeeded,
+    string Message);
+
+public record BulkUnpublishGradesRequest(
+    Guid? AcademicSessionId,
+    int? Semester,
+    Guid? FacultyId,
+    Guid? DepartmentId,
+    Guid? ProgramId,
+    string? UnpublicationNotes);
+
+public record BulkUnpublishResultDto(
+    int TotalProcessed,
+    int TotalUnpublished,
+    int TotalSkipped,
+    List<BulkUnpublishDetailDto> Details);
+
+public record BulkUnpublishDetailDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    bool Succeeded,
+    string Message);
+

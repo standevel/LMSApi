@@ -145,6 +145,15 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
       public DbSet<ClassterResultUpload> ClassterResultUploads => Set<ClassterResultUpload>();
       public DbSet<ClassterResultUploadRow> ClassterResultUploadRows => Set<ClassterResultUploadRow>();
 
+      // ===== Hostel Management =====
+      public DbSet<HostelBlock> HostelBlocks => Set<HostelBlock>();
+      public DbSet<HostelRoom> HostelRooms => Set<HostelRoom>();
+      public DbSet<HostelBed> HostelBeds => Set<HostelBed>();
+      public DbSet<HostelAllocation> HostelAllocations => Set<HostelAllocation>();
+      public DbSet<HostelMaintenanceRequest> HostelMaintenanceRequests => Set<HostelMaintenanceRequest>();
+      public DbSet<HostelExeat> HostelExeats => Set<HostelExeat>();
+      public DbSet<HostelDevice> HostelDevices => Set<HostelDevice>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -2237,6 +2246,39 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(x => x.AssignmentId);
+        });
+
+        modelBuilder.Entity<HostelDevice>(entity =>
+        {
+            entity.ToTable("HostelDevices");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Brand).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ModelNameNumber).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.SerialNumber).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.MacAddressOrImei).HasMaxLength(100);
+            entity.Property(x => x.ColorAndDescription).HasMaxLength(500);
+            entity.Property(x => x.ProofOfOwnershipUrl).HasMaxLength(2000);
+            entity.Property(x => x.VerificationNotes).HasMaxLength(500);
+
+            entity.HasOne(x => x.Student)
+                .WithMany()
+                .HasForeignKey(x => x.StudentId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.HostelAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.HostelAllocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.VerifiedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.VerifiedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.StudentId);
+            entity.HasIndex(x => x.SerialNumber);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.HostelAllocationId);
         });
     }
 }

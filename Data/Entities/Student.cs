@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json.Serialization;
+using LMS.Api.Extensions;
 
 namespace LMS.Api.Data.Entities;
 
@@ -17,14 +18,38 @@ public sealed class Student
     public string OfficialEmail { get; set; } = string.Empty;
     
     // Personal Info (copied from application)
-    public string FirstName { get; set; } = string.Empty;
-    public string LastName { get; set; } = string.Empty;
-    public string? MiddleName { get; set; }
+    private string _firstName = string.Empty;
+    public string FirstName 
+    { 
+        get => _firstName; 
+        set => _firstName = value.ToTitleCase() ?? string.Empty; 
+    }
+
+    private string _lastName = string.Empty;
+    public string LastName 
+    { 
+        get => _lastName; 
+        set => _lastName = value.ToTitleCase() ?? string.Empty; 
+    }
+
+    private string? _middleName;
+    public string? MiddleName 
+    { 
+        get => _middleName; 
+        set => _middleName = value.ToTitleCase(); 
+    }
+    
     public string PersonalEmail { get; set; } = string.Empty; // Original application email
     public string Phone { get; set; } = string.Empty;
+    public string? Gender { get; set; }
     
     // Emergency Contact (copied from AdmissionApplication)
-    public string? EmergencyContactName { get; set; }
+    private string? _emergencyContactName;
+    public string? EmergencyContactName 
+    { 
+        get => _emergencyContactName; 
+        set => _emergencyContactName = value.ToTitleCase(); 
+    }
     public string? EmergencyContactPhone { get; set; }
     public string? EmergencyContactEmail { get; set; }
     

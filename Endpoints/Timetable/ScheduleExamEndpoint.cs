@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FastEndpoints;
 using LMS.Api.Contracts;
+using LMS.Api.Security;
 using LMS.Api.Services;
 
 namespace LMS.Api.Endpoints.Timetable;
@@ -23,7 +24,7 @@ public sealed class ScheduleExamEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Post("timetable/exams");
-        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
+        Policies(PermissionPolicy.Build(LmsPermissions.TimetableManage));
         Description(d => d
             .WithName("ScheduleExam")
             .WithTags("Timetable")

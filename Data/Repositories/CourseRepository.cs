@@ -2,11 +2,12 @@ using LMS.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Data.Repositories;
-
 public sealed class CourseRepository(LmsDbContext dbContext) : ICourseRepository
 {
     public Task<Course?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         dbContext.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.Program)
             .Include(x => x.Level)
             .Include(x => x.Offerings)
@@ -24,6 +25,8 @@ public sealed class CourseRepository(LmsDbContext dbContext) : ICourseRepository
 
     public Task<List<Course>> GetAllAsync(CancellationToken ct = default) =>
         dbContext.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.Program)
             .Include(x => x.Level)
             .Include(x => x.Offerings)

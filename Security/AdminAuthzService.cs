@@ -307,6 +307,93 @@ public sealed class AdminAuthzService(
         return new GetEffectivePermissionsResult(true, user.EntraObjectId, sorted, StatusCode: StatusCodes.Status200OK);
     }
 
+    public async Task<ListRolesWithPermissionsResult> ListRolesWithPermissionsAsync(CancellationToken ct = default)
+    {
+        var roles = await dbContext.Roles
+            .Include(r => r.RolePermissions)
+            .ThenInclude(rp => rp.Permission)
+            .OrderBy(r => r.Name)
+            .ToListAsync(ct);
+
+        var systemRoles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.Lecturer,
+            LmsRoles.Student, LmsRoles.Registrar, LmsRoles.Finance, LmsRoles.HOD,
+            LmsRoles.AdmissionOfficer, LmsRoles.AcademicAdmin, LmsRoles.HostelWarden,
+            LmsRoles.StudentWelfare, LmsRoles.Adviser, LmsRoles.Parent
+        };
+
+        var list = roles.Select(r => new RolePermissionSummary(
+            r.Id,
+            r.Name,
+            r.Description,
+            systemRoles.Contains(r.Name),
+            r.RolePermissions.Select(rp => rp.Permission.Code).ToList()
+        )).ToList();
+
+        return new ListRolesWithPermissionsResult(true, list, StatusCode: StatusCodes.Status200OK);
+    }
+
+    public async Task<CreateCustomRoleResult> CreateCustomRoleAsync(string roleName, string? description, CancellationToken ct = default)
+    {
+        var trimmedName = roleName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedName))
+        {
+            return new CreateCustomRoleResult(false, ErrorCode: "role_name_required", ErrorMessage: "Role name cannot be empty.", StatusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var existing = await roleRepository.GetByNameAsync(trimmedName, ct);
+        if (existing is not null)
+        {
+            return new CreateCustomRoleResult(false, ErrorCode: "role_exists", ErrorMessage: $"Role '{trimmedName}' already exists.", StatusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var role = new AppRole
+        {
+            Id = Guid.NewGuid(),
+            Name = trimmedName,
+            Description = description?.Trim()
+        };
+
+        dbContext.Roles.Add(role);
+        await dbContext.SaveChangesAsync(ct);
+
+        var summary = new RolePermissionSummary(role.Id, role.Name, role.Description, false, Array.Empty<string>());
+        return new CreateCustomRoleResult(true, summary, StatusCode: StatusCodes.Status200OK);
+    }
+
+    public async Task<UpdateRolePermissionsResult> UpdateRolePermissionsAsync(string roleName, List<string> permissionCodes, CancellationToken ct = default)
+    {
+        var role = await dbContext.Roles
+            .Include(r => r.RolePermissions)
+            .FirstOrDefaultAsync(r => r.Name == roleName, ct);
+
+        if (role is null)
+        {
+            return new UpdateRolePermissionsResult(false, ErrorCode: "role_not_found", ErrorMessage: $"Role '{roleName}' was not found.", StatusCode: StatusCodes.Status404NotFound);
+        }
+
+        var permissions = await dbContext.Permissions
+            .Where(p => permissionCodes.Contains(p.Code))
+            .ToListAsync(ct);
+
+        dbContext.RolePermissions.RemoveRange(role.RolePermissions);
+
+        foreach (var p in permissions)
+        {
+            dbContext.RolePermissions.Add(new RolePermission
+            {
+                RoleId = role.Id,
+                PermissionId = p.Id
+            });
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        var updatedCodes = permissions.Select(p => p.Code).ToList();
+        return new UpdateRolePermissionsResult(true, role.Name, updatedCodes, StatusCode: StatusCodes.Status200OK);
+    }
+
     private async Task<bool> IsCurrentActorSuperAdminAsync(CancellationToken ct)
     {
         var actorUserId = await currentUserContext.GetUserIdAsync(ct);

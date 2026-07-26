@@ -3197,6 +3197,401 @@ namespace LMS.Api.Data.Migrations
                     b.ToTable("GradingScales", (string)null);
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AcademicSessionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AllocatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ApplicationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CheckedInAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CheckedOutAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("FeeRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("HostelBedId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("PreferredBlockId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("PreferredRoomType")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("SpecialNeeds")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.HasIndex("FeeRecordId");
+
+                    b.HasIndex("HostelBedId");
+
+                    b.HasIndex("PreferredBlockId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("HostelAllocations");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelBed", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BedLabel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("CurrentStudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("HostelRoomId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentStudentId");
+
+                    b.HasIndex("HostelRoomId");
+
+                    b.ToTable("HostelBeds");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelBlock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CampusLocation")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("GenderType")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("TotalFloors")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("WardenEmail")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("WardenName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("WardenPhone")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("HostelBlocks");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Brand")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ColorAndDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("DeviceType")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("HostelAllocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MacAddressOrImei")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ModelNameNumber")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("ProofOfOwnershipUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime>("RegisteredAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SerialNumber")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("VerificationNotes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HostelAllocationId");
+
+                    b.HasIndex("SerialNumber");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("VerifiedByUserId");
+
+                    b.ToTable("HostelDevices", (string)null);
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelExeat", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ActualReturnTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("DepartureTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Destination")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("ExpectedReturnTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("HostelAllocationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("ParentApproved")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("WardenRemarks")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("HostelAllocationId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("HostelExeats");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelMaintenanceRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AssignedTo")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("HostelBlockId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("HostelRoomId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ReportedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ReportedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HostelBlockId");
+
+                    b.HasIndex("HostelRoomId");
+
+                    b.HasIndex("ReportedByUserId");
+
+                    b.ToTable("HostelMaintenanceRequests");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelRoom", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AmenitiesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("FloorLevel")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("HostelBlockId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("RoomNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("RoomType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<decimal>("SemesterFeeRate")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HostelBlockId");
+
+                    b.ToTable("HostelRooms");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.LateFeeApplication", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5054,6 +5449,9 @@ namespace LMS.Api.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("Gender")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("GraduationDate")
                         .HasColumnType("datetime2");
 
@@ -6717,6 +7115,144 @@ namespace LMS.Api.Data.Migrations
                     b.Navigation("PublishedBy");
                 });
 
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelAllocation", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AcademicSession", "AcademicSession")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.StudentFeeRecord", "FeeRecord")
+                        .WithMany()
+                        .HasForeignKey("FeeRecordId");
+
+                    b.HasOne("LMS.Api.Data.Entities.HostelBed", "HostelBed")
+                        .WithMany()
+                        .HasForeignKey("HostelBedId");
+
+                    b.HasOne("LMS.Api.Data.Entities.HostelBlock", "PreferredBlock")
+                        .WithMany()
+                        .HasForeignKey("PreferredBlockId");
+
+                    b.HasOne("LMS.Api.Data.Entities.Student", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AcademicSession");
+
+                    b.Navigation("FeeRecord");
+
+                    b.Navigation("HostelBed");
+
+                    b.Navigation("PreferredBlock");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelBed", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.Student", "CurrentStudent")
+                        .WithMany()
+                        .HasForeignKey("CurrentStudentId");
+
+                    b.HasOne("LMS.Api.Data.Entities.HostelRoom", "HostelRoom")
+                        .WithMany("Beds")
+                        .HasForeignKey("HostelRoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CurrentStudent");
+
+                    b.Navigation("HostelRoom");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelDevice", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.HostelAllocation", "HostelAllocation")
+                        .WithMany()
+                        .HasForeignKey("HostelAllocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Api.Data.Entities.Student", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "VerifiedByUser")
+                        .WithMany()
+                        .HasForeignKey("VerifiedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("HostelAllocation");
+
+                    b.Navigation("Student");
+
+                    b.Navigation("VerifiedByUser");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelExeat", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId");
+
+                    b.HasOne("LMS.Api.Data.Entities.HostelAllocation", "HostelAllocation")
+                        .WithMany()
+                        .HasForeignKey("HostelAllocationId");
+
+                    b.HasOne("LMS.Api.Data.Entities.Student", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("HostelAllocation");
+
+                    b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelMaintenanceRequest", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.HostelBlock", "HostelBlock")
+                        .WithMany()
+                        .HasForeignKey("HostelBlockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Api.Data.Entities.HostelRoom", "HostelRoom")
+                        .WithMany()
+                        .HasForeignKey("HostelRoomId");
+
+                    b.HasOne("LMS.Api.Data.Entities.AppUser", "ReportedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReportedByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HostelBlock");
+
+                    b.Navigation("HostelRoom");
+
+                    b.Navigation("ReportedByUser");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelRoom", b =>
+                {
+                    b.HasOne("LMS.Api.Data.Entities.HostelBlock", "HostelBlock")
+                        .WithMany("Rooms")
+                        .HasForeignKey("HostelBlockId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HostelBlock");
+                });
+
             modelBuilder.Entity("LMS.Api.Data.Entities.LateFeeApplication", b =>
                 {
                     b.HasOne("LMS.Api.Data.Entities.FeeTemplate", "FeeTemplate")
@@ -7795,6 +8331,16 @@ namespace LMS.Api.Data.Migrations
             modelBuilder.Entity("LMS.Api.Data.Entities.GradingScale", b =>
                 {
                     b.Navigation("DirectEntryConfigurations");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelBlock", b =>
+                {
+                    b.Navigation("Rooms");
+                });
+
+            modelBuilder.Entity("LMS.Api.Data.Entities.HostelRoom", b =>
+                {
+                    b.Navigation("Beds");
                 });
 
             modelBuilder.Entity("LMS.Api.Data.Entities.LectureSession", b =>

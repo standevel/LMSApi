@@ -1,5 +1,6 @@
 using FastEndpoints;
 using LMS.Api.Data.Entities;
+using LMS.Api.Security;
 using LMS.Api.Services;
 
 namespace LMS.Api.Endpoints.Timetable;
@@ -16,7 +17,7 @@ public class AutoResolveConflictEndpoint(ITimetableService timetableService)
     public override void Configure()
     {
         Post("timetable/resolve-conflict");
-        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
+        Policies(PermissionPolicy.Build(LmsPermissions.TimetableManage));
         Description(d => d
             .WithName("AutoResolveConflict")
             .WithTags("Timetable")

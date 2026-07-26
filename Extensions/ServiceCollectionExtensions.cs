@@ -201,6 +201,9 @@ public static class ServiceCollectionExtensions
          services.AddHttpClient<PaystackService>();
          services.AddHttpClient<HydrogenService>();
 
+        // Hostel Management
+        services.AddScoped<IHostelService, HostelService>();
+
          // Timetable Management
         services.AddScoped<ITimetableService, TimetableService>();
         services.AddScoped<ILectureSessionService, LectureSessionService>();
@@ -257,20 +260,20 @@ public static class ServiceCollectionExtensions
                 options.ForwardDefaultSelector = context =>
                 {
                     var authorization = context.Request.Headers.Authorization.ToString();
-                    if (string.IsNullOrEmpty(authorization))
+                    var token = string.Empty;
+
+                    if (!string.IsNullOrEmpty(authorization) && authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        // Return LocalJwtScheme; its handler will gracefully handle missing tokens.
-                        return LocalJwtScheme;
+                        token = authorization["Bearer ".Length..].Trim();
+                    }
+                    else if (context.Request.Query.TryGetValue("access_token", out var queryToken))
+                    {
+                        token = queryToken.ToString();
                     }
 
-                    if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return LocalJwtScheme;
-                    }
-
-                    var token = authorization["Bearer ".Length..].Trim();
                     if (string.IsNullOrWhiteSpace(token))
                     {
+                        // Return LocalJwtScheme; its handler will gracefully handle missing tokens.
                         return LocalJwtScheme;
                     }
 
@@ -319,6 +322,16 @@ public static class ServiceCollectionExtensions
 
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    },
                     OnAuthenticationFailed = context =>
                     {
                         Console.WriteLine($"[Auth Failed] {context.Exception.Message}");
@@ -350,6 +363,20 @@ public static class ServiceCollectionExtensions
                     ClockSkew = TimeSpan.FromMinutes(1),
                     NameClaimType = "name",
                     RoleClaimType = "roles"
+                };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

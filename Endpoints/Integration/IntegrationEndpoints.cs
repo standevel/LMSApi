@@ -13,7 +13,7 @@ public sealed class TestExternalSystemConnectionEndpoint(IIntegrationService int
     public override void Configure()
     {
         Post("integrations/test-connection");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("Integration");
     }
 

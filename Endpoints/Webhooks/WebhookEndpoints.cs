@@ -13,7 +13,7 @@ public sealed class CreateWebhookSubscriptionEndpoint(IWebhookService webhookSer
     public override void Configure()
     {
         Post("webhooks/subscriptions");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("Webhooks");
     }
 
@@ -37,7 +37,7 @@ public sealed class GetWebhookSubscriptionsEndpoint(IWebhookService webhookServi
     public override void Configure()
     {
         Get("webhooks/subscriptions");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("Webhooks");
     }
 
@@ -59,7 +59,7 @@ public sealed class DeleteWebhookSubscriptionEndpoint(IWebhookService webhookSer
     public override void Configure()
     {
         Delete("webhooks/subscriptions/{Id}");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("Webhooks");
     }
 
@@ -81,7 +81,7 @@ public sealed class TestWebhookSubscriptionEndpoint(IWebhookService webhookServi
     public override void Configure()
     {
         Post("webhooks/subscriptions/{Id}/test");
-        Roles("SuperAdmin", "Admin");
+        Policies(PermissionPolicy.Build(LmsPermissions.IntegrationsManage));
         Tags("Webhooks");
     }
 

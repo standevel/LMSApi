@@ -46,6 +46,8 @@ public interface IGradebookService
     Task<ErrorOr<GradePublicationDto>> PublishGradesAsync(Guid courseOfferingId, PublishGradesRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> UnpublishGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<int>> UnlockGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<BulkPublishResultDto>> BulkPublishGradesAsync(BulkPublishGradesRequest request, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<BulkUnpublishResultDto>> BulkUnpublishGradesAsync(BulkUnpublishGradesRequest request, Guid userId, CancellationToken ct = default);
     
     // Course Listing (for course selector)
     Task<ErrorOr<List<CourseOfferingSummaryDto>>> GetAllCoursesForGradebookAsync(Guid userId, string? searchTerm = null, CancellationToken ct = default);

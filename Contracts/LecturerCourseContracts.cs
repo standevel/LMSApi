@@ -20,7 +20,8 @@ public record LecturerCourseOfferingDto(
     int Semester,
     CourseLecturerRole Role,
     int EnrolledStudentCount,
-    int UpcomingSessionsCount);
+    int UpcomingSessionsCount,
+    bool IsPublished = false);
 
 public record LecturerCoursesResponse(
     List<LecturerCourseOfferingDto> Courses,

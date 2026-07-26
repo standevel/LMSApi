@@ -30,7 +30,6 @@ app.UseApplicationMiddleware()
 
 app.Run();
 
-// Trigger full watch rebuild to scan new endpoints
 public partial class Program
 {
 }

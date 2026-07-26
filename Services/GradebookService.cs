@@ -1870,9 +1870,316 @@ public sealed class GradebookService : IGradebookService
             courseOfferingId.ToString(), $"Unlocked {unlockedCount} grades", ct);
 
         return unlockedCount;
-    }
+     }
 
-    #endregion
+     public async Task<ErrorOr<BulkPublishResultDto>> BulkPublishGradesAsync(
+         BulkPublishGradesRequest request,
+         Guid userId,
+         CancellationToken ct = default)
+     {
+         // 1. Get system configuration
+         var sysConfig = await GetSystemConfigurationAsync(ct);
+         if (sysConfig.IsError)
+             return sysConfig.FirstError;
+
+         var isApprovalEnabled = sysConfig.Value.ApprovalWorkflowEnabled;
+
+         // 2. Query matching CourseOfferings
+         var query = _dbContext.CourseOfferings
+             .Include(co => co.Course)
+                 .ThenInclude(c => c.Program)
+                     .ThenInclude(p => p.Department)
+             .Include(co => co.Programs)
+                 .ThenInclude(cop => cop.Program)
+                     .ThenInclude(p => p.Department)
+             .AsQueryable();
+
+         if (request.AcademicSessionId.HasValue)
+         {
+             query = query.Where(co => co.AcademicSessionId == request.AcademicSessionId.Value);
+         }
+
+         if (request.Semester.HasValue)
+         {
+             query = query.Where(co => co.Semester == (LMS.Api.Data.Enums.Semester)request.Semester.Value);
+         }
+
+         if (request.FacultyId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.Program.Department.FacultyId == request.FacultyId.Value ||
+                 co.Programs.Any(cop => cop.Program.Department.FacultyId == request.FacultyId.Value));
+         }
+
+         if (request.DepartmentId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.Program.DepartmentId == request.DepartmentId.Value ||
+                 co.Programs.Any(cop => cop.Program.DepartmentId == request.DepartmentId.Value));
+         }
+
+         if (request.ProgramId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.ProgramId == request.ProgramId.Value ||
+                 co.Programs.Any(cop => cop.ProgramId == request.ProgramId.Value));
+         }
+
+         var offerings = await query.ToListAsync(ct);
+
+         var details = new List<BulkPublishDetailDto>();
+         var publishedCount = 0;
+         var skippedCount = 0;
+
+         foreach (var offering in offerings)
+         {
+             try
+             {
+                 var approvalWorkflowCompleted = false;
+
+                 // Check approval workflow if enabled (and not force-publishing)
+                 if (isApprovalEnabled && !request.ForcePublish)
+                 {
+                     var approvals = await _dbContext.GradeApprovals
+                         .Where(x => x.CourseOfferingId == offering.Id && x.IsRequired)
+                         .ToListAsync(ct);
+
+                     if (approvals.Any() && !approvals.All(x => x.Status == ApprovalStatus.Approved))
+                     {
+                         details.Add(new BulkPublishDetailDto(
+                             offering.Id,
+                             offering.Course.Code,
+                             offering.Course.Title,
+                             false,
+                             "All required approvals must be approved before publishing"));
+                         skippedCount++;
+                         continue;
+                     }
+
+                     approvalWorkflowCompleted = approvals.Any() && approvals.All(x => x.Status == ApprovalStatus.Approved);
+                 }
+                 else if (isApprovalEnabled && request.ForcePublish)
+                 {
+                     // Mark workflow as bypassed but still record it
+                     approvalWorkflowCompleted = false;
+                 }
+
+                 // Lock all grades
+                 var assessments = await _dbContext.Assessments
+                     .Where(x => x.CourseOfferingId == offering.Id)
+                     .ToListAsync(ct);
+
+                 var grades = await _dbContext.Grades
+                     .Where(g => assessments.Select(a => a.Id).Contains(g.AssessmentId))
+                     .ToListAsync(ct);
+
+                 foreach (var grade in grades)
+                 {
+                     grade.IsLocked = true;
+                 }
+
+                 // Create or update publication — delete duplicates first to avoid unique constraint issues
+                 var existingPublications = await _dbContext.GradePublications
+                     .Where(x => x.CourseOfferingId == offering.Id)
+                     .OrderBy(x => x.CreatedAt)
+                     .ToListAsync(ct);
+
+                 GradePublication? publication;
+
+                 if (existingPublications.Count == 0)
+                 {
+                     publication = new GradePublication
+                     {
+                         CourseOfferingId = offering.Id,
+                         PublishedById = userId,
+                         IsVisibleToStudents = true,
+                         ApprovalWorkflowCompleted = approvalWorkflowCompleted,
+                         PublicationNotes = request.PublicationNotes,
+                         AcademicSessionId = offering.AcademicSessionId,
+                         Semester = (int)offering.Semester
+                     };
+                     _dbContext.GradePublications.Add(publication);
+                 }
+                 else
+                 {
+                     // Keep only the oldest record; remove any duplicates
+                     publication = existingPublications.First();
+                     if (existingPublications.Count > 1)
+                     {
+                         _dbContext.GradePublications.RemoveRange(existingPublications.Skip(1));
+                     }
+                     publication.IsVisibleToStudents = true;
+                     publication.ApprovalWorkflowCompleted = approvalWorkflowCompleted;
+                     publication.PublicationNotes = request.PublicationNotes;
+                 }
+
+                 await _dbContext.SaveChangesAsync(ct);
+
+
+                 // Notify students
+                 var enrolledStudents = await _dbContext.CourseEnrollments
+                     .Where(e => e.CourseOfferingId == offering.Id && e.Status == "Registered")
+                     .Select(e => e.StudentId)
+                     .ToListAsync(ct);
+
+                 var courseCode = offering.Course?.Code ?? "your course";
+                 foreach (var studentId in enrolledStudents)
+                 {
+                     await _notificationService.CreateAsync(new CreateNotificationRequest(
+                         studentId,
+                         userId,
+                         "Grades Published",
+                         $"Grades for {courseCode} have been published.",
+                         "System",
+                         $"/courses/{offering.Id}/grades"
+                     ), ct);
+                 }
+
+                 await _auditService.LogAsync("PublishGrades", "GradePublication",
+                     publication.Id.ToString(), $"Bulk published grades for course offering {offering.Id}", ct);
+
+                 details.Add(new BulkPublishDetailDto(
+                     offering.Id,
+                     offering.Course.Code,
+                     offering.Course.Title,
+                     true,
+                     "Published successfully"));
+                 publishedCount++;
+             }
+             catch (Exception ex)
+             {
+                 details.Add(new BulkPublishDetailDto(
+                     offering.Id,
+                     offering.Course.Code,
+                     offering.Course.Title,
+                     false,
+                     $"Error: {ex.Message}"));
+                 skippedCount++;
+             }
+         }
+
+         return new BulkPublishResultDto(
+             offerings.Count,
+             publishedCount,
+             skippedCount,
+             details);
+     }
+
+     public async Task<ErrorOr<BulkUnpublishResultDto>> BulkUnpublishGradesAsync(
+         BulkUnpublishGradesRequest request,
+         Guid userId,
+         CancellationToken ct = default)
+     {
+         var query = _dbContext.CourseOfferings
+             .Include(co => co.Course)
+                 .ThenInclude(c => c.Program)
+                     .ThenInclude(p => p.Department)
+             .Include(co => co.Programs)
+                 .ThenInclude(cop => cop.Program)
+                     .ThenInclude(p => p.Department)
+             .AsQueryable();
+
+         if (request.AcademicSessionId.HasValue)
+         {
+             query = query.Where(co => co.AcademicSessionId == request.AcademicSessionId.Value);
+         }
+
+         if (request.Semester.HasValue)
+         {
+             query = query.Where(co => co.Semester == (LMS.Api.Data.Enums.Semester)request.Semester.Value);
+         }
+
+         if (request.FacultyId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.Program.Department.FacultyId == request.FacultyId.Value ||
+                 co.Programs.Any(cop => cop.Program.Department.FacultyId == request.FacultyId.Value));
+         }
+
+         if (request.DepartmentId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.Program.DepartmentId == request.DepartmentId.Value ||
+                 co.Programs.Any(cop => cop.Program.DepartmentId == request.DepartmentId.Value));
+         }
+
+         if (request.ProgramId.HasValue)
+         {
+             query = query.Where(co =>
+                 co.Course.ProgramId == request.ProgramId.Value ||
+                 co.Programs.Any(cop => cop.ProgramId == request.ProgramId.Value));
+         }
+
+         var offerings = await query.ToListAsync(ct);
+
+         var details = new List<BulkUnpublishDetailDto>();
+         var unpublishedCount = 0;
+         var skippedCount = 0;
+
+         foreach (var offering in offerings)
+         {
+             try
+             {
+                 var existingPublications = await _dbContext.GradePublications
+                     .Where(x => x.CourseOfferingId == offering.Id)
+                     .ToListAsync(ct);
+
+                 var publishedRecords = existingPublications.Where(x => x.IsVisibleToStudents).ToList();
+
+                 if (publishedRecords.Count == 0)
+                 {
+                     details.Add(new BulkUnpublishDetailDto(
+                         offering.Id,
+                         offering.Course.Code,
+                         offering.Course.Title,
+                         false,
+                         "Course is not currently published"));
+                     skippedCount++;
+                     continue;
+                 }
+
+                 foreach (var pub in publishedRecords)
+                 {
+                     pub.IsVisibleToStudents = false;
+                     if (!string.IsNullOrWhiteSpace(request.UnpublicationNotes))
+                     {
+                         pub.PublicationNotes = request.UnpublicationNotes;
+                     }
+                 }
+
+                 await _dbContext.SaveChangesAsync(ct);
+
+                 await _auditService.LogAsync("UnpublishGrades", "GradePublication",
+                     offering.Id.ToString(), $"Bulk unpublished grades for course offering {offering.Id}", ct);
+
+                 details.Add(new BulkUnpublishDetailDto(
+                     offering.Id,
+                     offering.Course.Code,
+                     offering.Course.Title,
+                     true,
+                     "Unpublished successfully"));
+                 unpublishedCount++;
+             }
+             catch (Exception ex)
+             {
+                 details.Add(new BulkUnpublishDetailDto(
+                     offering.Id,
+                     offering.Course.Code,
+                     offering.Course.Title,
+                     false,
+                     $"Error: {ex.Message}"));
+                 skippedCount++;
+             }
+         }
+
+         return new BulkUnpublishResultDto(
+             offerings.Count,
+             unpublishedCount,
+             skippedCount,
+             details);
+     }
+
+     #endregion
 
     #region Course Listing
 
@@ -1977,6 +2284,12 @@ public sealed class GradebookService : IGradebookService
             .Where(x => x.StudentId == studentId && assessments.Select(a => a.Id).Contains(x.AssessmentId))
             .ToListAsync(ct);
 
+        var isEnrolled = await _dbContext.CourseEnrollments
+            .AnyAsync(x => x.CourseOfferingId == courseOfferingId && x.StudentId == studentId && x.Status != "Dropped", ct);
+
+        if (!isEnrolled && grades.Count == 0)
+            return Error.Forbidden("Grades.NotEnrolled", "You are not enrolled in this course and have no grades.");
+
         var assessmentGrades = new List<StudentAssessmentGradeDto>();
         decimal totalScore = 0;
 
@@ -2031,9 +2344,24 @@ public sealed class GradebookService : IGradebookService
             .Select(x => x.CourseOfferingId)
             .ToListAsync(ct);
 
+        // Filter publications to only those where the student is enrolled OR has grades
+        var enrolledOfferingIds = await _dbContext.CourseEnrollments
+            .Where(e => e.StudentId == studentId && e.Status != "Dropped")
+            .Select(e => e.CourseOfferingId)
+            .ToListAsync(ct);
+
+        var gradedOfferingIds = await _dbContext.Grades
+            .Where(g => g.StudentId == studentId)
+            .Select(g => g.Assessment.CourseOfferingId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var relevantOfferingIds = enrolledOfferingIds.Union(gradedOfferingIds).ToHashSet();
+        var relevantPublications = publications.Where(p => relevantOfferingIds.Contains(p)).ToList();
+
         var results = new List<StudentGradeViewDto>();
 
-        foreach (var courseOfferingId in publications)
+        foreach (var courseOfferingId in relevantPublications)
         {
             var result = await GetStudentGradesAsync(courseOfferingId, studentId, ct);
             if (!result.IsError)
@@ -2831,26 +3159,58 @@ public sealed class GradebookService : IGradebookService
 
     private async Task<Student?> FindStudentAsync(string identityNumber, string firstName, string lastName, CancellationToken ct)
     {
-        var student = await _dbContext.Students
-            .FirstOrDefaultAsync(s => s.StudentNumber == identityNumber, ct);
+        var cleanId = identityNumber?.Trim() ?? string.Empty;
+        var cleanFirst = firstName?.Trim() ?? string.Empty;
+        var cleanLast = lastName?.Trim() ?? string.Empty;
 
-        if (student != null)
-            return student;
+        if (!string.IsNullOrWhiteSpace(cleanId))
+        {
+            // 1. Direct match by StudentNumber (exact or case-insensitive)
+            var student = await _dbContext.Students
+                .FirstOrDefaultAsync(s => s.StudentNumber == cleanId || (s.StudentNumber != null && s.StudentNumber.ToLower() == cleanId.ToLower()), ct);
 
-        if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(lastName))
+            if (student != null)
+                return student;
+
+            // 2. Match by JAMB Registration Number
+            student = await _dbContext.Students
+                .FirstOrDefaultAsync(s => s.JambRegistrationNumber == cleanId || (s.JambRegistrationNumber != null && s.JambRegistrationNumber.ToLower() == cleanId.ToLower()), ct);
+
+            if (student != null)
+            {
+                if (string.IsNullOrWhiteSpace(student.StudentNumber))
+                {
+                    student.StudentNumber = cleanId;
+                }
+                return student;
+            }
+
+            // 3. Match normalized StudentNumber (without slashes, hyphens, or spaces)
+            var normCleanId = cleanId.Replace("/", "").Replace("-", "").Replace(" ", "").ToLower();
+            var allStudents = await _dbContext.Students.ToListAsync(ct);
+            student = allStudents.FirstOrDefault(s => 
+                !string.IsNullOrWhiteSpace(s.StudentNumber) && 
+                s.StudentNumber.Replace("/", "").Replace("-", "").Replace(" ", "").ToLower() == normCleanId);
+
+            if (student != null)
+                return student;
+        }
+
+        // 4. Match by First and Last Name
+        if (!string.IsNullOrWhiteSpace(cleanFirst) && !string.IsNullOrWhiteSpace(cleanLast))
         {
             var matchedStudents = await _dbContext.Students
-                .Where(s => s.FirstName.ToLower() == firstName.ToLower() && s.LastName.ToLower() == lastName.ToLower())
+                .Where(s => s.FirstName.ToLower() == cleanFirst.ToLower() && s.LastName.ToLower() == cleanLast.ToLower())
                 .ToListAsync(ct);
 
             if (matchedStudents.Count == 1)
             {
-                student = matchedStudents.First();
+                var student = matchedStudents.First();
 
-                if (string.IsNullOrWhiteSpace(student.StudentNumber) && !string.IsNullOrWhiteSpace(identityNumber))
+                if (string.IsNullOrWhiteSpace(student.StudentNumber) && !string.IsNullOrWhiteSpace(cleanId))
                 {
-                    student.StudentNumber = identityNumber;
-                    
+                    student.StudentNumber = cleanId;
+
                     var auditLog = new AuditLog
                     {
                         Id = Guid.NewGuid(),
@@ -2858,20 +3218,16 @@ public sealed class GradebookService : IGradebookService
                         Action = "AutoAssignMatricNumber",
                         EntityName = "Student",
                         EntityId = student.Id.ToString(),
-                        Changes = $"System auto-assigned Matric Number '{identityNumber}' to student '{student.FirstName} {student.LastName}' during result upload.",
+                        Changes = $"System auto-assigned Matric Number '{cleanId}' to student '{student.FirstName} {student.LastName}' during result upload.",
                         Timestamp = DateTime.UtcNow
                     };
                     _dbContext.AuditLogs.Add(auditLog);
                 }
-            }
-            else if (matchedStudents.Count > 1)
-            {
-                // Unsafe to assume a match when multiple students share the exact same First and Last Name.
-                student = null;
+                return student;
             }
         }
 
-        return student;
+        return null;
     }
 
     private async Task<(AppUser? User, bool Created)> ProvisionAppUserAsync(Student student, CancellationToken ct)

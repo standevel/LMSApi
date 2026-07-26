@@ -1,4 +1,5 @@
 using FastEndpoints;
+using LMS.Api.Security;
 using LMS.Api.Services;
 
 namespace LMS.Api.Endpoints.Timetable;
@@ -11,7 +12,7 @@ public class DeleteLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Delete("timetable/slots/{SlotId}");
-        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
+        Policies(PermissionPolicy.Build(LmsPermissions.TimetableManage));
         Description(d => d
             .WithName("DeleteLectureTimetableSlot")
             .WithTags("Timetable")

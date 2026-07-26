@@ -106,6 +106,17 @@ public class ParentPortalService : BaseService, IParentPortalService
             }
         }
 
+        var studentUser = await _context.Users.FirstOrDefaultAsync(u =>
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
+            || u.EntraObjectId == $"student:{student.Id}"
+            || (!string.IsNullOrWhiteSpace(student.OfficialEmail) && u.Email == student.OfficialEmail), ct);
+
+        var studentUserIds = new List<Guid> { student.Id };
+        if (studentUser != null)
+        {
+            studentUserIds.Add(studentUser.Id);
+        }
+
         var sysConfig = await _context.SystemGradingConfigurations
             .AsNoTracking()
             .OrderByDescending(x => x.UpdatedAt)
@@ -124,7 +135,7 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .ThenInclude(co => co.Course)
             .Include(e => e.CourseOffering)
                 .ThenInclude(co => co.AcademicSession)
-            .Where(e => e.StudentId == studentId && e.Status == "Registered");
+            .Where(e => e.StudentId == studentId && (e.Status == "Registered" || e.Status == "Enrolled" || e.Status == "Approved" || e.Status == "Active" || string.IsNullOrEmpty(e.Status)));
 
         if (academicSessionId.HasValue)
             enrollmentsQuery = enrollmentsQuery.Where(e => e.CourseOffering.AcademicSessionId == academicSessionId.Value);
@@ -139,7 +150,7 @@ public class ParentPortalService : BaseService, IParentPortalService
             if (offering == null) continue;
 
             var totalMarks = await _context.Grades
-                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
+                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && studentUserIds.Contains(g.StudentId))
                 .SumAsync(g => g.MarksObtained, ct);
 
             if (totalMarks > 100m) totalMarks = 100m;
@@ -151,7 +162,7 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .CountAsync(ls => ls.CourseOfferingId == offering.Id && ls.IsCompleted, ct);
 
             var attendedSessions = await _context.SessionAttendances
-                .CountAsync(sa => sa.LectureSession.CourseOfferingId == offering.Id && sa.StudentId == studentId && sa.IsPresent, ct);
+                .CountAsync(sa => sa.LectureSession.CourseOfferingId == offering.Id && studentUserIds.Contains(sa.StudentId) && sa.IsPresent, ct);
 
             var attendancePercentage = totalSessions > 0
                 ? (int)Math.Round((double)attendedSessions / totalSessions * 100)
@@ -188,6 +199,17 @@ public class ParentPortalService : BaseService, IParentPortalService
             return Error.NotFound("Student.NotFound", "Student not found.");
         }
 
+        var studentUser = await _context.Users.FirstOrDefaultAsync(u =>
+            (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId)
+            || u.EntraObjectId == $"student:{student.Id}"
+            || (!string.IsNullOrWhiteSpace(student.OfficialEmail) && u.Email == student.OfficialEmail), ct);
+
+        var studentUserIds = new List<Guid> { student.Id };
+        if (studentUser != null)
+        {
+            studentUserIds.Add(studentUser.Id);
+        }
+
         var sysConfig = await _context.SystemGradingConfigurations
             .AsNoTracking()
             .OrderByDescending(x => x.UpdatedAt)
@@ -207,7 +229,7 @@ public class ParentPortalService : BaseService, IParentPortalService
                 .ThenInclude(co => co.Course)
             .Include(e => e.CourseOffering)
                 .ThenInclude(co => co.AcademicSession)
-            .Where(e => e.StudentId == studentId && e.Status == "Registered");
+            .Where(e => e.StudentId == studentId && (e.Status == "Registered" || e.Status == "Enrolled" || e.Status == "Approved" || e.Status == "Active" || string.IsNullOrEmpty(e.Status)));
 
         if (academicSessionId.HasValue)
             enrollmentsQuery = enrollmentsQuery.Where(e => e.CourseOffering.AcademicSessionId == academicSessionId.Value);
@@ -222,7 +244,7 @@ public class ParentPortalService : BaseService, IParentPortalService
             if (offering == null) continue;
 
             var totalMarks = await _context.Grades
-                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
+                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && studentUserIds.Contains(g.StudentId))
                 .SumAsync(g => g.MarksObtained, ct);
 
             if (totalMarks > 100m) totalMarks = 100m;

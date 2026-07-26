@@ -17,7 +17,8 @@ public static class LmsRoles
     public const string Parent = "Parent";
     public const string AdmissionOfficer = "AdmissionOfficer";
     public const string AcademicAdmin = "AcademicAdmin";
-
+    public const string HostelWarden = "HostelWarden";
+    public const string StudentWelfare = "StudentWelfare";
 }
 
 public static class LmsPolicies

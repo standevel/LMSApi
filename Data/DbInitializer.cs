@@ -25,6 +25,7 @@ public sealed partial class DbInitializer(LmsDbContext dbContext, ILogger<DbInit
         await SeedProgramsAsync(ct);
         await SeedLecturersAsync(ct);
         await SeedStudentsAsync(ct);
+        await SeedTestUsersAsync(ct);
         await SeedDocumentTypesAsync(ct);
         await SeedSponsorsAsync(ct);
         await SeedSubjectsAsync(ct);
@@ -38,6 +39,7 @@ await SeedCountriesAsync(ct);
         await SeedSystemGradingConfigurationAsync(ct);
         await SeedSystemTranscriptConfigurationAsync(ct);
         await SeedFeeCategoriesAsync(ct);
+        await SeedHostelsAsync(ct);
        
         logger.LogInformation("Database initialization completed successfully.");
     }
@@ -59,7 +61,10 @@ await SeedCountriesAsync(ct);
             LmsRoles.Guest,
             LmsRoles.HOD,
             LmsRoles.Parent,
-            LmsRoles.AdmissionOfficer
+            LmsRoles.AdmissionOfficer,
+            LmsRoles.AcademicAdmin,
+            LmsRoles.HostelWarden,
+            LmsRoles.StudentWelfare
         };
 
         var existing = await dbContext.Roles.Select(x => x.Name).ToListAsync(ct);
@@ -102,28 +107,20 @@ await SeedCountriesAsync(ct);
         var map = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
         {
             [LmsRoles.SuperAdmin] = LmsPermissions.All,
-            [LmsRoles.Admin] =
-            [
-                LmsPermissions.UsersManage,
-                LmsPermissions.CoursesManage,
-                LmsPermissions.CoursesTeach,
-                LmsPermissions.GradesSubmit,
-                LmsPermissions.RecordsManage,
-                LmsPermissions.ReportsView,
-                LmsPermissions.EnrollmentsManage,
-                LmsPermissions.AdvisingManage,
-                LmsPermissions.AdvisingAccess,
-                LmsPermissions.ProfileView
-            ],
-            [LmsRoles.ViceChancellor] = [LmsPermissions.UsersManage, LmsPermissions.RolesManage, LmsPermissions.PermissionsManage, LmsPermissions.CoursesManage, LmsPermissions.ReportsView],
-            [LmsRoles.Dean] = [LmsPermissions.CoursesManage, LmsPermissions.CoursesTeach, LmsPermissions.ReportsView, LmsPermissions.EnrollmentsManage, LmsPermissions.AdvisingManage, LmsPermissions.AdvisingAccess],
-            [LmsRoles.HOD] = [LmsPermissions.CoursesManage, LmsPermissions.CoursesTeach, LmsPermissions.ReportsView, LmsPermissions.EnrollmentsManage, LmsPermissions.AdvisingManage, LmsPermissions.AdvisingAccess],
-            [LmsRoles.Lecturer] = [LmsPermissions.CoursesTeach, LmsPermissions.GradesSubmit, LmsPermissions.ProfileView, LmsPermissions.AdvisingAccess],
+            [LmsRoles.Admin] = LmsPermissions.All,
+            [LmsRoles.ViceChancellor] = [LmsPermissions.UsersManage, LmsPermissions.RolesManage, LmsPermissions.PermissionsManage, LmsPermissions.CoursesManage, LmsPermissions.ReportsView, LmsPermissions.HostelsView, LmsPermissions.AdmissionsManage, LmsPermissions.FeesManage],
+            [LmsRoles.Dean] = [LmsPermissions.CoursesManage, LmsPermissions.CoursesTeach, LmsPermissions.ReportsView, LmsPermissions.EnrollmentsManage, LmsPermissions.AdvisingManage, LmsPermissions.AdvisingAccess, LmsPermissions.ProfileView],
+            [LmsRoles.HOD] = [LmsPermissions.CoursesManage, LmsPermissions.CoursesTeach, LmsPermissions.ReportsView, LmsPermissions.EnrollmentsManage, LmsPermissions.AdvisingManage, LmsPermissions.AdvisingAccess, LmsPermissions.ProfileView],
+            [LmsRoles.Lecturer] = [LmsPermissions.CoursesTeach, LmsPermissions.GradesSubmit, LmsPermissions.QuizzesManage, LmsPermissions.ProfileView, LmsPermissions.AdvisingAccess],
             [LmsRoles.Adviser] = [LmsPermissions.ProfileView, LmsPermissions.AdvisingAccess],
             [LmsRoles.Student] = [LmsPermissions.ProfileView],
-            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage],
+            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.AdmissionsManage, LmsPermissions.TimetableManage, LmsPermissions.HostelsView, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.Finance] = [LmsPermissions.FeesManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
             [LmsRoles.Parent] = [LmsPermissions.ProfileView],
-            [LmsRoles.AdmissionOfficer] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.ReportsView]
+            [LmsRoles.AdmissionOfficer] = [LmsPermissions.AdmissionsManage, LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.AcademicAdmin] = [LmsPermissions.CoursesManage, LmsPermissions.TimetableManage, LmsPermissions.EnrollmentsManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.HostelWarden] = [LmsPermissions.HostelsManage, LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.StudentWelfare] = [LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView]
         };
 
         var existingPairs = await dbContext.RolePermissions
@@ -951,4 +948,118 @@ await SeedCountriesAsync(ct);
             await dbContext.SaveChangesAsync(ct);
             logger.LogInformation("Seeded default system transcript configuration.");
         }
+
+        private async Task SeedTestUsersAsync(CancellationToken ct)
+        {
+            var testUsers = new[]
+            {
+                new { Role = LmsRoles.Admin, Email = "admin@wigweuniversity.edu.ng", Name = "Test Admin" },
+                new { Role = LmsRoles.Student, Email = "student@wigweuniversity.edu.ng", Name = "Test Student" },
+                new { Role = LmsRoles.Lecturer, Email = "lecturer@wigweuniversity.edu.ng", Name = "Test Lecturer" },
+                new { Role = LmsRoles.Registrar, Email = "registry@wigweuniversity.edu.ng", Name = "Test Registrar" },
+                new { Role = LmsRoles.Finance, Email = "finance@wigweuniversity.edu.ng", Name = "Test Finance" },
+                new { Role = LmsRoles.Dean, Email = "senate@wigweuniversity.edu.ng", Name = "Test Senate" }
+            };
+
+            foreach (var tu in testUsers)
+            {
+                var role = await dbContext.Roles.FirstOrDefaultAsync(x => x.Name == tu.Role, ct);
+                if (role == null) continue;
+
+                if (await dbContext.Users.AnyAsync(x => x.Email == tu.Email, ct)) continue;
+
+                logger.LogInformation("Seeding Test User: {Email} ({Role})", tu.Email, tu.Role);
+                var user = new AppUser
+                {
+                    DisplayName = tu.Name,
+                    Email = tu.Email,
+                    Username = tu.Email,
+                    EntraObjectId = Guid.NewGuid().ToString(),
+                    IsActive = true
+                };
+                dbContext.Users.Add(user);
+                await dbContext.SaveChangesAsync(ct);
+                dbContext.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+            }
+            await dbContext.SaveChangesAsync(ct);
+        }
+
+    private async Task SeedHostelsAsync(CancellationToken ct)
+    {
+        if (await dbContext.HostelBlocks.AnyAsync(ct))
+        {
+            logger.LogInformation("Hostels already seeded. Skipping.");
+            return;
+        }
+
+        logger.LogInformation("Seeding Hostel Blocks, Rooms, and Beds...");
+
+        var maleBlock = new HostelBlock
+        {
+            Name = "Nelson Mandela Hall (Male Hostel A)",
+            Code = "MANDELA-A",
+            GenderType = HostelGenderType.Male,
+            CampusLocation = "East Campus Block 1",
+            TotalFloors = 3,
+            WardenName = "Mr. John Okafor",
+            WardenPhone = "+2348030001122",
+            WardenEmail = "warden.mandela@wigweuniversity.edu.ng",
+            IsActive = true
+        };
+
+        var femaleBlock = new HostelBlock
+        {
+            Name = "Funmilayo Ransome-Kuti Hall (Female Hostel A)",
+            Code = "KUTI-A",
+            GenderType = HostelGenderType.Female,
+            CampusLocation = "West Campus Block 2",
+            TotalFloors = 3,
+            WardenName = "Mrs. Sarah Adebayo",
+            WardenPhone = "+2348030003344",
+            WardenEmail = "warden.kuti@wigweuniversity.edu.ng",
+            IsActive = true
+        };
+
+        dbContext.HostelBlocks.AddRange(maleBlock, femaleBlock);
+        await dbContext.SaveChangesAsync(ct);
+
+        // Seed Rooms for Male Block
+        var maleRooms = new List<HostelRoom>
+        {
+            new HostelRoom { HostelBlockId = maleBlock.Id, RoomNumber = "101", FloorLevel = 1, RoomType = "Single Deluxe", Capacity = 1, SemesterFeeRate = 250000, AmenitiesJson = "[\"AC\", \"Ensuite Bath\", \"Study Desk\"]", Status = RoomStatus.Available },
+            new HostelRoom { HostelBlockId = maleBlock.Id, RoomNumber = "102", FloorLevel = 1, RoomType = "Double Standard", Capacity = 2, SemesterFeeRate = 180000, AmenitiesJson = "[\"Ceiling Fan\", \"Shared Bath\", \"Study Desk\"]", Status = RoomStatus.Available },
+            new HostelRoom { HostelBlockId = maleBlock.Id, RoomNumber = "201", FloorLevel = 2, RoomType = "4-Bed Standard", Capacity = 4, SemesterFeeRate = 120000, AmenitiesJson = "[\"Ceiling Fan\", \"Shared Bath\"]", Status = RoomStatus.Available }
+        };
+
+        // Seed Rooms for Female Block
+        var femaleRooms = new List<HostelRoom>
+        {
+            new HostelRoom { HostelBlockId = femaleBlock.Id, RoomNumber = "101", FloorLevel = 1, RoomType = "Single Deluxe", Capacity = 1, SemesterFeeRate = 250000, AmenitiesJson = "[\"AC\", \"Ensuite Bath\", \"Study Desk\"]", Status = RoomStatus.Available },
+            new HostelRoom { HostelBlockId = femaleBlock.Id, RoomNumber = "102", FloorLevel = 1, RoomType = "Double Standard", Capacity = 2, SemesterFeeRate = 180000, AmenitiesJson = "[\"Ceiling Fan\", \"Shared Bath\", \"Study Desk\"]", Status = RoomStatus.Available },
+            new HostelRoom { HostelBlockId = femaleBlock.Id, RoomNumber = "201", FloorLevel = 2, RoomType = "4-Bed Standard", Capacity = 4, SemesterFeeRate = 120000, AmenitiesJson = "[\"Ceiling Fan\", \"Shared Bath\"]", Status = RoomStatus.Available }
+        };
+
+        dbContext.HostelRooms.AddRange(maleRooms);
+        dbContext.HostelRooms.AddRange(femaleRooms);
+        await dbContext.SaveChangesAsync(ct);
+
+        // Seed Beds
+        var allRooms = maleRooms.Concat(femaleRooms);
+        foreach (var room in allRooms)
+        {
+            for (int i = 1; i <= room.Capacity; i++)
+            {
+                char bedLetter = (char)('A' + i - 1);
+                dbContext.HostelBeds.Add(new HostelBed
+                {
+                    HostelRoomId = room.Id,
+                    BedLabel = $"Bed {bedLetter}",
+                    Status = BedStatus.Vacant
+                });
+            }
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("Seeded Hostels, Rooms, and Beds successfully.");
     }
+}

@@ -9,7 +9,7 @@ public interface IStudentService
 {
     Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
         string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
-        int page, int pageSize, CancellationToken ct);
+        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct);
 
     Task<StudentDetailDto?> GetStudentDetailAsync(Guid studentId, CancellationToken ct);
 
@@ -28,7 +28,7 @@ public class StudentService(LmsDbContext context) : IStudentService
 {
     public async Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
         string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
-        int page, int pageSize, CancellationToken ct)
+        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct)
     {
         var query = context.Students
             .Include(s => s.AcademicProgram)
@@ -71,9 +71,17 @@ public class StudentService(LmsDbContext context) : IStudentService
         }
 
         // Filter by level
-        if (!string.IsNullOrWhiteSpace(levelId) && Guid.TryParse(levelId, out var levId))
+        if (!string.IsNullOrWhiteSpace(levelId))
         {
-            query = query.Where(s => s.LevelId == levId);
+            if (Guid.TryParse(levelId, out var levId))
+            {
+                query = query.Where(s => s.LevelId == levId);
+            }
+            else
+            {
+                var searchLevel = levelId.Trim();
+                query = query.Where(s => s.Level != null && s.Level.Name == searchLevel);
+            }
         }
 
         // Filter by session
@@ -93,9 +101,18 @@ public class StudentService(LmsDbContext context) : IStudentService
 
         var totalCount = await query.CountAsync(ct);
 
+        if (!string.IsNullOrWhiteSpace(sortBy) && sortBy.Equals("level", StringComparison.OrdinalIgnoreCase))
+        {
+            query = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase)
+                ? query.OrderByDescending(s => s.Level != null ? s.Level.Name : "").ThenBy(s => s.LastName).ThenBy(s => s.FirstName)
+                : query.OrderBy(s => s.Level != null ? s.Level.Name : "").ThenBy(s => s.LastName).ThenBy(s => s.FirstName);
+        }
+        else
+        {
+            query = query.OrderBy(s => s.LastName).ThenBy(s => s.FirstName);
+        }
+
         var students = await query
-            .OrderBy(s => s.LastName)
-            .ThenBy(s => s.FirstName)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new StudentSummaryDto
@@ -207,31 +224,120 @@ public class StudentService(LmsDbContext context) : IStudentService
         var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
         var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
 
+        var studentEntity = await context.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (studentEntity == null)
+            return Enumerable.Empty<StudentCourseResultDto>();
+
+        var appUser = await context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Email == studentEntity.OfficialEmail, ct);
+
+        if (appUser == null)
+            return Enumerable.Empty<StudentCourseResultDto>();
+
+        var userId = appUser.Id;
+
+        var enrolledOfferingIds = await context.CourseEnrollments
+            .Where(e => e.StudentId == userId && e.Status != "Dropped")
+            .Select(e => e.CourseOfferingId)
+            .ToListAsync(ct);
+
+        var gradedOfferingIds = await context.Grades
+            .Where(g => g.StudentId == userId)
+            .Select(g => g.Assessment.CourseOfferingId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var relevantOfferingIds = enrolledOfferingIds.Union(gradedOfferingIds).ToHashSet();
+
+        if (!relevantOfferingIds.Any())
+            return Enumerable.Empty<StudentCourseResultDto>();
+
         var courseOfferings = await context.CourseOfferings
+            .Where(co => relevantOfferingIds.Contains(co.Id))
             .Include(co => co.Course)
             .Include(co => co.AcademicSession)
             .ToListAsync(ct);
+
+        var publicationRaw = await context.GradePublications
+            .Where(x => relevantOfferingIds.Contains(x.CourseOfferingId))
+            .ToListAsync(ct);
+
+        // Deduplicate by CourseOfferingId (oldest record wins) to handle any legacy duplicate rows
+        var publications = publicationRaw
+            .GroupBy(x => x.CourseOfferingId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.CreatedAt).First().IsVisibleToStudents);
 
         var results = new List<StudentCourseResultDto>();
 
         foreach (var offering in courseOfferings)
         {
-            // Calculate total CA (sum of all assessment marks for this student)
-            var totalCA = await context.Grades
-                .Where(g => g.Assessment!.CourseOfferingId == offering.Id && g.StudentId == studentId)
-                .SumAsync(g => (double?)g.MarksObtained ?? 0.0, ct);
+            var categories = await context.AssessmentCategories
+                .Where(x => x.CourseOfferingId == offering.Id)
+                .ToListAsync(ct);
 
-            // For simplicity, treat CA as a portion and exam as remaining
-            // In a real system, CA categories and exam categories would be separate
-            var maxCaMarks = 40m;
+            var assessments = await context.Assessments
+                .Where(x => x.CourseOfferingId == offering.Id)
+                .Include(x => x.Grades)
+                .ToListAsync(ct);
 
-            var caScore = totalCA > (double)maxCaMarks ? maxCaMarks : (decimal)totalCA;
-            var examScore = 0m; // Would need separate exam data
+            decimal CalculateCategoryScoreHelper(AssessmentCategoryType categoryType)
+            {
+                var category = categories.FirstOrDefault(c => c.CategoryType == categoryType);
+                if (category == null) return 0m;
 
-            var totalMarks = caScore + examScore;
+                var categoryAssessments = assessments.Where(a => a.AssessmentCategoryId == category.Id).ToList();
+                if (!categoryAssessments.Any()) return 0m;
 
-            // Compute grade and point using GradeCalculator
-            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
+                var totalObtained = 0m;
+                var totalMaxMarks = 0m;
+
+                foreach (var assessment in categoryAssessments)
+                {
+                    var grade = assessment.Grades.FirstOrDefault(g => g.StudentId == userId);
+                    totalObtained += grade?.MarksObtained ?? 0m;
+                    totalMaxMarks += assessment.MaxMarks;
+                }
+
+                if (totalMaxMarks == 0) return 0m;
+                return totalObtained / totalMaxMarks * 100m; // Return percentage
+            }
+
+            var ca1Score = CalculateCategoryScoreHelper(AssessmentCategoryType.CA1);
+            var ca2Score = CalculateCategoryScoreHelper(AssessmentCategoryType.CA2);
+            var ca3Score = CalculateCategoryScoreHelper(AssessmentCategoryType.CA3);
+            var examScoreRaw = CalculateCategoryScoreHelper(AssessmentCategoryType.Exam);
+
+            var gradingStyle = sysConfig?.DefaultGradingStyle ?? GradingStyle.Weighted;
+            decimal totalScore = 0m;
+
+            decimal ca1Weight = sysConfig?.DefaultCA1Weight ?? 15m;
+            decimal ca2Weight = sysConfig?.DefaultCA2Weight ?? 15m;
+            decimal ca3Weight = sysConfig?.DefaultCA3Weight ?? 10m;
+            decimal examWeight = sysConfig?.DefaultExamWeight ?? 60m;
+
+            decimal ca1Contrib = ca1Score * ca1Weight / 100m;
+            decimal ca2Contrib = ca2Score * ca2Weight / 100m;
+            decimal ca3Contrib = ca3Score * ca3Weight / 100m;
+            decimal examContrib = examScoreRaw * examWeight / 100m;
+
+            if (gradingStyle == GradingStyle.Weighted)
+            {
+                totalScore = ca1Contrib + ca2Contrib + ca3Contrib + examContrib;
+            }
+            else
+            {
+                var scores = new[] { ca1Score, ca2Score, ca3Score, examScoreRaw }.Where(s => s >= 0).ToList();
+                totalScore = scores.Any() ? scores.Average() : 0m;
+            }
+
+            decimal totalCA = ca1Contrib + ca2Contrib + ca3Contrib;
+            decimal totalExam = examContrib;
+
+            var gradeResult = GradeCalculator.CalculateGrade(totalScore, rStrategy, decimalPlaces, graceThreshold, mappings);
 
             results.Add(new StudentCourseResultDto
             {
@@ -240,13 +346,13 @@ public class StudentService(LmsDbContext context) : IStudentService
                 CourseTitle = offering.Course?.Title ?? string.Empty,
                 CreditUnits = offering.Course?.CreditUnits ?? 0,
                 Semester = offering.Semester.ToString(),
-                Level = 0, // Level is now per-program via CourseOfferingPrograms join table
-                TotalCA = (decimal)caScore,
-                TotalExam = examScore,
+                Level = 0,
+                TotalCA = totalCA,
+                TotalExam = totalExam,
                 TotalMarks = gradeResult.Score,
                 Grade = gradeResult.LetterGrade,
                 Point = gradeResult.GradePoints.ToString("F2"),
-                IsPublished = false
+                IsPublished = publications.TryGetValue(offering.Id, out var visible) && visible
             });
         }
 

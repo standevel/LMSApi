@@ -1,4 +1,5 @@
 using FastEndpoints;
+using LMS.Api.Security;
 using LMS.Api.Services;
 
 namespace LMS.Api.Endpoints.Timetable;
@@ -21,7 +22,7 @@ public class CreateLectureTimetableSlotEndpoint(ITimetableService timetableServi
     public override void Configure()
     {
         Post("timetable/slots");
-        Roles("AcademicAdmin", "Admin", "Registrar", "SuperAdmin");
+        Policies(PermissionPolicy.Build(LmsPermissions.TimetableManage));
         Description(d => d
             .WithName("CreateLectureTimetableSlot")
             .WithTags("Timetable")
