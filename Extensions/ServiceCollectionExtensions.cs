@@ -82,15 +82,24 @@ public static class ServiceCollectionExtensions
                     warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
             }
 
-            options.UseSqlServer(
-                connectionString,
-                sqlOptions =>
-                {
-                    sqlOptions.EnableRetryOnFailure(
-                        maxRetryCount: 5,
-                        maxRetryDelay: TimeSpan.FromSeconds(10),
-                        errorNumbersToAdd: null);
-                });
+            var conn = connectionString.ToLowerInvariant();
+            if (conn.Contains("host=") || conn.Contains("username=") || conn.Contains("postgres") || conn.StartsWith("postgresql://"))
+            {
+                options.UseNpgsql(connectionString);
+            }
+            else
+            {
+                options.UseSqlServer(
+                    connectionString,
+                    sqlOptions =>
+                    {
+                        sqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(30),
+                            errorNumbersToAdd: null);
+                        sqlOptions.CommandTimeout(60);
+                    });
+            }
         });
 
         return services;
