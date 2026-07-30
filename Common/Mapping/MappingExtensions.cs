@@ -66,21 +66,116 @@ public static class MappingExtensions
         s.IsAdmissionOpen,
         s.IsAdmissionActive);
 
-    public static CourseDto ToDto(this Course course) => new(
-        course.Id,
-        course.ProgramId,
-        course.Code,
-        course.Title,
-        course.Description,
-        course.CreditUnits,
-        course.LevelId,
-        course.Level?.Name,
-        course.Semester,
-        course.IsActive,
-        course.Offerings.Select(o => o.ToDto()).ToList());
+    public static CourseDto ToDto(this Course course, IEnumerable<CurriculumCourse>? extraCurriculumCourses = null)
+    {
+        var currCourses = extraCurriculumCourses?.ToList();
 
-    public static CourseOfferingDto ToDto(this CourseOffering o) =>
-        new(
+        var offeringsList = course.Offerings ?? Array.Empty<CourseOffering>();
+        var offerings = offeringsList.Select(o => {
+            var dto = o.ToDto();
+            if (dto.Programs == null || dto.Programs.Count == 0)
+            {
+                var fallbackPrograms = new List<OfferingProgramDto>();
+
+                // 1. Fallback from CurriculumCourses matching offering's semester
+                if (currCourses != null && currCourses.Count > 0)
+                {
+                    var ccMatches = currCourses
+                        .Where(cc => cc != null && cc.Semester == o.Semester && cc.Curriculum?.Program != null)
+                        .ToList();
+
+                    foreach (var cc in ccMatches)
+                    {
+                        var progId = cc.Curriculum?.ProgramId ?? Guid.Empty;
+                        if (progId != Guid.Empty &&
+                            !fallbackPrograms.Any(fp => fp.ProgramId == progId && fp.LevelId == cc.LevelId))
+                        {
+                            fallbackPrograms.Add(new OfferingProgramDto(
+                                progId,
+                                cc.Curriculum?.Program?.Name ?? "N/A",
+                                cc.LevelId,
+                                cc.Level?.Name ?? "N/A"));
+                        }
+                    }
+
+                    // If no match for exact semester, take any CurriculumCourse mapping
+                    if (fallbackPrograms.Count == 0)
+                    {
+                        foreach (var cc in currCourses)
+                        {
+                            if (cc == null) continue;
+                            var progId = cc.Curriculum?.ProgramId ?? Guid.Empty;
+                            if (progId != Guid.Empty &&
+                                !fallbackPrograms.Any(fp => fp.ProgramId == progId && fp.LevelId == cc.LevelId))
+                            {
+                                fallbackPrograms.Add(new OfferingProgramDto(
+                                    progId,
+                                    cc.Curriculum?.Program?.Name ?? "N/A",
+                                    cc.LevelId,
+                                    cc.Level?.Name ?? "N/A"));
+                            }
+                        }
+                    }
+                }
+
+                // 2. Fallback to course's top-level Program & Level
+                if (fallbackPrograms.Count == 0 && course.ProgramId != Guid.Empty)
+                {
+                    fallbackPrograms.Add(new OfferingProgramDto(
+                        course.ProgramId,
+                        course.Program?.Name ?? "N/A",
+                        course.LevelId ?? Guid.Empty,
+                        course.Level?.Name ?? "N/A"));
+                }
+
+                if (fallbackPrograms.Count > 0)
+                {
+                    return dto with { Programs = fallbackPrograms };
+                }
+            }
+            return dto;
+        }).ToList();
+
+        return new(
+            course.Id,
+            course.ProgramId,
+            course.Program?.Name,
+            course.Code,
+            course.Title,
+            course.Description,
+            course.CreditUnits,
+            course.LevelId,
+            course.Level?.Name,
+            course.Semester,
+            course.IsActive,
+            offerings);
+    }
+
+    public static CourseOfferingDto ToDto(this CourseOffering o)
+    {
+        var progs = o.Programs ?? Array.Empty<CourseOfferingProgram>();
+        var programs = progs.Select(p => new OfferingProgramDto(
+            p.ProgramId,
+            p.Program?.Name ?? "N/A",
+            p.LevelId,
+            p.Level?.Name ?? "N/A")).ToList();
+
+        if (programs.Count == 0 && o.Course != null && o.Course.ProgramId != Guid.Empty)
+        {
+            programs.Add(new OfferingProgramDto(
+                o.Course.ProgramId,
+                o.Course.Program?.Name ?? "N/A",
+                o.Course.LevelId ?? Guid.Empty,
+                o.Course.Level?.Name ?? "N/A"));
+        }
+
+        var lecs = o.Lecturers ?? Array.Empty<CourseOfferingLecturer>();
+        var lecturers = lecs.Select(l => new OfferingLecturerDto(
+            l.LecturerId,
+            l.Lecturer?.DisplayName,
+            l.Role)).ToList();
+
+        return new(
             o.Id,
             o.CourseId,
             o.Course?.Code ?? string.Empty,
@@ -88,15 +183,9 @@ public static class MappingExtensions
             o.AcademicSessionId,
             o.AcademicSession?.Name ?? "N/A",
             (int)o.Semester,
-            o.Programs.Select(p => new OfferingProgramDto(
-                p.ProgramId,
-                p.Program?.Name ?? "N/A",
-                p.LevelId,
-                p.Level?.Name ?? "N/A")).ToList(),
-            o.Lecturers.Select(l => new OfferingLecturerDto(
-                l.LecturerId,
-                l.Lecturer?.DisplayName,
-                l.Role)).ToList());
+            programs,
+            lecturers);
+    }
 
     public static CurriculumDto ToDto(this Curriculum c) => new(
         c.Id,

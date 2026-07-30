@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lms-api
+    env: docker
+    plan: free
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+
+databases:
+  - name: lms-postgres-db
+    plan: free
+    databaseName: lmsdb
+    user: lmsuser

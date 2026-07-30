@@ -6,7 +6,6 @@ public sealed class CourseRepository(LmsDbContext dbContext) : ICourseRepository
 {
     public Task<Course?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         dbContext.Courses
-            .AsNoTracking()
             .AsSplitQuery()
             .Include(x => x.Program)
             .Include(x => x.Level)

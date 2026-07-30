@@ -57,6 +57,9 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
     public DbSet<StudentScholarship> StudentScholarships => Set<StudentScholarship>();
 
+    // AI & Vector Search RAG
+    public DbSet<LMS.Api.Data.Entities.AI.CourseDocumentChunk> CourseDocumentChunks => Set<LMS.Api.Data.Entities.AI.CourseDocumentChunk>();
+
     // Timetable Management
     public DbSet<LectureTimetableSlot> LectureTimetableSlots => Set<LectureTimetableSlot>();
     public DbSet<LectureSession> LectureSessions => Set<LectureSession>();
@@ -167,6 +170,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.PasswordHash).HasMaxLength(1024);
             entity.Property(x => x.Email).HasMaxLength(256);
             entity.Property(x => x.DisplayName).HasMaxLength(256);
+            entity.Property(x => x.ThemePreference).HasMaxLength(50);
             entity.HasIndex(x => x.EntraObjectId).IsUnique();
             entity.HasIndex(x => x.Username).IsUnique().HasFilter("[Username] IS NOT NULL");
             entity.HasIndex(x => x.Email);

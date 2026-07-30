@@ -27,8 +27,6 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
         if (student == null)
             return DomainErrors.Reporting.StudentNotFound;
 
-        // Force academicSessionId to null so we always get the GLOBAL cumulative GPA
-        // If callers want a specific session's GPA, they can call GetStudentSessionGpasAsync or CalculateGpaForStudentAsync directly
         var result = await CalculateGpaForStudentAsync(studentId, null, ct);
         return result;
     }
@@ -125,7 +123,10 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
 
             if (!studentGrades.Any()) continue;
 
-            var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: true);
+            // Try finalized/locked grades first; fall back to unfinalized grades if locked ones don't exist yet
+            var totalScore = CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: true)
+                          ?? CalculateCourseScore(assessments, studentGrades, sysConfig, finalizedOnly: false);
+            
             if (!totalScore.HasValue) continue;
 
             var rStrategy = sysConfig.RoundingStrategy;
@@ -144,9 +145,6 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
             }
         }
 
-        if (gradedCoursesCount == 0)
-            return DomainErrors.Reporting.GpaNotAvailable;
-
         var cumulativeGpa = totalGpaCredits > 0 ? Math.Round(totalGpaPoints / totalGpaCredits, 2) : 0;
 
         // Get the most recent academic session
@@ -162,14 +160,14 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
             .OrderByDescending(s => s.EffectiveDate)
             .FirstOrDefaultAsync(ct);
 
-        var standingType = standing?.StandingType.ToString() ?? "GoodStanding";
+        var standingType = standing?.StandingType.ToString() ?? (cumulativeGpa >= 3.5m ? "FirstClass" : cumulativeGpa >= 2.5m ? "SecondClassUpper" : "GoodStanding");
 
         return new GpaDto(
             studentId,
             $"{student.FirstName} {student.LastName}",
             student.OfficialEmail,
             cumulativeGpa,
-            gradedCoursesCount,
+            (int)totalGpaCredits,
             totalCreditsEarned,
             totalCreditsEarned > 0 ? cumulativeGpa : 0,
             academicSession?.Name ?? "N/A",
@@ -183,7 +181,7 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
             ? new List<LMS.Api.Contracts.GradeMappingDto>()
             : System.Text.Json.JsonSerializer.Deserialize<List<LMS.Api.Contracts.GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) 
               ?? new List<LMS.Api.Contracts.GradeMappingDto>();
-              
+
         var rStrategy = sysConfig.RoundingStrategy;
         var decimalPlaces = sysConfig.RoundingDecimalPlaces;
         var graceThreshold = sysConfig.GraceThreshold;

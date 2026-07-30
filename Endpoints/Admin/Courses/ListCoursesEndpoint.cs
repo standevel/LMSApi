@@ -8,7 +8,7 @@ using LMS.Api.Security;
 namespace LMS.Api.Endpoints.Admin.Courses;
 
 public sealed class ListCoursesEndpoint(ICourseService courseService)
-    : ApiEndpoint<EmptyRequest, List<CourseDto>>
+    : ApiEndpoint<ListCoursesRequest, List<CourseDto>>
 {
     public override void Configure()
     {
@@ -24,7 +24,7 @@ public sealed class ListCoursesEndpoint(ICourseService courseService)
         });
     }
 
-    public override async Task HandleAsync(EmptyRequest req, CancellationToken ct)
+    public override async Task HandleAsync(ListCoursesRequest req, CancellationToken ct)
     {
         var result = await courseService.GetAllAsync(ct);
         await result.Match(
@@ -32,4 +32,9 @@ public sealed class ListCoursesEndpoint(ICourseService courseService)
             errors => HandleErrorAsync(errors, ct)
         );
     }
+}
+
+public class ListCoursesRequest
+{
+    public Guid? AcademicSessionId { get; set; }
 }

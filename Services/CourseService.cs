@@ -17,7 +17,8 @@ public sealed class CourseService(
     LmsDbContext dbContext,
     IFileStorageService fileStorageService,
     INotificationService notificationService,
-    IEmailService emailService) : BaseService(auditService), ICourseService
+    IEmailService emailService,
+    Microsoft.Extensions.Logging.ILogger<CourseService> logger) : BaseService(auditService), ICourseService
 {
     // ─── Query helpers ────────────────────────────────────────────────────────
 
@@ -35,13 +36,86 @@ public sealed class CourseService(
     {
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course is null) return DomainErrors.Course.NotFound;
-        return course.ToDto();
+
+        var ccList = await dbContext.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program)
+            .Include(cc => cc.Level)
+            .Where(cc => cc.CourseId == id)
+            .ToListAsync(ct);
+
+        if (course.Offerings.Count == 0)
+        {
+            var activeSessions = await dbContext.AcademicSessions
+                .Where(s => s.IsActive || s.IsAdmissionActive)
+                .ToListAsync(ct);
+
+            if (activeSessions.Count == 0)
+            {
+                activeSessions = await dbContext.AcademicSessions
+                    .OrderByDescending(s => s.StartDate)
+                    .Take(1)
+                    .ToListAsync(ct);
+            }
+
+            if (activeSessions.Count > 0)
+            {
+                foreach (var session in activeSessions)
+                {
+                    var semester = course.Semester ?? Semester.First;
+                    var offering = new CourseOffering
+                    {
+                        CourseId = course.Id,
+                        AcademicSessionId = session.Id,
+                        Semester = semester
+                    };
+
+                    if (ccList.Count > 0)
+                    {
+                        foreach (var cc in ccList)
+                        {
+                            if (cc.Curriculum?.ProgramId != null && cc.Curriculum.ProgramId != Guid.Empty)
+                            {
+                                offering.Programs.Add(new CourseOfferingProgram
+                                {
+                                    CourseOfferingId = offering.Id,
+                                    ProgramId = cc.Curriculum.ProgramId,
+                                    LevelId = cc.LevelId
+                                });
+                            }
+                        }
+                    }
+                    else if (course.ProgramId != Guid.Empty)
+                    {
+                        offering.Programs.Add(new CourseOfferingProgram
+                        {
+                            CourseOfferingId = offering.Id,
+                            ProgramId = course.ProgramId,
+                            LevelId = course.LevelId ?? Guid.Empty
+                        });
+                    }
+
+                    dbContext.CourseOfferings.Add(offering);
+                    course.Offerings.Add(offering);
+                }
+                await dbContext.SaveChangesAsync(ct);
+            }
+        }
+
+        return course.ToDto(ccList);
     }
 
     public async Task<ErrorOr<List<CourseDto>>> GetAllAsync(CancellationToken ct = default)
     {
         var courses = await courseRepository.GetAllAsync(ct);
-        return courses.Select(c => c.ToDto()).ToList();
+        var ccLookup = (await dbContext.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program)
+            .Include(cc => cc.Level)
+            .ToListAsync(ct))
+            .ToLookup(cc => cc.CourseId);
+
+        return courses.Select(c => c.ToDto(ccLookup[c.Id])).ToList();
     }
 
     public async Task<ErrorOr<CourseDto>> CreateAsync(CreateCourseRequest request, CancellationToken ct = default)
@@ -81,18 +155,31 @@ public sealed class CourseService(
             // Offerings with session, semester, and optional program+level
             Offerings = request.Offerings
                 .GroupBy(o => new { o.AcademicSessionId, o.Semester })
-                .Select(g => new CourseOffering
-                {
-                    AcademicSessionId = g.Key.AcademicSessionId,
-                    Semester          = (Semester)g.Key.Semester,
-                    Programs = g.Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
+                .Select(g => {
+                    var progs = g.Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
                                 .Select(r => new { r.ProgramId, r.LevelId })
                                 .Distinct()
                                 .Select(rp => new CourseOfferingProgram
                                 {
                                     ProgramId = rp.ProgramId!.Value,
                                     LevelId = rp.LevelId!.Value
-                                }).ToList()
+                                }).ToList();
+
+                    if (progs.Count == 0 && resolvedProgramId != Guid.Empty && request.LevelId.HasValue)
+                    {
+                        progs.Add(new CourseOfferingProgram
+                        {
+                            ProgramId = resolvedProgramId,
+                            LevelId = request.LevelId.Value
+                        });
+                    }
+
+                    return new CourseOffering
+                    {
+                        AcademicSessionId = g.Key.AcademicSessionId,
+                        Semester          = (Semester)g.Key.Semester,
+                        Programs          = progs
+                    };
                 }).ToList()
         };
 
@@ -111,6 +198,11 @@ public sealed class CourseService(
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course == null) return DomainErrors.Course.NotFound;
 
+        if (request.ProgramId.HasValue && request.ProgramId.Value != Guid.Empty)
+        {
+            course.ProgramId = request.ProgramId.Value;
+        }
+
         course.Code        = request.Code?.Replace("-", " ") ?? string.Empty;
         course.Title       = request.Title;
         course.Description = string.IsNullOrWhiteSpace(request.Description)
@@ -120,25 +212,11 @@ public sealed class CourseService(
         course.LevelId     = request.LevelId;
         course.Semester    = request.Semester;
 
-        var existingOfferings = course.Offerings.ToList();
         var uniqueOfferingRequests = request.Offerings
             .GroupBy(r => new { r.AcademicSessionId, r.Semester })
             .ToList();
 
-        // Remove offerings no longer in the request (matched by session+semester)
-        var offeringsToRemove = course.Offerings
-            .Where(existing => !uniqueOfferingRequests.Any(g => 
-                g.Key.AcademicSessionId == existing.AcademicSessionId && 
-                g.Key.Semester == (int)existing.Semester))
-            .ToList();
-
-        foreach (var toRemove in offeringsToRemove)
-        {
-            course.Offerings.Remove(toRemove);
-            dbContext.CourseOfferings.Remove(toRemove);
-        }
-
-        // Add or Update offerings and sync programs
+        // 1. Add or Update offerings and sync programs
         foreach (var offeringGroup in uniqueOfferingRequests)
         {
             var session = offeringGroup.Key.AcademicSessionId;
@@ -150,6 +228,7 @@ public sealed class CourseService(
             {
                 offering = new CourseOffering
                 {
+                    Id = Guid.NewGuid(),
                     CourseId = id,
                     AcademicSessionId = session,
                     Semester = sem,
@@ -158,28 +237,28 @@ public sealed class CourseService(
                 course.Offerings.Add(offering);
             }
 
-            // Sync programs
+            // Sync programs for this offering
             var requestedPrograms = offeringGroup
                 .Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
                 .Select(r => new { ProgramId = r.ProgramId!.Value, LevelId = r.LevelId!.Value })
                 .Distinct()
                 .ToList();
 
-            var programsToRemove = offering.Programs
-                .Where(p => !requestedPrograms.Any(rp => rp.ProgramId == p.ProgramId && rp.LevelId == p.LevelId))
-                .ToList();
-
-            foreach (var pToRemove in programsToRemove)
+            if (requestedPrograms.Count == 0 && course.ProgramId != Guid.Empty && course.LevelId.HasValue)
             {
-                offering.Programs.Remove(pToRemove);
+                requestedPrograms.Add(new { ProgramId = course.ProgramId, LevelId = course.LevelId.Value });
             }
 
+            // Additive-only: never remove existing program-level links during an update.
+            // Only add new ones that aren't already attached. Removals must be explicit.
             foreach (var rp in requestedPrograms)
             {
                 if (!offering.Programs.Any(p => p.ProgramId == rp.ProgramId && p.LevelId == rp.LevelId))
                 {
                     offering.Programs.Add(new CourseOfferingProgram
                     {
+                        Id = Guid.NewGuid(),
+                        CourseOfferingId = offering.Id,
                         ProgramId = rp.ProgramId,
                         LevelId = rp.LevelId
                     });
@@ -187,13 +266,67 @@ public sealed class CourseService(
             }
         }
 
-        await courseRepository.UpdateAsync(course, ct);
-        await courseRepository.SaveChangesAsync(ct);
+        // 2. Remove offerings (and their program links) that are not in the request.
+        //    Use ExecuteDeleteAsync (direct SQL) to bypass the EF change tracker — this avoids
+        //    DbUpdateConcurrencyException caused by auto-provisioned in-memory offerings whose
+        //    rows may not actually exist in the DB yet.
+        var offeringsToRemove = course.Offerings
+            .Where(existing =>
+                existing.Id != Guid.Empty &&  // skip un-persisted auto-provisioned offerings
+                !uniqueOfferingRequests.Any(g =>
+                    g.Key.AcademicSessionId == existing.AcademicSessionId &&
+                    g.Key.Semester == (int)existing.Semester))
+            .ToList();
+
+        foreach (var toRemove in offeringsToRemove)
+        {
+            var hasEnrollments = await dbContext.CourseEnrollments.AnyAsync(e => e.CourseOfferingId == toRemove.Id, ct);
+            if (hasEnrollments) continue;
+
+            // Step 1: Direct SQL deletes — bypasses change tracker, won't throw if row is already gone.
+            await dbContext.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == toRemove.Id)
+                .ExecuteDeleteAsync(ct);
+
+            await dbContext.CourseOfferings
+                .Where(o => o.Id == toRemove.Id)
+                .ExecuteDeleteAsync(ct);
+
+            // Step 2: Detach ALL related entities from the change tracker BEFORE touching the collection.
+            // Without this, course.Offerings.Remove() causes EF to re-queue a DELETE for these
+            // already-gone rows, resulting in DbUpdateConcurrencyException (0 rows affected).
+            foreach (var prog in toRemove.Programs?.ToList() ?? [])
+            {
+                dbContext.Entry(prog).State = EntityState.Detached;
+            }
+            dbContext.Entry(toRemove).State = EntityState.Detached;
+
+            // Step 3: Remove from the in-memory collection (now safe — entity is detached).
+            course.Offerings.Remove(toRemove);
+        }
+
+        try
+        {
+            await courseRepository.UpdateAsync(course, ct);
+            await courseRepository.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating course {CourseId}: {Message}", id, ex.InnerException?.Message ?? ex.Message);
+            throw;
+        }
 
         await LogActionAsync("Update", "Course", id.ToString(), $"Updated course: {course.Code}", ct);
 
+        var ccList = await dbContext.CurriculumCourses
+            .AsNoTracking()
+            .Include(cc => cc.Curriculum).ThenInclude(c => c.Program)
+            .Include(cc => cc.Level)
+            .Where(cc => cc.CourseId == id)
+            .ToListAsync(ct);
+
         var updatedCourse = await courseRepository.GetByIdAsync(id, ct);
-        return updatedCourse!.ToDto();
+        return updatedCourse!.ToDto(ccList);
     }
 
     public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id, CancellationToken ct = default)

@@ -332,64 +332,11 @@ public sealed class AutoImportClassterDataEndpoint : ApiEndpointWithoutRequest<o
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        var academicSessionId = Guid.Parse("cc64de5c-ddb7-4222-af07-e6a2a3ae3981");
-        var userId = Guid.Parse("d5d33b21-5d7b-41e3-83bd-ec03a4131d31");
-
-        // The path depends on where the app runs. Assume root is LMSApi directory
-        var dataDir = System.IO.Path.Combine("..", "Classter Data");
-        if (!System.IO.Directory.Exists(dataDir))
-        {
-            await SendFailureAsync(404, "Data directory not found", "NOT_FOUND", dataDir, ct);
-            return;
-        }
-
-        var files = System.IO.Directory.GetFiles(dataDir, "*.xlsx");
-        var results = new System.Collections.Generic.List<string>();
-
-        foreach (var file in files)
-        {
-            var fileName = System.IO.Path.GetFileName(file);
-            if (fileName.StartsWith(".~") || fileName.StartsWith("Students per Educational"))
-                continue;
-
-            var codeString = System.IO.Path.GetFileNameWithoutExtension(fileName);
-            if (codeString.Contains("Examination", StringComparison.OrdinalIgnoreCase))
-            {
-                var idx = codeString.IndexOf("Examination", StringComparison.OrdinalIgnoreCase);
-                codeString = codeString.Substring(0, idx).Trim();
-            }
-
-            var codeHyphensToSpaces = codeString.Replace("-", " ");
-            var codeHyphensToEmpty = codeString.Replace("-", "");
-
-            var course = await _dbContext.Courses.FirstOrDefaultAsync(c => 
-                c.Code == codeString || c.Code == codeHyphensToSpaces || c.Code == codeHyphensToEmpty, ct);
-
-            if (course == null)
-            {
-                results.Add($"[SKIPPED] Course not found: {fileName}");
-                continue;
-            }
-
-            using var stream = new System.IO.FileStream(file, System.IO.FileMode.Open, System.IO.FileAccess.Read);
-            var formFile = new Microsoft.AspNetCore.Http.FormFile(stream, 0, stream.Length, "file", fileName)
-            {
-                Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
-                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            };
-
-            var result = await _gradebookService.MigrateClassterGradesAsync(academicSessionId, course.Id, formFile, userId, null, ct);
-
-            if (result.IsError)
-            {
-                results.Add($"[ERROR] {fileName}: {result.FirstError.Description}");
-            }
-            else
-            {
-                results.Add($"[SUCCESS] {fileName}");
-            }
-        }
-
-        await SendSuccessAsync(new { Results = results }, ct);
+        // Result Auto-Import is paused
+        await SendSuccessAsync(new 
+        { 
+            Status = "Paused", 
+            Message = "Automatic Classter result import is currently paused by administrator configuration." 
+        }, ct);
     }
 }

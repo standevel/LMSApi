@@ -34,7 +34,8 @@ public sealed class UpdateCourseEndpoint(ICourseService courseService)
             req.CreditUnits,
             req.LevelId,
             req.Semester,
-            req.Offerings);
+            req.Offerings,
+            req.ProgramId);
 
         var result = await courseService.UpdateAsync(req.Id, request, ct);
         await result.Match(
@@ -47,6 +48,7 @@ public sealed class UpdateCourseEndpoint(ICourseService courseService)
 public class UpdateCourseRequestWrapper
 {
     public Guid Id { get; set; }
+    public Guid? ProgramId { get; set; }
     public string Code { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }

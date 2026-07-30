@@ -241,8 +241,21 @@ public static class ServiceCollectionExtensions
         // Student Management
         services.AddScoped<IStudentService, StudentService>();
 
+        // AI Agentic Suite Services & Tools
+        services.Configure<LMS.Api.Common.AI.AIAgentOptions>(configuration.GetSection(LMS.Api.Common.AI.AIAgentOptions.SectionName));
+        services.AddScoped<LMS.Api.Services.AI.ICourseRagService, LMS.Api.Services.AI.CourseRagService>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.AdvisorAgentTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.FeeAgentTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.AssessmentAgentTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.TutorAgentTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.CampusLifeTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.AdmissionAgentTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.AdminAssistantTools>();
+        services.AddScoped<LMS.Api.Services.AI.IAgentOrchestratorService, LMS.Api.Services.AI.AgentOrchestratorService>();
+
         // Background Services
         services.AddHostedService<NotificationBackgroundService>();
+        services.AddHostedService<LMS.Api.Services.AI.AIAgentInterventionBackgroundService>();
 
         // Course Catalog Import — must be Singleton so in-memory preview dictionary survives across requests
         services.AddSingleton<ICourseCatalogImportService, CourseCatalogImportService>();

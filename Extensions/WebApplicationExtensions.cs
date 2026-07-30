@@ -118,6 +118,7 @@ public static class WebApplicationExtensions
         });
 
         app.MapHub<LMS.Api.Hubs.NotificationHub>("/hubs/notifications");
+        app.MapHub<LMS.Api.Hubs.AgentNotificationHub>("/hubs/agent-notifications");
 
         app.MapOpenApi();
         app.MapScalarApiReference("/docs", options =>

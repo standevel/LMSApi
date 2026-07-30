@@ -39,6 +39,7 @@ public record CourseOfferingDto(
 public record CourseDto(
     Guid Id,
     Guid ProgramId,
+    string? ProgramName,
     string Code,
     string Title,
     string? Description,
@@ -76,7 +77,8 @@ public record UpdateCourseRequest(
     int CreditUnits,
     Guid? LevelId,
     Semester? Semester,
-    List<CreateCourseOfferingRequest> Offerings);
+    List<CreateCourseOfferingRequest> Offerings,
+    Guid? ProgramId = null);
 
 public record ToggleCourseStatusRequest(Guid Id);
 
