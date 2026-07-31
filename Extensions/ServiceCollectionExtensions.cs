@@ -260,6 +260,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<LMS.Api.Services.AI.Tools.CampusLifeTools>();
         services.AddScoped<LMS.Api.Services.AI.Tools.AdmissionAgentTools>();
         services.AddScoped<LMS.Api.Services.AI.Tools.AdminAssistantTools>();
+        services.AddScoped<LMS.Api.Services.AI.Tools.LecturerCopilotTools>();
         services.AddScoped<LMS.Api.Services.AI.IAgentOrchestratorService, LMS.Api.Services.AI.AgentOrchestratorService>();
 
         // Background Services

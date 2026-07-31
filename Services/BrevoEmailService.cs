@@ -71,10 +71,10 @@ public sealed class BrevoEmailService(
     public Task SendApplicationSubmittedEmailAsync(string toEmail, string studentName)
     {
         studentName = FormatName(studentName);
-        var subject = "Application Received - Wigwe University";
+        var subject = "Application Submission Confirmation - Wigwe University Admissions";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Application Received!</h2>
+                <h2 style='color: #006B62;'>Admission Application Received</h2>
                 <p>Dear {studentName},</p>
                 <p>Thank you for applying to Wigwe University. We have received your application and it is currently under review.</p>
                 <p>We will notify you of the next steps shortly.</p>
@@ -94,10 +94,10 @@ public sealed class BrevoEmailService(
         string? secondFileName = null)
     {
         studentName = FormatName(studentName);
-        var subject = "Admission Offer - Wigwe University";
+        var subject = $"Provisional Admission Offer: {programName} - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Congratulations!</h2>
+                <h2 style='color: #006B62;'>Provisional Offer of Admission</h2>
                 <p>Dear {studentName},</p>
                 <p>We are pleased to offer you admission into the <strong>{programName}</strong> program at Wigwe University!</p>
                 <p>Please find attached your provisional admission letter.</p>
@@ -124,10 +124,10 @@ public sealed class BrevoEmailService(
     public Task SendPaymentInstructionsEmailAsync(string toEmail, string studentName, decimal amountDue, string paymentPageUrl)
     {
         studentName = FormatName(studentName);
-        var subject = "Payment Instructions - Wigwe University";
+        var subject = "Action Required: Acceptance Fee Payment Instructions - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Next Step: Payment</h2>
+                <h2 style='color: #006B62;'>Acceptance Fee Payment & Next Steps</h2>
                 <p>Dear {studentName},</p>
                 <p>Thank you for accepting your admission offer. To secure your spot, please proceed with the payment of your acceptance fee.</p>
                 <p><strong>Amount Due:</strong> ₦{amountDue:N2}</p>
@@ -144,10 +144,10 @@ public sealed class BrevoEmailService(
     public Task SendStudentCredentialsEmailAsync(string toEmail, string studentName, string officialEmail, string temporaryPassword)
     {
         studentName = FormatName(studentName);
-        var subject = "Welcome to Wigwe University - Your Official Credentials";
+        var subject = "Official Student Portal Credentials & Account Activation - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Welcome to the Tribe!</h2>
+                <h2 style='color: #006B62;'>Welcome to Wigwe University - Student Credentials</h2>
                 <p>Dear {studentName},</p>
                 <p>Your payment has been verified, and your official student account has been created.</p>
                 <div style='background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;'>
@@ -164,10 +164,10 @@ public sealed class BrevoEmailService(
     public Task SendOfferAcceptedConfirmationAsync(string toEmail, string studentName, string programName)
     {
         studentName = FormatName(studentName);
-        var subject = "Offer Accepted - Wigwe University";
+        var subject = $"Admission Offer Acceptance Confirmation: {programName} - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Offer Accepted Successfully!</h2>
+                <h2 style='color: #006B62;'>Admission Offer Acceptance Confirmed</h2>
                 <p>Dear {studentName},</p>
                 <p>Congratulations on accepting your admission offer for the <strong>{programName}</strong> program at Wigwe University!</p>
                 <p>Your acceptance has been recorded and is now being processed by the Admissions Office.</p>
@@ -187,10 +187,10 @@ public sealed class BrevoEmailService(
     public Task SendExistingAccountNotificationAsync(string toEmail, string studentName, string officialEmail)
     {
         studentName = FormatName(studentName);
-        var subject = "Wigwe University - Your Student Account Information";
+        var subject = "Student Portal Account Access & Status Update - Wigwe University";
         var content = $@"
             <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
-                <h2 style='color: #003366;'>Student Account Access</h2>
+                <h2 style='color: #003366;'>Existing Student Account Notification</h2>
                 <p>Dear {studentName},</p>
                 <p>Your student account has been processed. We found that you already have an existing account in our system.</p>
                 <div style='background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;'>
@@ -207,9 +207,13 @@ public sealed class BrevoEmailService(
     public Task SendTestEmailAsync(string toEmail, string subject, string message)
     {
         var encodedMessage = System.Net.WebUtility.HtmlEncode(message);
+        if (!string.IsNullOrWhiteSpace(subject) && !subject.Contains("Wigwe University", StringComparison.OrdinalIgnoreCase))
+        {
+            subject = $"[System Test] {subject} - Wigwe University LMS";
+        }
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #006B62;'>Test Email</h2>
+                <h2 style='color: #006B62;'>LMS Email Verification Test</h2>
                 <p>{encodedMessage}</p>
                 <hr style='border: 0; border-top: 1px solid #eee; margin: 20px 0;'>
                 <p style='font-size: 12px; color: #666;'>This is a test email from Wigwe University LMS API.</p>
@@ -220,10 +224,10 @@ public sealed class BrevoEmailService(
     public async Task SendApplicationReminderEmailAsync(string toEmail, string studentName, string applicationNumber, AdmissionStatus status)
     {
         studentName = FormatName(studentName);
-        var subject = "Action Required: Complete Your Admission Process - Wigwe University";
+        var subject = $"Urgent Action Required: Complete Admission Requirements (App #{applicationNumber}) - Wigwe University";
         var content = $@"
             <div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;'>
-                <h2 style='color: #D4AF37;'>Important: Action Required</h2>
+                <h2 style='color: #D4AF37;'>Admission Process Completion Reminder</h2>
                 <p>Dear {studentName},</p>
                 <p>This is a reminder regarding your admission application <strong>{applicationNumber}</strong> to Wigwe University.</p>
                 <p>Please ensure you have completed the following steps to receive your offer letter:</p>
@@ -263,7 +267,7 @@ public sealed class BrevoEmailService(
     {
         guardianName = FormatName(guardianName);
         studentName = FormatName(studentName);
-        var subject = "Wigwe University - Parent/Guardian Portal Access";
+        var subject = "Parent & Guardian Portal Access Credentials - Wigwe University";
 
         string body;
         if (isNewAccount)
@@ -300,7 +304,7 @@ public sealed class BrevoEmailService(
 
         var content = $@"
             <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>
-                <h2 style='color:#006B62;'>Parent/Guardian Portal</h2>
+                <h2 style='color:#006B62;'>Parent & Guardian Portal Credentials</h2>
                 <p>Dear {guardianName},</p>
                 <p>You have been registered as the parent/guardian of <strong>{studentName}</strong> at Wigwe University.</p>
                 {body}
@@ -317,10 +321,10 @@ public sealed class BrevoEmailService(
     public Task SendCourseAssignmentEmailAsync(string toEmail, string lecturerName, string courseCode, string courseTitle, string sessionName)
     {
         lecturerName = FormatName(lecturerName);
-        var subject = $"Course Assignment: {courseCode} - Wigwe University";
+        var subject = $"Course Allocation Notice: {courseCode} - {courseTitle} ({sessionName}) - Wigwe University";
         var content = $@"
             <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>
-                <h2 style='color:#006B62;'>New Course Assignment</h2>
+                <h2 style='color:#006B62;'>Official Course Allocation & Teaching Assignment</h2>
                 <p>Dear {lecturerName},</p>
                 <p>You have been assigned to teach the following course for the <strong>{sessionName}</strong> academic session:</p>
                 <div style='background:#f9f9f9; padding:15px; border-radius:8px; margin:20px 0;'>
