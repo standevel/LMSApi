@@ -17,6 +17,13 @@ public sealed class AssignmentSubmission
 
     public Assignment Assignment { get; set; } = null!;
     public SubmissionGrade? Grade { get; set; }
+
+    // Turnitin Plagiarism / Similarity Integration
+    public int? TurnitinSimilarityScore { get; set; }
+    public string? TurnitinStatus { get; set; }
+    public string? TurnitinReportUrl { get; set; }
+    public string? TurnitinResultJson { get; set; }
+    public DateTimeOffset? TurnitinCheckedAt { get; set; }
 }
 
 

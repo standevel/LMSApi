@@ -204,69 +204,23 @@ public class AgentOrchestratorService : IAgentOrchestratorService
     private async Task<AgentChatResponse> HandleAdmissionPersonaAsync(AgentChatRequest request, AgentChatResponse response, CancellationToken ct)
     {
         string p = (request?.Prompt ?? string.Empty).ToLowerInvariant();
+        bool isAdminQuery = !string.IsNullOrEmpty(request?.StudentId) &&
+            (p.Contains("admin stats") || p.Contains("pipeline metrics") || p.Contains("pending review list") || p.Contains("breakdown report") || p.Contains("registry stats"));
 
-        // Lookup a specific applicant by number/email
-        if (p.Contains("lookup") || p.Contains("find applicant") || p.Contains("search applicant") ||
-            p.Contains("track") || p.Contains("check application"))
+        // -------------------------------------------------------------------------
+        // 1. ADMIN / REGISTRY STAFF ROUTE (Only when user is authenticated staff & explicitly requesting admin metrics)
+        // -------------------------------------------------------------------------
+        if (isAdminQuery)
         {
-            var tokens = request.Prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            var searchQuery = tokens.LastOrDefault(t => t.Length > 5) ?? request.Prompt;
-            response.ToolsExecuted.Add("AdmissionAgentTools.GetApplicantStatusByNumberAsync");
-            string applicantInfo = await _admissionTools.GetApplicantStatusByNumberAsync(searchQuery, ct);
-            response.ResponseText = $"🎓 **Admissions Officer AI**\n\n{applicantInfo}";
-            return response;
-        }
-
-        // Breakdown by program
-        if (p.Contains("program") || p.Contains("faculty") || p.Contains("breakdown") || p.Contains("popular"))
-        {
-            response.ToolsExecuted.Add("AdmissionAgentTools.GetApplicationsByProgramAsync");
-            await _admissionTools.GetApplicationsByProgramAsync(ct);
-
-            var rawBreakdown = await _dbContext.AdmissionApplications
-                .Include(a => a.AcademicProgram)
-                .GroupBy(a => a.AcademicProgram != null ? a.AcademicProgram.Name : "Unspecified Program")
-                .Select(g => new { ProgramName = g.Key, Count = g.Count() })
-                .OrderByDescending(g => g.Count)
-                .Take(15)
-                .ToListAsync(ct);
-
-            response.ResponseText = $"📊 Here is the current application breakdown by academic program:";
-
-            response.Card = new GenerativeCardDto
+            if (p.Contains("pending"))
             {
-                CardType = "applicant_table",
-                Title = "Applications Breakdown by Program",
-                Subtitle = $"All Programs ({rawBreakdown.Sum(b => b.Count)} Total Applications)",
-                Data = new Dictionary<string, object>
-                {
-                    { "items", rawBreakdown.Select(b => new Dictionary<string, object> {
-                        { "program", b.ProgramName },
-                        { "totalApplications", b.Count }
-                    }).ToList() }
-                },
-                Actions = new List<CardActionDto>
-                {
-                    new CardActionDto { Label = "View Admissions Portal", ActionType = "navigate", Target = "/dashboard/registry/admissions" }
-                }
-            };
-            return response;
-        }
+                var pendingList = await _dbContext.AdmissionApplications
+                    .Where(a => a.Status == AdmissionStatus.UnderReview || a.Status == AdmissionStatus.Submitted)
+                    .Include(a => a.AcademicProgram)
+                    .OrderBy(a => a.SubmittedAt)
+                    .Take(8)
+                    .ToListAsync(ct);
 
-        // Pending applications
-        if (p.Contains("pending") || p.Contains("review") || p.Contains("awaiting"))
-        {
-            response.ToolsExecuted.Add("AdmissionAgentTools.GetPendingApplicationsReviewAsync");
-
-            var pendingList = await _dbContext.AdmissionApplications
-                .Where(a => a.Status == AdmissionStatus.UnderReview || a.Status == AdmissionStatus.Submitted)
-                .Include(a => a.AcademicProgram)
-                .OrderBy(a => a.SubmittedAt)
-                .Take(8)
-                .ToListAsync(ct);
-
-            if (pendingList.Count > 0)
-            {
                 response.ResponseText = $"📋 Found {pendingList.Count} application(s) pending review in the admissions pipeline:";
                 response.Card = new GenerativeCardDto
                 {
@@ -279,102 +233,236 @@ public class AgentOrchestratorService : IAgentOrchestratorService
                             { "applicantName", $"{a.FirstName} {a.LastName}".ToTitleCase() },
                             { "applicationNo", a.ApplicationNumber },
                             { "program", a.AcademicProgram?.Name ?? "N/A" },
-                            { "applicantType", a.ApplicantType.ToString() },
-                            { "status", a.Status.ToString() },
-                            { "submitted", a.SubmittedAt?.ToString("yyyy-MM-dd") ?? "N/A" }
+                            { "status", a.Status.ToString() }
                         }).ToList() }
                     },
                     Actions = new List<CardActionDto>
                     {
-                        new CardActionDto { Label = "Review Applications", ActionType = "navigate", Target = "/dashboard/registry/admissions" }
+                        new CardActionDto { Label = "View Admissions Portal", ActionType = "navigate", Target = "/dashboard/registry/admissions" }
                     }
                 };
+                return response;
             }
-            else
+
+            var activeSession = await _dbContext.AcademicSessions.Where(s => s.IsActive).FirstOrDefaultAsync(ct);
+            var query = _dbContext.AdmissionApplications.AsQueryable();
+            if (activeSession != null) query = query.Where(a => a.AcademicSessionId == activeSession.Id);
+            var totalApps = await query.CountAsync(ct);
+            var admittedApps = await query.CountAsync(a => a.Status == AdmissionStatus.Admitted, ct);
+            var pendingApps = await query.CountAsync(a => a.Status == AdmissionStatus.UnderReview || a.Status == AdmissionStatus.Submitted, ct);
+
+            response.ResponseText = $"🎓 Live admissions statistics overview for {activeSession?.Name ?? "the active session"}:";
+            response.Card = new GenerativeCardDto
             {
-                response.ResponseText = "📋 No applications are currently awaiting review. All submissions have been processed!";
-            }
+                CardType = "admission_stats",
+                Title = "Admission Performance Dashboard",
+                Subtitle = $"{activeSession?.Name ?? "Current Academic Session"}",
+                Data = new Dictionary<string, object>
+                {
+                    { "totalApplications", totalApps },
+                    { "admitted", admittedApps },
+                    { "pendingReview", pendingApps }
+                },
+                Actions = new List<CardActionDto>
+                {
+                    new CardActionDto { Label = "View Admissions Portal", ActionType = "navigate", Target = "/dashboard/registry/admissions" }
+                }
+            };
             return response;
         }
 
-        // Recently admitted list
-        if (p.Contains("admitted") || p.Contains("recently") || p.Contains("accepted") || p.Contains("offer"))
-        {
-            response.ToolsExecuted.Add("AdmissionAgentTools.GetRecentlyAdmittedApplicantsAsync");
+        // -------------------------------------------------------------------------
+        // 2. APPLICANT GUIDANCE ROUTE (For applicants & prospective students)
+        // -------------------------------------------------------------------------
 
-            var admittedList = await _dbContext.AdmissionApplications
-                .Where(a => a.Status == AdmissionStatus.Admitted || a.Status == AdmissionStatus.OfferAccepted || a.Status == AdmissionStatus.FeePaid)
-                .Include(a => a.AcademicProgram)
-                .OrderByDescending(a => a.UpdatedAt)
-                .Take(10)
+        // 2A. Track / Check specific application status
+        if (p.Contains("lookup") || p.Contains("find applicant") || p.Contains("search applicant") ||
+            p.Contains("track") || (p.Contains("check") && p.Contains("application")))
+        {
+            var tokens = request.Prompt.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var searchQuery = tokens.LastOrDefault(t => t.Length > 5) ?? request.Prompt;
+            response.ToolsExecuted.Add("AdmissionAgentTools.GetApplicantStatusByNumberAsync");
+            string applicantInfo = await _admissionTools.GetApplicantStatusByNumberAsync(searchQuery, ct);
+            response.ResponseText = $"📋 **Application Status Guidance**\n\n{applicantInfo}\n\n*Need assistance? Contact Admissions Office at admissions@wigweuniversity.edu.ng.*";
+            return response;
+        }
+
+        // 2B. Programs & Colleges Exploration
+        if (p.Contains("program") || p.Contains("course") || p.Contains("faculty") || p.Contains("college") ||
+            p.Contains("study") || p.Contains("engineering") || p.Contains("law") || p.Contains("science") ||
+            p.Contains("arts") || p.Contains("business") || p.Contains("popular") || p.Contains("offered"))
+        {
+            response.ToolsExecuted.Add("AdmissionAgentTools.GetAvailableProgramsAsync");
+
+            var programs = await _dbContext.Programs
+                .AsNoTracking()
+                .Include(pr => pr.Department)
+                .ThenInclude(d => d.Faculty)
+                .Where(pr => pr.IsActive && pr.ParentProgramId == null)
+                .OrderBy(pr => pr.Department.Faculty.Name)
+                .ThenBy(pr => pr.Name)
                 .ToListAsync(ct);
 
-            if (admittedList.Count > 0)
+            var grouped = programs
+                .GroupBy(pr => pr.Department?.Faculty?.Name ?? "General Programs")
+                .Select(g => new { FacultyName = g.Key, Programs = g.Select(p => p.Name).ToList() })
+                .ToList();
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("🎓 **Wigwe University Academic Programs & Colleges**\n");
+            sb.AppendLine("We offer accredited undergraduate programs across our premier Colleges:\n");
+
+            foreach (var group in grouped)
             {
-                response.ResponseText = $"✅ Here are the most recently admitted applicants:";
-                response.Card = new GenerativeCardDto
+                sb.AppendLine($"🏛️ **{group.FacultyName}**");
+                foreach (var prog in group.Programs)
                 {
-                    CardType = "applicant_table",
-                    Title = "Recently Admitted Applicants",
-                    Subtitle = $"{admittedList.Count} Most Recent Decisions",
-                    Data = new Dictionary<string, object>
-                    {
-                        { "items", admittedList.Select(a => new Dictionary<string, object> {
-                            { "applicantName", $"{a.FirstName} {a.LastName}".ToTitleCase() },
-                            { "applicationNo", a.ApplicationNumber },
-                            { "program", a.AcademicProgram?.Name ?? "N/A" },
-                            { "status", a.Status.ToString() },
-                            { "decidedDate", a.UpdatedAt.ToString("yyyy-MM-dd") }
-                        }).ToList() }
-                    },
-                    Actions = new List<CardActionDto>
-                    {
-                        new CardActionDto { Label = "All Admissions", ActionType = "navigate", Target = "/dashboard/registry/admissions" }
-                    }
-                };
+                    sb.AppendLine($"  • {prog}");
+                }
+                sb.AppendLine();
             }
-            else
+
+            sb.AppendLine("📌 **General Entry Requirement:** Minimum of 5 O-Level credit passes (including English Language and Mathematics) in WAEC, NECO, or NABTEB in not more than two sittings.");
+            response.ResponseText = sb.ToString();
+
+            response.Card = new GenerativeCardDto
             {
-                response.ResponseText = "✅ No admitted applicants found in the current session.";
-            }
+                CardType = "action_card",
+                Title = "Choose Your Program & Apply",
+                Subtitle = $"{programs.Count} Accredited Academic Programs Available",
+                Data = new Dictionary<string, object>
+                {
+                    { "actionText", "Select your Faculty and Program in Step 1 of the application form to get started!" }
+                },
+                Actions = new List<CardActionDto>
+                {
+                    new CardActionDto { Label = "Start / Resume Application", ActionType = "navigate", Target = "/apply" }
+                }
+            };
             return response;
         }
 
-        // Default: statistics overview
-        response.ToolsExecuted.Add("AdmissionAgentTools.GetAdmissionStatisticsAsync");
-        string statsText = await _admissionTools.GetAdmissionStatisticsAsync(null, ct);
+        // 2C. Documents & Upload Requirements
+        if (p.Contains("document") || p.Contains("upload") || p.Contains("waec") || p.Contains("neco") ||
+            p.Contains("passport") || p.Contains("birth") || p.Contains("certificate") || p.Contains("scratch card") || p.Contains("file"))
+        {
+            response.ResponseText = @"📄 **Required Documents for Wigwe University Admission Application**
 
-        var activeSession = await _dbContext.AcademicSessions.Where(s => s.IsActive).FirstOrDefaultAsync(ct);
-        var query = _dbContext.AdmissionApplications.AsQueryable();
-        if (activeSession != null) query = query.Where(a => a.AcademicSessionId == activeSession.Id);
+To complete **Step 3 (Document Uploads)** of your application, please have the following documents ready:
 
-        var totalApps = await query.CountAsync(ct);
-        var admittedApps = await query.CountAsync(a => a.Status == AdmissionStatus.Admitted, ct);
-        var acceptedApps = await query.CountAsync(a => a.Status == AdmissionStatus.OfferAccepted, ct);
-        var feePaidApps = await query.CountAsync(a => a.Status == AdmissionStatus.FeePaid, ct);
-        var pendingApps = await query.CountAsync(a => a.Status == AdmissionStatus.UnderReview || a.Status == AdmissionStatus.Submitted, ct);
-        var rejectedApps = await query.CountAsync(a => a.Status == AdmissionStatus.Rejected, ct);
+1. 📸 **Recent Passport Photograph** (Clear white background, max 2MB).
+2. 📜 **O-Level Result Statement / Certificate** (WAEC, NECO, or NABTEB).
+3. 💳 **WAEC / NECO Result Checker Scratch Card Details** (PIN & Serial Number for verification).
+4. 🎂 **Birth Certificate or Official Age Declaration**.
+5. 🗺️ **Local Government / State of Origin Identification Certificate**.
+6. 🎯 **JAMB Result Slip** (Showing UTME score and choice of institution).
 
-        response.ResponseText = $"🎓 Here is the live admissions statistics overview for {activeSession?.Name ?? "the active session"}:";
+💡 *Supported file formats: PDF, JPG, PNG (Max 5MB per file).*";
+
+            response.Card = new GenerativeCardDto
+            {
+                CardType = "action_card",
+                Title = "Document Upload Checklist",
+                Subtitle = "Step 3 of Admission Application",
+                Data = new Dictionary<string, object>
+                {
+                    { "actionText", "Ensure all documents are clear and legible before submitting." }
+                },
+                Actions = new List<CardActionDto>
+                {
+                    new CardActionDto { Label = "Upload Documents Now", ActionType = "navigate", Target = "/apply" }
+                }
+            };
+            return response;
+        }
+
+        // 2D. JAMB CAPS & Entry Guidelines
+        if (p.Contains("jamb") || p.Contains("caps") || p.Contains("cut off") || p.Contains("utme") ||
+            p.Contains("direct entry") || p.Contains("choice"))
+        {
+            response.ResponseText = @"🎯 **JAMB CAPS & Admission Requirements Guidelines**
+
+To ensure your admission offer is processed smoothly by JAMB:
+
+1. 🥇 **1st Choice Selection:** Ensure **Wigwe University** is selected as your **FIRST CHOICE** institution on the official JAMB CAPS Portal.
+2. 📤 **O-Level Upload to JAMB:** Visit an accredited JAMB CBT center to upload your O-Level results directly to your JAMB CAPS profile.
+3. 📋 **Complete Online Application:** Fill out all 5 steps of the online application form on our portal.
+4. 📩 **Offer Acceptance:** Once approved, your admission offer letter will be sent via email and updated on JAMB CAPS.
+
+❓ *Need help changing your first choice to Wigwe University? Visit any accredited JAMB CBT center or contact our Admissions Team.*";
+
+            return response;
+        }
+
+        // 2E. Application Steps & General Guidance Fallback
+        response.ResponseText = @"📋 **Wigwe University Admission Application Guide**
+
+Welcome! We are excited to support your application journey. Here is how to complete your application in **5 simple steps**:
+
+1. **Step 1: Program Choice** — Select your Faculty/College and preferred Academic Program.
+2. **Step 2: Qualifications** — Enter your JAMB Registration Number, UTME Score, and O-Level subjects/grades.
+3. **Step 3: Document Uploads** — Upload your Passport photo, O-Level statement, and Birth Certificate.
+4. **Step 4: Contact & Sponsorship** — Enter emergency contact and parent/guardian information.
+5. **Step 5: Review & Submit** — Review your application summary and submit!
+
+📧 **Admissions Office Support:**
+• Email: `admissions@wigweuniversity.edu.ng`
+• Office Hours: Mon - Fri (8:00 AM - 5:00 PM)";
+
+        // 2F. In-Copilot Admission Application Wizard Card Trigger
+        if (p.Contains("wizard") || p.Contains("fill application") || p.Contains("apply in copilot") ||
+            p.Contains("copilot apply") || p.Contains("start application in copilot") || p.Contains("apply now"))
+        {
+            var faculties = await _dbContext.Faculties
+                .AsNoTracking()
+                .OrderBy(f => f.Name)
+                .Select(f => new Dictionary<string, object> {
+                    { "id", f.Id.ToString() },
+                    { "name", f.Name }
+                })
+                .ToListAsync(ct);
+
+            var programs = await _dbContext.Programs
+                .AsNoTracking()
+                .Where(pr => pr.IsActive && pr.ParentProgramId == null)
+                .OrderBy(pr => pr.Name)
+                .Select(pr => new Dictionary<string, object> {
+                    { "id", pr.Id.ToString() },
+                    { "name", pr.Name },
+                    { "facultyId", pr.Department != null ? pr.Department.FacultyId.ToString() : "" }
+                })
+                .ToListAsync(ct);
+
+            response.ResponseText = "✨ **Interactive In-Copilot Admission Wizard**\n\nYou can complete and submit your admission application directly below within this Copilot drawer:";
+
+            response.Card = new GenerativeCardDto
+            {
+                CardType = "copilot_admission_wizard",
+                Title = "Wigwe University Admission Wizard",
+                Subtitle = "Complete your application directly in Copilot",
+                Data = new Dictionary<string, object>
+                {
+                    { "faculties", faculties },
+                    { "programs", programs }
+                },
+                Actions = new List<CardActionDto>()
+            };
+            return response;
+        }
+
         response.Card = new GenerativeCardDto
         {
-            CardType = "admission_stats",
-            Title = "Admission Performance Dashboard",
-            Subtitle = $"{activeSession?.Name ?? "Current Academic Session"}",
+            CardType = "action_card",
+            Title = "Ready to Apply to Wigwe University?",
+            Subtitle = "Fast, Seamless Online Admission Application",
             Data = new Dictionary<string, object>
             {
-                { "totalApplications", totalApps },
-                { "admitted", admittedApps },
-                { "offerAccepted", acceptedApps },
-                { "enrolledFeePaid", feePaidApps },
-                { "pendingReview", pendingApps },
-                { "rejected", rejectedApps }
+                { "actionText", "Fill out your application directly in Copilot or open the full form." }
             },
             Actions = new List<CardActionDto>
             {
-                new CardActionDto { Label = "View Admissions Portal", ActionType = "navigate", Target = "/dashboard/registry/admissions" },
-                new CardActionDto { Label = "Pending Reviews", ActionType = "prompt", Target = "Show pending admission applications" },
-                new CardActionDto { Label = "Admitted List", ActionType = "prompt", Target = "Show recently admitted applicants" }
+                new CardActionDto { Label = "⚡ Apply in Copilot Wizard", ActionType = "prompt", Target = "start application in copilot" },
+                new CardActionDto { Label = "Open Full Application Form", ActionType = "navigate", Target = "/apply" }
             }
         };
         return response;

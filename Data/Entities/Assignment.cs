@@ -16,6 +16,7 @@ public sealed class Assignment
     public int? MaxGroupSize { get; set; }
     public string ReleaseConditionsJson { get; set; } = "{}";
     public string TargetProgramIdsJson { get; set; } = "[]";
+    public bool EnableTurnitinCheck { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public int Version { get; set; } = 1;

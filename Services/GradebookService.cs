@@ -688,6 +688,36 @@ public sealed class GradebookService : IGradebookService
             .Where(s => studentIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id, s => s.StudentNumber, ct);
 
+        var levelOrder = offeringProgram?.Level?.Order ?? 1;
+        var levelNameStr = offeringProgram?.Level?.Name ?? "";
+        bool isYear1 = levelOrder <= 1 || levelNameStr.Contains("100") || levelNameStr.ToLower().Contains("year 1");
+        bool includeCgpa = !isYear1 || (isYear1 && offering.Semester == Data.Enums.Semester.Second);
+
+        // Load all historical registered course enrollments for cohort students up to current session & semester
+        var historicalEnrollments = await _dbContext.CourseEnrollments
+            .AsNoTracking()
+            .Where(e => studentIds.Contains(e.StudentId) && e.Status == "Registered")
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.AcademicSession)
+            .Include(e => e.CourseOffering)
+                .ThenInclude(co => co.Course)
+            .Where(e => e.CourseOffering.AcademicSession.StartDate < offering.AcademicSession.StartDate ||
+                       (e.CourseOffering.AcademicSessionId == offering.AcademicSessionId && (int)e.CourseOffering.Semester <= (int)offering.Semester))
+            .ToListAsync(ct);
+
+        var histOfferingIds = historicalEnrollments.Select(e => e.CourseOfferingId).Distinct().ToList();
+        foreach (var offId in histOfferingIds)
+        {
+            if (!allSummaries.ContainsKey(offId))
+            {
+                var sumRes = await GetStudentGradeSummariesAsync(offId, ct);
+                if (!sumRes.IsError)
+                {
+                    allSummaries[offId] = sumRes.Value;
+                }
+            }
+        }
+
         // ── Load Template Workbook ───────────────────────────────────────
         var templatePath = Path.Combine(AppContext.BaseDirectory, "Assets", "wigwe_result_template.xlsx");
         if (!File.Exists(templatePath))
@@ -743,6 +773,9 @@ public sealed class GradebookService : IGradebookService
         int totalGpCol = 42 - deletedCount;
         int gpaCol = 43 - deletedCount;
         int remarksCol = 44 - deletedCount;
+
+        // Set header label in row 5 for GPA / CGPA column
+        ws.Cell(5, gpaCol).Value = includeCgpa ? "GPA / CGPA" : "GPA";
 
         // Clear existing template dummy values (rows 6 to 327)
         ws.Rows(6, 327).Clear(XLClearOptions.Contents);
@@ -832,33 +865,111 @@ public sealed class GradebookService : IGradebookService
                 }
             }
 
-            // Summary metrics
-            // Total Registered
-            ws.Cell(r2, regUnitsCol).Value = totalRegisteredUnits;
+            // Cumulative summary calculation across all historical semesters up to current
+            double cumRegisteredUnits = 0;
+            double cumPassedUnits = 0;
+            double cumFailedUnits = 0;
+            double cumGradePoints = 0;
+            var cumOutstandingList = new List<string>();
+
+            if (includeCgpa)
+            {
+                var studHistEnrollments = historicalEnrollments.Where(e => e.StudentId == student.Id).ToList();
+                foreach (var e in studHistEnrollments)
+                {
+                    var peerOffering = e.CourseOffering;
+                    if (allSummaries.TryGetValue(peerOffering.Id, out var summaries))
+                    {
+                        var studSum = summaries.FirstOrDefault(s => s.StudentId == student.Id);
+                        if (studSum != null)
+                        {
+                            double scoreVal = (double)studSum.TotalScore;
+                            var gp = getGradeAndPoints(scoreVal);
+                            double creditUnits = peerOffering.Course.CreditUnits;
+
+                            cumRegisteredUnits += creditUnits;
+                            if (gp.Grade != "F")
+                            {
+                                cumPassedUnits += creditUnits;
+                            }
+                            else
+                            {
+                                cumFailedUnits += creditUnits;
+                            }
+                            cumGradePoints += gp.Points * creditUnits;
+                        }
+                    }
+                }
+
+                var studentCourseGroups = studHistEnrollments.GroupBy(e => e.CourseOffering.Course.Code);
+                foreach (var group in studentCourseGroups)
+                {
+                    var latestEnrollment = group
+                        .OrderByDescending(e => e.CourseOffering.AcademicSession.StartDate)
+                        .ThenByDescending(e => (int)e.CourseOffering.Semester)
+                        .First();
+
+                    if (allSummaries.TryGetValue(latestEnrollment.CourseOfferingId, out var summaries))
+                    {
+                        var studSum = summaries.FirstOrDefault(s => s.StudentId == student.Id);
+                        if (studSum != null)
+                        {
+                            var gp = getGradeAndPoints((double)studSum.TotalScore);
+                            if (gp.Grade == "F")
+                            {
+                                cumOutstandingList.Add($"{latestEnrollment.CourseOffering.Course.Code} ({latestEnrollment.CourseOffering.Course.CreditUnits})");
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                cumRegisteredUnits = totalRegisteredUnits;
+                cumPassedUnits = totalPassedUnits;
+                cumFailedUnits = totalFailedUnits;
+                cumGradePoints = totalGradePoints;
+                cumOutstandingList = outstandingList;
+            }
+
+            // Current Semester Summary Metrics (Row 1)
+            ws.Cell(r1, regUnitsCol).Value = totalRegisteredUnits;
+            ws.Cell(r1, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell(r1, passedUnitsCol).Value = totalPassedUnits;
+            ws.Cell(r1, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell(r1, failedUnitsCol).Value = totalFailedUnits;
+            ws.Cell(r1, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell(r1, totalGpCol).Value = totalGradePoints;
+            ws.Cell(r1, totalGpCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            var r1RegCell = ws.Cell(r1, regUnitsCol).Address.ToString();
+            var r1GpCell = ws.Cell(r1, totalGpCol).Address.ToString();
+            ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({r1RegCell}>0, ROUND({r1GpCell}/{r1RegCell}, 2), 0)";
+            ws.Cell(r1, gpaCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // Cumulative / CGPA Summary Metrics (Row 2)
+            ws.Cell(r2, regUnitsCol).Value = cumRegisteredUnits;
             ws.Cell(r2, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            // Total Passed
-            ws.Cell(r2, passedUnitsCol).Value = totalPassedUnits;
+            ws.Cell(r2, passedUnitsCol).Value = cumPassedUnits;
             ws.Cell(r2, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            // Total Failed
-            ws.Cell(r2, failedUnitsCol).Value = totalFailedUnits;
+            ws.Cell(r2, failedUnitsCol).Value = cumFailedUnits;
             ws.Cell(r2, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            // Total Grade Point
-            ws.Cell(r1, totalGpCol).Value = totalGradePoints;
-            ws.Range(r1, totalGpCol, r2, totalGpCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(r1, totalGpCol, r2, totalGpCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            ws.Cell(r2, totalGpCol).Value = cumGradePoints;
+            ws.Cell(r2, totalGpCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            // GPA
-            var totalGpCell = ws.Cell(r1, totalGpCol).Address.ToString();
-            var regUnitsCell = ws.Cell(r2, regUnitsCol).Address.ToString();
-            ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({regUnitsCell}>0, ROUND({totalGpCell}/{regUnitsCell}, 2), 0)";
-            ws.Range(r1, gpaCol, r2, gpaCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(r1, gpaCol, r2, gpaCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            var r2RegCell = ws.Cell(r2, regUnitsCol).Address.ToString();
+            var r2GpCell = ws.Cell(r2, totalGpCol).Address.ToString();
+            ws.Cell(r2, gpaCol).FormulaA1 = $"=IF({r2RegCell}>0, ROUND({r2GpCell}/{r2RegCell}, 2), 0)";
+            ws.Cell(r2, gpaCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            // Remarks
-            string remarksVal = outstandingList.Count > 0 ? string.Join(", ", outstandingList) : "PASS";
+            // Remarks (Merged r1:r2)
+            string remarksVal = cumOutstandingList.Count > 0 ? string.Join(", ", cumOutstandingList) : "PASS";
             ws.Cell(r1, remarksCol).Value = remarksVal;
             ws.Range(r1, remarksCol, r2, remarksCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(r1, remarksCol, r2, remarksCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
@@ -988,6 +1099,21 @@ public sealed class GradebookService : IGradebookService
                 .Where(s => studentIds.Contains(s.Id))
                 .ToDictionaryAsync(s => s.Id, s => s.StudentNumber, ct);
 
+            bool isYear1 = level.Order <= 1 || level.Name.Contains("100") || level.Name.ToLower().Contains("year 1");
+            bool includeCgpa = !isYear1 || (isYear1 && semester == Data.Enums.Semester.Second);
+
+            // Load all historical registered course enrollments for cohort students up to current session & semester
+            var historicalEnrollments = await _dbContext.CourseEnrollments
+                .AsNoTracking()
+                .Where(e => studentIds.Contains(e.StudentId) && e.Status == "Registered")
+                .Include(e => e.CourseOffering)
+                    .ThenInclude(co => co.AcademicSession)
+                .Include(e => e.CourseOffering)
+                    .ThenInclude(co => co.Course)
+                .Where(e => e.CourseOffering.AcademicSession.StartDate < session.StartDate ||
+                           (e.CourseOffering.AcademicSessionId == session.Id && (int)e.CourseOffering.Semester <= (int)semester))
+                .ToListAsync(ct);
+
             // Fetch student summaries for each offering
             var allSummaries = new Dictionary<Guid, List<StudentGradeSummaryDto>>();
             foreach (var peer in uniquePeerOfferings)
@@ -996,6 +1122,19 @@ public sealed class GradebookService : IGradebookService
                 if (!sumRes.IsError)
                 {
                     allSummaries[peer.Id] = sumRes.Value;
+                }
+            }
+
+            var histOfferingIds = historicalEnrollments.Select(e => e.CourseOfferingId).Distinct().ToList();
+            foreach (var offId in histOfferingIds)
+            {
+                if (!allSummaries.ContainsKey(offId))
+                {
+                    var sumRes = await GetStudentGradeSummariesAsync(offId, ct);
+                    if (!sumRes.IsError)
+                    {
+                        allSummaries[offId] = sumRes.Value;
+                    }
                 }
             }
 
@@ -1052,6 +1191,9 @@ public sealed class GradebookService : IGradebookService
             int totalGpCol = 42 - deletedCount;
             int gpaCol = 43 - deletedCount;
             int remarksCol = 44 - deletedCount;
+
+            // Set header label in row 5 for GPA / CGPA column
+            ws.Cell(5, gpaCol).Value = includeCgpa ? "GPA / CGPA" : "GPA";
 
             // Clear dummy rows
             ws.Rows(6, 327).Clear(XLClearOptions.Contents);
@@ -1130,33 +1272,111 @@ public sealed class GradebookService : IGradebookService
                     }
                 }
 
-                // Summary metrics
-                // Total Registered
-                ws.Cell(r2, regUnitsCol).Value = totalRegisteredUnits;
+                // Cumulative summary calculation across all historical semesters up to current
+                double cumRegisteredUnits = 0;
+                double cumPassedUnits = 0;
+                double cumFailedUnits = 0;
+                double cumGradePoints = 0;
+                var cumOutstandingList = new List<string>();
+
+                if (includeCgpa)
+                {
+                    var studHistEnrollments = historicalEnrollments.Where(e => e.StudentId == student.Id).ToList();
+                    foreach (var e in studHistEnrollments)
+                    {
+                        var peerOffering = e.CourseOffering;
+                        if (allSummaries.TryGetValue(peerOffering.Id, out var summaries))
+                        {
+                            var studSum = summaries.FirstOrDefault(s => s.StudentId == student.Id);
+                            if (studSum != null)
+                            {
+                                double scoreVal = (double)studSum.TotalScore;
+                                var gp = getGradeAndPoints(scoreVal);
+                                double creditUnits = peerOffering.Course.CreditUnits;
+
+                                cumRegisteredUnits += creditUnits;
+                                if (gp.Grade != "F")
+                                {
+                                    cumPassedUnits += creditUnits;
+                                }
+                                else
+                                {
+                                    cumFailedUnits += creditUnits;
+                                }
+                                cumGradePoints += gp.Points * creditUnits;
+                            }
+                        }
+                    }
+
+                    var studentCourseGroups = studHistEnrollments.GroupBy(e => e.CourseOffering.Course.Code);
+                    foreach (var group in studentCourseGroups)
+                    {
+                        var latestEnrollment = group
+                            .OrderByDescending(e => e.CourseOffering.AcademicSession.StartDate)
+                            .ThenByDescending(e => (int)e.CourseOffering.Semester)
+                            .First();
+
+                        if (allSummaries.TryGetValue(latestEnrollment.CourseOfferingId, out var summaries))
+                        {
+                            var studSum = summaries.FirstOrDefault(s => s.StudentId == student.Id);
+                            if (studSum != null)
+                            {
+                                var gp = getGradeAndPoints((double)studSum.TotalScore);
+                                if (gp.Grade == "F")
+                                {
+                                    cumOutstandingList.Add($"{latestEnrollment.CourseOffering.Course.Code} ({latestEnrollment.CourseOffering.Course.CreditUnits})");
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    cumRegisteredUnits = totalRegisteredUnits;
+                    cumPassedUnits = totalPassedUnits;
+                    cumFailedUnits = totalFailedUnits;
+                    cumGradePoints = totalGradePoints;
+                    cumOutstandingList = outstandingList;
+                }
+
+                // Current Semester Summary Metrics (Row 1)
+                ws.Cell(r1, regUnitsCol).Value = totalRegisteredUnits;
+                ws.Cell(r1, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                ws.Cell(r1, passedUnitsCol).Value = totalPassedUnits;
+                ws.Cell(r1, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                ws.Cell(r1, failedUnitsCol).Value = totalFailedUnits;
+                ws.Cell(r1, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                ws.Cell(r1, totalGpCol).Value = totalGradePoints;
+                ws.Cell(r1, totalGpCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                var r1RegCell = ws.Cell(r1, regUnitsCol).Address.ToString();
+                var r1GpCell = ws.Cell(r1, totalGpCol).Address.ToString();
+                ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({r1RegCell}>0, ROUND({r1GpCell}/{r1RegCell}, 2), 0)";
+                ws.Cell(r1, gpaCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                // Cumulative / CGPA Summary Metrics (Row 2)
+                ws.Cell(r2, regUnitsCol).Value = cumRegisteredUnits;
                 ws.Cell(r2, regUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Total Passed
-                ws.Cell(r2, passedUnitsCol).Value = totalPassedUnits;
+                ws.Cell(r2, passedUnitsCol).Value = cumPassedUnits;
                 ws.Cell(r2, passedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Total Failed
-                ws.Cell(r2, failedUnitsCol).Value = totalFailedUnits;
+                ws.Cell(r2, failedUnitsCol).Value = cumFailedUnits;
                 ws.Cell(r2, failedUnitsCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Total Grade Point
-                ws.Cell(r1, totalGpCol).Value = totalGradePoints;
-                ws.Range(r1, totalGpCol, r2, totalGpCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(r1, totalGpCol, r2, totalGpCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                ws.Cell(r2, totalGpCol).Value = cumGradePoints;
+                ws.Cell(r2, totalGpCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // GPA
-                var totalGpCell = ws.Cell(r1, totalGpCol).Address.ToString();
-                var regUnitsCell = ws.Cell(r2, regUnitsCol).Address.ToString();
-                ws.Cell(r1, gpaCol).FormulaA1 = $"=IF({regUnitsCell}>0, ROUND({totalGpCell}/{regUnitsCell}, 2), 0)";
-                ws.Range(r1, gpaCol, r2, gpaCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(r1, gpaCol, r2, gpaCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                var r2RegCell = ws.Cell(r2, regUnitsCol).Address.ToString();
+                var r2GpCell = ws.Cell(r2, totalGpCol).Address.ToString();
+                ws.Cell(r2, gpaCol).FormulaA1 = $"=IF({r2RegCell}>0, ROUND({r2GpCell}/{r2RegCell}, 2), 0)";
+                ws.Cell(r2, gpaCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                // Remarks
-                string remarksVal = outstandingList.Count > 0 ? string.Join(", ", outstandingList) : "PASS";
+                // Remarks (Merged r1:r2)
+                string remarksVal = cumOutstandingList.Count > 0 ? string.Join(", ", cumOutstandingList) : "PASS";
                 ws.Cell(r1, remarksCol).Value = remarksVal;
                 ws.Range(r1, remarksCol, r2, remarksCol).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 ws.Range(r1, remarksCol, r2, remarksCol).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;

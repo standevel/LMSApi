@@ -11,4 +11,6 @@ public interface IAssignmentService
     Task<ErrorOr<List<AssignmentSubmissionDto>>> GetSubmissionsAsync(Guid assignmentId, Guid? submitterId, CancellationToken ct = default);
     Task<ErrorOr<AssignmentSubmissionDto>> GradeAsync(GradeSubmissionRequest request, Guid graderId, CancellationToken ct = default);
     Task<ErrorOr<int>> ImportAssignmentsFromOfferingAsync(Guid sourceOfferingId, Guid targetOfferingId, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<TurnitinCheckResultDto>> CheckTurnitinAsync(Guid submissionId, CancellationToken ct = default);
+    Task<ErrorOr<TurnitinCheckResultDto>> GetTurnitinReportAsync(Guid submissionId, CancellationToken ct = default);
 }

@@ -131,3 +131,34 @@ public sealed class BulkRegisterEndpoint(IRegistrationService registrationServic
     }
 }
 
+public sealed class GetGlobalCourseOfferingsEndpoint(IRegistrationService registrationService, ICurrentUserContext currentUserContext)
+    : ApiEndpointWithoutRequest<List<RegistrationOfferingDto>>
+{
+    public override void Configure()
+    {
+        Get("self-service/global-offerings");
+        Roles("Student", "SuperAdmin");
+        Tags("SelfService");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendUnauthorizedAsync(ct);
+            return;
+        }
+
+        var search = HttpContext.Request.Query["search"].FirstOrDefault();
+        var result = await registrationService.GetGlobalCourseOfferingsAsync(userId.Value, search, ct);
+        if (result.IsError)
+        {
+            await HandleErrorAsync(result.Errors, ct);
+            return;
+        }
+
+        await SendSuccessAsync(result.Value, ct);
+    }
+}
+

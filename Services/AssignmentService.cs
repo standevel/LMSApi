@@ -9,7 +9,8 @@ namespace LMS.Api.Services;
 public sealed class AssignmentService(
     LmsDbContext context,
     INotificationService notificationService,
-    IAssignmentGroupService groupService) : IAssignmentService
+    IAssignmentGroupService groupService,
+    ITurnitinService turnitinService) : IAssignmentService
 {
     public async Task<ErrorOr<AssignmentDto>> CreateAssignmentAsync(UpsertAssignmentRequest request, Guid creatorId, CancellationToken ct = default)
     {
@@ -219,10 +220,21 @@ public sealed class AssignmentService(
             return s;
         });
 
-        // Propagate to group members if this is a group assignment (fire-and-forget errors handled silently)
-        if (submission.Assignment?.IsGroupAssignment == true || (await context.Assignments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == submission.AssignmentId, ct))?.IsGroupAssignment == true)
+        // Trigger Turnitin plagiarism check for final (non-draft) submissions
+        if (!request.SaveAsDraft)
         {
-            await groupService.PropagateSubmissionAsync(submission.Id, ct);
+            try
+            {
+                await turnitinService.CheckSubmissionAsync(submission.Id, ct);
+                // Reload updated Turnitin properties on submission
+                submission = await context.AssignmentSubmissions
+                    .Include(x => x.Grade)
+                    .FirstOrDefaultAsync(x => x.Id == submission.Id, ct) ?? submission;
+            }
+            catch (Exception ex)
+            {
+                // Log and continue gracefully if Turnitin service encounters external API timeout
+            }
         }
 
         return ToDto(submission);
@@ -343,6 +355,7 @@ public sealed class AssignmentService(
         assignment.MaxGroupSize = request.IsGroupAssignment ? request.MaxGroupSize : null;
         assignment.ReleaseConditionsJson = string.IsNullOrWhiteSpace(request.ReleaseConditionsJson) ? "{}" : request.ReleaseConditionsJson;
         assignment.TargetProgramIdsJson = JsonSerializer.Serialize(NormalizeTargetProgramIds(request.TargetProgramIds));
+        assignment.EnableTurnitinCheck = request.EnableTurnitinCheck ?? true;
     }
 
     private static List<Guid> NormalizeTargetProgramIds(IEnumerable<Guid>? programIds) =>
@@ -378,11 +391,52 @@ public sealed class AssignmentService(
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseOfferingId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.MaxGroupSize, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt);
+    private static AssignmentDto ToDto(Assignment x) => new(x.Id, x.Title, x.Description, x.MaxPoints, x.CourseOfferingId, x.AssessmentCategoryId, x.DueDate, x.CutoffDate, x.AllowedExtensions, x.MaxFileSizeMb, x.IsGroupAssignment, x.MaxGroupSize, x.ReleaseConditionsJson, DeserializeTargetProgramIds(x.TargetProgramIdsJson), x.CreatedAt, x.UpdatedAt, x.EnableTurnitinCheck);
 
-    private static AssignmentSubmissionDto ToDto(AssignmentSubmission x) => new(x.Id, x.AssignmentId, x.SubmitterId, x.GroupId, x.Status.ToString(), x.SubmittedAt, x.SubmissionMetadataJson, x.DigitalReceipt, x.Grade is null ? null : ToDto(x.Grade), x.CreatedAt, x.UpdatedAt);
+    private static AssignmentSubmissionDto ToDto(AssignmentSubmission x)
+    {
+        TurnitinCheckResultDto? turnitinResult = null;
+        if (!string.IsNullOrWhiteSpace(x.TurnitinResultJson))
+        {
+            try
+            {
+                turnitinResult = JsonSerializer.Deserialize<TurnitinCheckResultDto>(
+                    x.TurnitinResultJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            }
+            catch { }
+        }
+
+        return new(
+            x.Id,
+            x.AssignmentId,
+            x.SubmitterId,
+            x.GroupId,
+            x.Status.ToString(),
+            x.SubmittedAt,
+            x.SubmissionMetadataJson,
+            x.DigitalReceipt,
+            x.Grade is null ? null : ToDto(x.Grade),
+            x.CreatedAt,
+            x.UpdatedAt,
+            x.TurnitinSimilarityScore,
+            x.TurnitinStatus,
+            x.TurnitinReportUrl,
+            turnitinResult,
+            x.TurnitinCheckedAt);
+    }
 
     private static SubmissionGradeDto ToDto(SubmissionGrade x) => new(x.Id, x.SubmissionId, x.GraderId, x.Score, x.FeedbackText, x.FeedbackMediaUrl, x.RubricExecutionJson, x.GradedAt);
+
+    public async Task<ErrorOr<TurnitinCheckResultDto>> CheckTurnitinAsync(Guid submissionId, CancellationToken ct = default)
+    {
+        return await turnitinService.CheckSubmissionAsync(submissionId, ct);
+    }
+
+    public async Task<ErrorOr<TurnitinCheckResultDto>> GetTurnitinReportAsync(Guid submissionId, CancellationToken ct = default)
+    {
+        return await turnitinService.GetSubmissionReportAsync(submissionId, ct);
+    }
 
     public async Task<ErrorOr<int>> ImportAssignmentsFromOfferingAsync(Guid sourceOfferingId, Guid targetOfferingId, Guid userId, CancellationToken ct = default)
     {

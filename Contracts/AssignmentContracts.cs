@@ -16,7 +16,24 @@ public sealed record AssignmentDto(
     string ReleaseConditionsJson,
     List<Guid> TargetProgramIds,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool EnableTurnitinCheck = true);
+
+public record TurnitinCheckResultDto(
+    Guid SubmissionId,
+    int SimilarityScore,
+    string Status,
+    string RiskLevel,
+    string ReportUrl,
+    List<TurnitinMatchedSourceDto> MatchedSources,
+    DateTimeOffset CheckedAt);
+
+public record TurnitinMatchedSourceDto(
+    string SourceTitle,
+    string SourceType,
+    int MatchPercentage,
+    string? SourceUrl,
+    string? MatchedSnippet);
 
 public sealed record AssignmentSubmissionDto(
     Guid Id,
@@ -29,7 +46,12 @@ public sealed record AssignmentSubmissionDto(
     string DigitalReceipt,
     SubmissionGradeDto? Grade,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    int? TurnitinSimilarityScore = null,
+    string? TurnitinStatus = null,
+    string? TurnitinReportUrl = null,
+    TurnitinCheckResultDto? TurnitinResult = null,
+    DateTimeOffset? TurnitinCheckedAt = null);
 
 public sealed record SubmissionGradeDto(
     Guid Id,
@@ -56,6 +78,7 @@ public class UpsertAssignmentRequest
     public int? MaxGroupSize { get; set; }
     public string ReleaseConditionsJson { get; set; } = "{}";
     public List<Guid> TargetProgramIds { get; set; } = new();
+    public bool? EnableTurnitinCheck { get; set; } = true;
 }
 
 public sealed class SubmitAssignmentRequest

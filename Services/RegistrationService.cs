@@ -41,8 +41,11 @@ public class RegistrationService : BaseService, IRegistrationService
                 return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
 
             var blockers = await GetBlockersAsync(studentId, offering, ct);
-            if (blockers.Count > 0)
-                return Error.Validation(blockers[0].Code, blockers[0].Message);
+            var hardBlockers = blockers.Where(b => b.Code != "Registration.IneligibleOffering" &&
+                                                  b.Code != "Registration.NotInCurriculum" &&
+                                                  b.Code != "Registration.WrongSemester").ToList();
+            if (hardBlockers.Count > 0)
+                return Error.Validation(hardBlockers[0].Code, hardBlockers[0].Message);
 
             var enrollment = await _context.CourseEnrollments
                 .FirstOrDefaultAsync(x => x.StudentId == studentId && x.CourseOfferingId == courseOfferingId, ct);
@@ -379,11 +382,10 @@ public class RegistrationService : BaseService, IRegistrationService
                 return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
         }
 
-        var programmeEnrollment = await _context.Enrollments.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UserId == studentId && x.AcademicSessionId == session.Id, ct);
+        var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, session.Id, ct);
 
         var studentName = await _context.Users.Where(x => x.Id == studentId)
-            .Select(x => x.DisplayName ?? x.Email ?? "Student").FirstAsync(ct);
+            .Select(x => x.DisplayName ?? x.Email ?? "Student").FirstOrDefaultAsync(ct) ?? "Student";
 
         var programName = "";
         var levelName = "";
@@ -395,6 +397,26 @@ public class RegistrationService : BaseService, IRegistrationService
                 .FirstOrDefaultAsync(l => l.Id == programmeEnrollment.LevelId, ct);
             programName = program?.Name ?? "";
             levelName = level?.Name ?? "";
+        }
+        else
+        {
+            var student = await _context.Set<Student>().AsNoTracking()
+                .Include(s => s.AcademicProgram)
+                .Include(s => s.Level)
+                .FirstOrDefaultAsync(s => s.Id == studentId || (s.EntraObjectId != null
+                    ? _context.Users.Any(u => u.Id == studentId && u.EntraObjectId == s.EntraObjectId)
+                    : _context.Users.Any(u => u.Id == studentId && u.Email == s.OfficialEmail)), ct)
+                ?? await _context.Set<Student>().AsNoTracking()
+                    .Include(s => s.AcademicProgram)
+                    .Include(s => s.Level)
+                    .Where(s => _context.Users.Any(u => u.Id == studentId && (u.Email == s.OfficialEmail || u.Email == s.PersonalEmail)))
+                    .FirstOrDefaultAsync(ct);
+
+            if (student is not null)
+            {
+                programName = student.AcademicProgram?.Name ?? "";
+                levelName = student.Level?.Name ?? "";
+            }
         }
 
         // If no programme enrollment exists for the active session, return an empty summary
@@ -458,9 +480,10 @@ public class RegistrationService : BaseService, IRegistrationService
             var ccList = await _context.CurriculumCourses.AsNoTracking()
                 .Where(x => x.CurriculumId == resolvedCurriculumId)
                 .ToListAsync(ct);
-            curriculumCreditMap = ccList.ToDictionary(x => x.CourseId, x => x.CreditUnits);
-            curriculumCourseSemesters = ccList.ToDictionary(x => x.CourseId, x => x.Semester);
-            curriculumCourseLevels = ccList.ToDictionary(x => x.CourseId, x => x.LevelId);
+            var distinctCCs = ccList.GroupBy(x => x.CourseId).Select(g => g.First()).ToList();
+            curriculumCreditMap = distinctCCs.ToDictionary(x => x.CourseId, x => x.CreditUnits);
+            curriculumCourseSemesters = distinctCCs.ToDictionary(x => x.CourseId, x => x.Semester);
+            curriculumCourseLevels = distinctCCs.ToDictionary(x => x.CourseId, x => x.LevelId);
         }
 
         var offerings = await _context.CourseOfferings.AsNoTracking()
@@ -566,8 +589,10 @@ public class RegistrationService : BaseService, IRegistrationService
     private async Task<List<RegistrationBlockerDto>> GetBlockersAsync(Guid studentId, CourseOffering offering, CancellationToken ct)
     {
         var blockers = new List<RegistrationBlockerDto>();
-        var programmeEnrollment = await _context.Enrollments.AsNoTracking().FirstOrDefaultAsync(x =>
-            x.UserId == studentId && x.AcademicSessionId == offering.AcademicSessionId, ct);
+        var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, offering.AcademicSessionId, ct);
+
+        var lowerLevelIds = new List<Guid>();
+        var offeringLevelIds = new List<Guid>();
 
         // Check that the student's program is attached to this offering
         var programAttached = programmeEnrollment != null && await _context.CourseOfferingPrograms.AnyAsync(
@@ -575,27 +600,27 @@ public class RegistrationService : BaseService, IRegistrationService
         if (programmeEnrollment is null || !programAttached)
         {
             blockers.Add(new("Registration.IneligibleOffering", "This course is not offered for your programme."));
-            return blockers;
         }
-
-        var levels = await _context.Levels.AsNoTracking()
-            .Where(x => x.ProgramId == programmeEnrollment.ProgramId)
-            .ToListAsync(ct);
-        var currentLevel = levels.FirstOrDefault(x => x.Id == programmeEnrollment.LevelId);
-        var lowerLevelIds = currentLevel != null 
-            ? levels.Where(x => x.Order < currentLevel.Order).Select(x => x.Id).ToList() 
-            : new List<Guid>();
-
-        var eligibleLevelIds = new HashSet<Guid>(lowerLevelIds) { programmeEnrollment.LevelId };
-        // Check that one of the offering's attached levels is eligible for this student
-        var offeringLevelIds = await _context.CourseOfferingPrograms
-            .Where(p => p.CourseOfferingId == offering.Id && p.ProgramId == programmeEnrollment.ProgramId)
-            .Select(p => p.LevelId)
-            .ToListAsync(ct);
-        if (!offeringLevelIds.Any(lid => eligibleLevelIds.Contains(lid)))
+        else
         {
-            blockers.Add(new("Registration.IneligibleOffering", "This course is not offered for your programme and level."));
-            return blockers;
+            var levels = await _context.Levels.AsNoTracking()
+                .Where(x => x.ProgramId == programmeEnrollment.ProgramId)
+                .ToListAsync(ct);
+            var currentLevel = levels.FirstOrDefault(x => x.Id == programmeEnrollment.LevelId);
+            lowerLevelIds = currentLevel != null 
+                ? levels.Where(x => x.Order < currentLevel.Order).Select(x => x.Id).ToList() 
+                : new List<Guid>();
+
+            var eligibleLevelIds = new HashSet<Guid>(lowerLevelIds) { programmeEnrollment.LevelId };
+            // Check that one of the offering's attached levels is eligible for this student
+            offeringLevelIds = await _context.CourseOfferingPrograms
+                .Where(p => p.CourseOfferingId == offering.Id && p.ProgramId == programmeEnrollment.ProgramId)
+                .Select(p => p.LevelId)
+                .ToListAsync(ct);
+            if (!offeringLevelIds.Any(lid => eligibleLevelIds.Contains(lid)))
+            {
+                blockers.Add(new("Registration.IneligibleOffering", "This course is not offered for your programme and level."));
+            }
         }
 
         if (offering.AcademicSession == null || !offering.AcademicSession.IsActive)
@@ -605,16 +630,20 @@ public class RegistrationService : BaseService, IRegistrationService
             x.CourseOfferingId == offering.Id && x.Status == "Registered", ct))
             blockers.Add(new("Registration.AlreadyRegistered", "You are already registered for this course."));
 
-        var courseAlreadyPassed = await _context.Grades.AsNoTracking()
+        // Fetch grouped totals into memory first to avoid SQL divide-by-zero (SQL Server does not
+        // guarantee short-circuit evaluation of AND inside HAVING clauses).
+        var gradeGroupTotals = await _context.Grades.AsNoTracking()
             .Where(g => g.StudentId == studentId && g.Assessment.CourseOffering.CourseId == offering.CourseId &&
                 _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
             .GroupBy(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId })
-            .AnyAsync(g => g.Sum(x => x.Assessment.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.Assessment.MaxMarks) * 100m >= 40m, ct);
+            .Select(g => new { TotalMax = g.Sum(x => x.Assessment.MaxMarks), TotalObtained = g.Sum(x => x.MarksObtained) })
+            .ToListAsync(ct);
+        var courseAlreadyPassed = gradeGroupTotals.Any(g => g.TotalMax > 0 && g.TotalObtained / g.TotalMax * 100m >= 40m);
         if (courseAlreadyPassed)
             blockers.Add(new("Registration.AlreadyPassed", "You have already passed this course."));
 
         // Resolve curriculum — by admission session, then program active curriculum
-        var resolvedCurriculumId = await ResolveCurriculumIdAsync(studentId, programmeEnrollment, ct);
+        var resolvedCurriculumId = programmeEnrollment != null ? await ResolveCurriculumIdAsync(studentId, programmeEnrollment, ct) : Guid.Empty;
 
         var curriculumCreditMap = new Dictionary<Guid, int>();
         var curriculumCourseSemesters = new Dictionary<Guid, LMS.Api.Data.Enums.Semester>();
@@ -623,8 +652,9 @@ public class RegistrationService : BaseService, IRegistrationService
             var ccList = await _context.CurriculumCourses.AsNoTracking()
                 .Where(x => x.CurriculumId == resolvedCurriculumId)
                 .ToListAsync(ct);
-            curriculumCreditMap = ccList.ToDictionary(x => x.CourseId, x => x.CreditUnits);
-            curriculumCourseSemesters = ccList.ToDictionary(x => x.CourseId, x => x.Semester);
+            var distinctCCs = ccList.GroupBy(x => x.CourseId).Select(g => g.First()).ToList();
+            curriculumCreditMap = distinctCCs.ToDictionary(x => x.CourseId, x => x.CreditUnits);
+            curriculumCourseSemesters = distinctCCs.ToDictionary(x => x.CourseId, x => x.Semester);
 
             if (!curriculumCreditMap.ContainsKey(offering.CourseId))
             {
@@ -636,9 +666,11 @@ public class RegistrationService : BaseService, IRegistrationService
             }
         }
 
-        var maxCredits = await _context.LevelSemesterConfigs.AsNoTracking()
-            .Where(x => x.LevelId == programmeEnrollment!.LevelId && x.Semester == offering.Semester && x.IsActive)
-            .Select(x => (int?)x.MaxCreditLoad).FirstOrDefaultAsync(ct) ?? 24;
+        var maxCredits = programmeEnrollment != null 
+            ? (await _context.LevelSemesterConfigs.AsNoTracking()
+                .Where(x => x.LevelId == programmeEnrollment.LevelId && x.Semester == offering.Semester && x.IsActive)
+                .Select(x => (int?)x.MaxCreditLoad).FirstOrDefaultAsync(ct) ?? 24)
+            : 24;
 
         var enrolledOfferings = await _context.CourseEnrollments.AsNoTracking()
             .Where(x => x.StudentId == studentId && x.Status == "Registered" &&
@@ -856,8 +888,7 @@ public class RegistrationService : BaseService, IRegistrationService
             return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
 
         // Get student program enrollment
-        var programmeEnrollment = await _context.Enrollments.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UserId == studentId && x.AcademicSessionId == session.Id, ct);
+        var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, session.Id, ct);
         if (programmeEnrollment is null)
             return Error.NotFound("Enrollment.NotFound", "No active program enrollment found for this session.");
 
@@ -879,8 +910,9 @@ public class RegistrationService : BaseService, IRegistrationService
             var ccList = await _context.CurriculumCourses.AsNoTracking()
                 .Where(x => x.CurriculumId == resolvedCurriculumId)
                 .ToListAsync(ct);
-            curriculumCreditMap = ccList.ToDictionary(x => x.CourseId, x => x.CreditUnits);
-            curriculumCourseSemesters = ccList.ToDictionary(x => x.CourseId, x => x.Semester);
+            var distinctCCs = ccList.GroupBy(x => x.CourseId).Select(g => g.First()).ToList();
+            curriculumCreditMap = distinctCCs.ToDictionary(x => x.CourseId, x => x.CreditUnits);
+            curriculumCourseSemesters = distinctCCs.ToDictionary(x => x.CourseId, x => x.Semester);
         }
 
         // Load all requested offerings
@@ -890,18 +922,7 @@ public class RegistrationService : BaseService, IRegistrationService
             .Include(o => o.AcademicSession)
             .ToListAsync(ct);
 
-        if (resolvedCurriculumId != Guid.Empty)
-        {
-            var invalidOfferings = requestedOfferings.Where(o => 
-                !curriculumCreditMap.ContainsKey(o.CourseId) || 
-                (curriculumCourseSemesters.TryGetValue(o.CourseId, out var sem) && sem != session.ActiveSemester)
-            ).ToList();
-
-            if (invalidOfferings.Count > 0)
-            {
-                return Error.Validation("Registration.NotInCurriculum", "One or more selected courses are not in your curriculum for the active semester.");
-            }
-        }
+        // Note: Students are permitted to select courses outside their strict curriculum mapping as electives/global courses
 
         // Identify outstanding carryovers
         var allGradeRows = await _context.Grades.AsNoTracking()
@@ -1092,5 +1113,161 @@ public class RegistrationService : BaseService, IRegistrationService
 
             return await GetRegistrationSummaryAsync(studentId, null, ct);
         });
+    }
+
+    public async Task<ErrorOr<List<RegistrationOfferingDto>>> GetGlobalCourseOfferingsAsync(Guid studentId, string? search = null, CancellationToken ct = default)
+    {
+        var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+        if (session is null)
+            return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
+
+        var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, session.Id, ct);
+
+        var query = _context.CourseOfferings.AsNoTracking()
+            .Where(x => x.AcademicSessionId == session.Id && x.Semester == session.ActiveSemester)
+            .Include(x => x.Course)
+            .Include(x => x.AcademicSession)
+            .Include(x => x.Programs).ThenInclude(p => p.Level)
+            .Include(x => x.Lecturers).ThenInclude(l => l.Lecturer)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(x =>
+                (x.Course != null && (x.Course.Code.ToLower().Contains(s) || x.Course.Title.ToLower().Contains(s))) ||
+                x.Lecturers.Any(l => l.Lecturer != null && (l.Lecturer.DisplayName.ToLower().Contains(s) || l.Lecturer.Email.ToLower().Contains(s))));
+        }
+
+        var offerings = await query.OrderBy(x => x.Course.Code).ToListAsync(ct);
+        var offeringIds = offerings.Select(x => x.Id).ToList();
+
+        var slots = await _context.LectureTimetableSlots.AsNoTracking()
+            .Where(x => offeringIds.Contains(x.CourseOfferingId)).OrderBy(x => x.DayOfWeek).ThenBy(x => x.StartTime).ToListAsync(ct);
+
+        var registrations = await _context.CourseEnrollments.AsNoTracking()
+            .Where(x => x.StudentId == studentId && offeringIds.Contains(x.CourseOfferingId) && x.Status == "Registered")
+            .ToListAsync(ct);
+
+        var resolvedCurriculumId = programmeEnrollment != null 
+            ? await ResolveCurriculumIdAsync(studentId, programmeEnrollment, ct) 
+            : Guid.Empty;
+
+        var curriculumCreditMap = new Dictionary<Guid, int>();
+        if (resolvedCurriculumId != Guid.Empty)
+        {
+            var ccList = await _context.CurriculumCourses.AsNoTracking()
+                .Where(x => x.CurriculumId == resolvedCurriculumId)
+                .ToListAsync(ct);
+            curriculumCreditMap = ccList.GroupBy(x => x.CourseId).ToDictionary(g => g.Key, g => g.First().CreditUnits);
+        }
+
+        var resultDtos = new List<RegistrationOfferingDto>();
+        foreach (var offering in offerings)
+        {
+            var isRegistered = registrations.Any(x => x.CourseOfferingId == offering.Id);
+            var blockers = isRegistered
+                ? new List<RegistrationBlockerDto> { new("Registration.AlreadyRegistered", "Already registered.") }
+                : await GetBlockersAsync(studentId, offering, ct);
+
+            var hardBlockers = blockers.Where(b => b.Code != "Registration.IneligibleOffering" &&
+                                                  b.Code != "Registration.NotInCurriculum" &&
+                                                  b.Code != "Registration.WrongSemester").ToList();
+
+            var isExternal = blockers.Any(b => b.Code == "Registration.NotInCurriculum" || b.Code == "Registration.IneligibleOffering");
+            var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
+
+            resultDtos.Add(new RegistrationOfferingDto(
+                offering.Id,
+                offering.Course?.Code ?? string.Empty,
+                offering.Course?.Title ?? string.Empty,
+                credits,
+                (int)offering.Semester,
+                offering.Lecturers.FirstOrDefault(l => l.Role == Data.Enums.CourseLecturerRole.Main)?.Lecturer?.DisplayName ?? "To be announced",
+                slots.Where(x => x.CourseOfferingId == offering.Id).Select(x => $"{x.DayOfWeek} {x.StartTime:HH\\:mm}–{x.EndTime:HH\\:mm}").ToList(),
+                isRegistered,
+                hardBlockers.Count == 0,
+                blockers,
+                false,
+                isExternal));
+        }
+
+        return resultDtos;
+    }
+
+    private async Task<ProgramEnrollment?> ResolveProgrammeEnrollmentAsync(Guid studentId, Guid academicSessionId, CancellationToken ct)
+    {
+        var programmeEnrollment = await _context.Enrollments.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.UserId == studentId && x.AcademicSessionId == academicSessionId, ct);
+
+        if (programmeEnrollment != null)
+        {
+            return programmeEnrollment;
+        }
+
+        // Try resolving from previous session enrollments
+        var prevEnrollment = await _context.Enrollments.AsNoTracking()
+            .Where(x => x.UserId == studentId)
+            .OrderByDescending(x => x.EnrolledAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+        // Try resolving from Student entity
+        var student = await _context.Set<Student>().AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == studentId || (s.EntraObjectId != null
+                ? _context.Users.Any(u => u.Id == studentId && u.EntraObjectId == s.EntraObjectId)
+                : _context.Users.Any(u => u.Id == studentId && u.Email == s.OfficialEmail)), ct)
+            ?? await _context.Set<Student>().AsNoTracking()
+                .Where(s => _context.Users.Any(u => u.Id == studentId && (u.Email == s.OfficialEmail || u.Email == s.PersonalEmail)))
+                .FirstOrDefaultAsync(ct);
+
+        Guid? programId = prevEnrollment?.ProgramId ?? student?.AcademicProgramId;
+        Guid? levelId = prevEnrollment?.LevelId ?? student?.LevelId;
+        Guid curriculumId = prevEnrollment?.CurriculumId ?? Guid.Empty;
+
+        if (programId.HasValue && !levelId.HasValue)
+        {
+            var defaultLevel = await _context.Levels.AsNoTracking()
+                .Where(l => l.ProgramId == programId.Value)
+                .OrderBy(l => l.Order)
+                .FirstOrDefaultAsync(ct);
+            levelId = defaultLevel?.Id;
+        }
+
+        if (programId.HasValue && levelId.HasValue)
+        {
+            if (curriculumId == Guid.Empty)
+            {
+                curriculumId = await _context.Curricula.AsNoTracking()
+                    .Where(c => c.ProgramId == programId.Value && c.IsActive)
+                    .OrderByDescending(c => c.CreatedUtc)
+                    .Select(c => c.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            var newEnrollment = new ProgramEnrollment
+            {
+                Id = Guid.NewGuid(),
+                UserId = studentId,
+                AcademicSessionId = academicSessionId,
+                ProgramId = programId.Value,
+                LevelId = levelId.Value,
+                CurriculumId = curriculumId,
+                EnrolledAtUtc = DateTime.UtcNow
+            };
+
+            _context.Enrollments.Add(newEnrollment);
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch
+            {
+                // Ignore concurrent save conflicts if created simultaneously by another request
+            }
+
+            return newEnrollment;
+        }
+
+        return null;
     }
 }

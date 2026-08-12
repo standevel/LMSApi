@@ -2173,6 +2173,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.MaxGroupSize);
             entity.Property(x => x.ReleaseConditionsJson).HasColumnType("nvarchar(max)").IsRequired();
             entity.Property(x => x.TargetProgramIdsJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.EnableTurnitinCheck).HasDefaultValue(true);
             entity.Property(x => x.CreatedAt).IsRequired();
             entity.Property(x => x.UpdatedAt).IsRequired();
             entity.Property(x => x.Version).IsConcurrencyToken();
@@ -2199,6 +2200,13 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.UpdatedAt).IsRequired();
             entity.Property(x => x.Version).IsConcurrencyToken();
             entity.Property(x => x.IsDeleted).IsRequired();
+
+            entity.Property(x => x.TurnitinSimilarityScore).IsRequired(false);
+            entity.Property(x => x.TurnitinStatus).HasMaxLength(50).IsRequired(false);
+            entity.Property(x => x.TurnitinReportUrl).HasMaxLength(512).IsRequired(false);
+            entity.Property(x => x.TurnitinResultJson).HasColumnType("nvarchar(max)").IsRequired(false);
+            entity.Property(x => x.TurnitinCheckedAt).IsRequired(false);
+
             entity.HasQueryFilter(x => !x.IsDeleted);
 
             entity.HasOne(x => x.Assignment)

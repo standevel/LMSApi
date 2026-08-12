@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkMonikerAttribute>false</GenerateTargetFrameworkMonikerAttribute>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -45,6 +47,10 @@
   <ItemGroup>
     <Content Remove="appsettings.Development.json" />
     <None Include="appsettings.Development.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Scripts\**" />
   </ItemGroup>
 
   <ItemGroup>

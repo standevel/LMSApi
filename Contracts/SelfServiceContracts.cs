@@ -30,7 +30,8 @@ public record RegistrationOfferingDto(
     bool IsRegistered,
     bool CanRegister,
     IReadOnlyList<RegistrationBlockerDto> Blockers,
-    bool IsCarryover = false);
+    bool IsCarryover = false,
+    bool IsExternalCurriculum = false);
 
 public record RegistrationSummaryDto(
     Guid StudentId,

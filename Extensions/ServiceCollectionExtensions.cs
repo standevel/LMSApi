@@ -177,6 +177,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IGradebookService, GradebookService>();
+        services.AddScoped<ITurnitinService, TurnitinService>();
         services.AddScoped<IAssignmentService, AssignmentService>();
         services.AddScoped<IAssignmentGroupService, AssignmentGroupService>();
         services.AddScoped<IAnnouncementService, AnnouncementService>();

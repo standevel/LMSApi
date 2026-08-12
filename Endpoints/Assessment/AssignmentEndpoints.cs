@@ -190,3 +190,39 @@ public sealed class ImportAssignmentsFromOfferingEndpoint(IAssignmentService ser
         await SendAsync(result, ct);
     }
 }
+
+public sealed class CheckTurnitinSubmissionEndpoint(IAssignmentService service) : ApiEndpoint<CheckTurnitinSubmissionEndpoint.Request, TurnitinCheckResultDto>
+{
+    public sealed class Request
+    {
+        [FromRoute] public Guid SubmissionId { get; set; }
+    }
+
+    public override void Configure()
+    {
+        Post("assignments/submissions/{SubmissionId:guid}/turnitin-check");
+        Roles("SuperAdmin", "Admin", "Instructor", "Lecturer");
+        Tags("Assignments");
+    }
+
+    public override async Task HandleAsync(Request req, CancellationToken ct) =>
+        await SendAsync(await service.CheckTurnitinAsync(req.SubmissionId, ct), ct);
+}
+
+public sealed class GetTurnitinReportEndpoint(IAssignmentService service) : ApiEndpoint<GetTurnitinReportEndpoint.Request, TurnitinCheckResultDto>
+{
+    public sealed class Request
+    {
+        [FromRoute] public Guid SubmissionId { get; set; }
+    }
+
+    public override void Configure()
+    {
+        Get("assignments/submissions/{SubmissionId:guid}/turnitin-report");
+        Roles("SuperAdmin", "Admin", "Instructor", "Lecturer", "Student");
+        Tags("Assignments");
+    }
+
+    public override async Task HandleAsync(Request req, CancellationToken ct) =>
+        await SendAsync(await service.GetTurnitinReportAsync(req.SubmissionId, ct), ct);
+}

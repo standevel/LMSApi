@@ -798,7 +798,7 @@ public sealed class AdmissionService(
                         app.OfferExpiresAt = DateTime.UtcNow.AddDays(14);
                         logger.LogInformation("[ADMITTED] Application {ApplicationId} admitted. Offer expires at {OfferExpiresAt}", app.Id, app.OfferExpiresAt);
                         
-                        var applicantPortalBaseUrl = configuration["ClientApp:BaseUrl"] ?? "http://localhost:4200";
+                        var applicantPortalBaseUrl = configuration["ClientApp:BaseUrl"] ?? "https://portal.wigweuniversity.edu.ng";
                         var offerDecisionBaseUrl = applicantPortalBaseUrl.TrimEnd('/');
                         var offerDecisionUrl = $"{offerDecisionBaseUrl}/apply/offer/{app.Id}";
                         var templateType = app.AcademicProgram?.Type switch
@@ -1360,7 +1360,7 @@ public sealed class AdmissionService(
             var amountDue = await CalculateProgramFeeAsync(app.AcademicProgramId ?? Guid.Empty, app.AcademicSessionId);
 
             // Get payment page URL
-            var paymentPortalBaseUrl = configuration["ClientApp:BaseUrl"] ?? "http://localhost:4200";
+            var paymentPortalBaseUrl = configuration["ClientApp:BaseUrl"] ?? "https://portal.wigweuniversity.edu.ng";
             var paymentPageUrl = $"{paymentPortalBaseUrl.TrimEnd('/')}/student/payment";
 
             // Send emails

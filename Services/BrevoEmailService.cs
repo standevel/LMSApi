@@ -333,7 +333,7 @@ public sealed class BrevoEmailService(
                 </div>
                 <p>You can view your course details and manage materials via the LMS portal.</p>
                 <p>
-                    <a href='https://lms.wigweuniversity.edu.ng/lecturer/courses'
+                    <a href='https://portal.wigweuniversity.edu.ng/dashboard/lecturer/courses'
                        style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
                         Go to My Courses
                     </a>
