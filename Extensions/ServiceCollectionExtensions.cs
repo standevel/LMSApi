@@ -139,13 +139,20 @@ public static class ServiceCollectionExtensions
         {
             options.AddPolicy(FrontendCorsPolicy, policyBuilder =>
             {
-                if (allowedOrigins.Length == 0)
-                {
-                    policyBuilder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-                    return;
-                }
-
-                policyBuilder.WithOrigins(allowedOrigins)
+                policyBuilder
+                    .SetIsOriginAllowed(origin =>
+                    {
+                        if (string.IsNullOrWhiteSpace(origin)) return false;
+                        if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+                        {
+                            // In development or local runs, allow any localhost / 127.0.0.1 port (4200, 57978, etc.)
+                            if (uri.Host is "localhost" or "127.0.0.1")
+                            {
+                                return true;
+                            }
+                        }
+                        return allowedOrigins.Length == 0 || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+                    })
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
