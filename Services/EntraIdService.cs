@@ -9,25 +9,29 @@ namespace LMS.Api.Services;
 
 public sealed class EntraIdService : IActiveDirectoryService
 {
-    private readonly GraphServiceClient _graphClient;
+    private readonly GraphServiceClient? _graphClient;
     private readonly ILogger<EntraIdService> _logger;
     private readonly string _domain;
+    private readonly bool _isConfigured;
 
-public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logger)
-        {
-            _logger = logger;
-            _domain = "wigweuniversity.edu.ng";
+    public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logger)
+    {
+        _logger = logger;
+        _domain = configuration["AzureAd:Domain"] ?? "wigweuniversity.edu.ng";
 
-            var tenantId = configuration["AzureAd:TenantId"];
-            var clientId = configuration["AzureAd:ClientId"];
-            var clientSecret = configuration["AzureAd:ClientSecret"];
+        var tenantId = configuration["AzureAd:TenantId"];
+        var clientId = configuration["AzureAd:ClientId"];
+        var clientSecret = configuration["AzureAd:ClientSecret"];
 
         _logger.LogInformation("Initializing Entra ID Service with TenantId: {TenantId}, ClientId: {ClientId}, Domain: {Domain}",
             tenantId, clientId, _domain);
 
         if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
         {
-            throw new InvalidOperationException("AzureAd TenantId, ClientId, or ClientSecret is not configured");
+            _logger.LogWarning("AzureAd TenantId, ClientId, or ClientSecret is not configured. Entra ID Service will operate in development mock mode.");
+            _isConfigured = false;
+            _graphClient = null;
+            return;
         }
 
         try
@@ -39,12 +43,14 @@ public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logg
 
             var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, options);
             _graphClient = new GraphServiceClient(clientSecretCredential);
+            _isConfigured = true;
             _logger.LogInformation("Entra ID Service initialized successfully");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize Entra ID Service");
-            throw;
+            _logger.LogError(ex, "Failed to initialize Entra ID Service client. Falling back to development mock mode.");
+            _isConfigured = false;
+            _graphClient = null;
         }
     }
 
@@ -60,6 +66,14 @@ public EntraIdService(IConfiguration configuration, ILogger<EntraIdService> logg
 
         _logger.LogInformation("[ENTRA-CREATE-PREP] Prepared user details: Email={Email}, FirstName={FirstName}, LastName={LastName}, Domain={Domain}",
             officialEmail, firstName, lastName, _domain);
+
+        if (!_isConfigured || _graphClient == null)
+        {
+            _logger.LogWarning("[ENTRA-MOCK] Entra ID is not configured with credentials. Generating development mock account credentials for {Email}", officialEmail);
+            var mockTempPassword = GenerateTemporaryPassword();
+            var mockObjectId = $"mock-entra-{Guid.NewGuid():N}";
+            return (EntraObjectId: mockObjectId, OfficialEmail: officialEmail, TemporaryPassword: mockTempPassword, IsExisting: false);
+        }
      
     
         // Check if user already exists in Entra ID (Idempotency check)

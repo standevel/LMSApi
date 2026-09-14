@@ -12,8 +12,9 @@ namespace LMS.Api.Services;
 
 public class TeamsMeetingService : BaseService, ITeamsMeetingService
 {
-    private readonly GraphServiceClient _graphClient;
+    private readonly GraphServiceClient? _graphClient;
     private readonly ILogger<TeamsMeetingService> _logger;
+    private readonly bool _isConfigured;
 
     public TeamsMeetingService(
         IConfiguration configuration,
@@ -28,16 +29,30 @@ public class TeamsMeetingService : BaseService, ITeamsMeetingService
 
         if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
         {
-            throw new InvalidOperationException("AzureAd TenantId, ClientId, or ClientSecret is not configured");
+            _logger.LogWarning("AzureAd TenantId, ClientId, or ClientSecret is not configured. Teams Meeting Service will operate in development mock mode.");
+            _isConfigured = false;
+            _graphClient = null;
+            return;
         }
 
-        var options = new TokenCredentialOptions
+        try
         {
-            AuthorityHost = AzureAuthorityHosts.AzurePublicCloud
-        };
+            var options = new TokenCredentialOptions
+            {
+                AuthorityHost = AzureAuthorityHosts.AzurePublicCloud
+            };
 
-        var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, options);
-        _graphClient = new GraphServiceClient(clientSecretCredential);
+            var clientSecretCredential = new ClientSecretCredential(tenantId, clientId, clientSecret, options);
+            _graphClient = new GraphServiceClient(clientSecretCredential);
+            _isConfigured = true;
+            _logger.LogInformation("Teams Meeting Service initialized successfully with Microsoft Graph");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize Teams Meeting Service with Microsoft Graph. Falling back to development mock mode.");
+            _isConfigured = false;
+            _graphClient = null;
+        }
     }
 
     public async Task<ErrorOr<OnlineMeeting>> CreateTeamsMeetingAsync(
@@ -52,6 +67,22 @@ public class TeamsMeetingService : BaseService, ITeamsMeetingService
             if (string.IsNullOrWhiteSpace(lecturerEntraObjectId))
             {
                 return Error.Validation("InvalidLecturerEntraId", "Lecturer Entra Object ID is required.");
+            }
+
+            if (!_isConfigured || _graphClient == null)
+            {
+                _logger.LogWarning("Teams meeting requested in development mode without Azure AD credentials. Returning mock Teams meeting.");
+                var mockMeetingId = $"mock-teams-{Guid.NewGuid():N}";
+                var mockJoinUrl = $"https://teams.microsoft.com/l/meetup-join/mock/{mockMeetingId}";
+                var mockMeeting = new OnlineMeeting
+                {
+                    Id = mockMeetingId,
+                    Subject = subject,
+                    JoinWebUrl = mockJoinUrl,
+                    StartDateTime = new DateTimeOffset(startDateTime, TimeSpan.Zero),
+                    EndDateTime = new DateTimeOffset(endDateTime, TimeSpan.Zero)
+                };
+                return mockMeeting;
             }
 
             var onlineMeeting = new OnlineMeeting
@@ -104,6 +135,18 @@ public class TeamsMeetingService : BaseService, ITeamsMeetingService
                 return Error.Validation("InvalidLecturerEntraId", "Lecturer Entra Object ID is required.");
             }
 
+            if (!_isConfigured || _graphClient == null)
+            {
+                return new OnlineMeeting
+                {
+                    Id = meetingId,
+                    Subject = subject,
+                    JoinWebUrl = $"https://teams.microsoft.com/l/meetup-join/mock/{meetingId}",
+                    StartDateTime = new DateTimeOffset(startDateTime, TimeSpan.Zero),
+                    EndDateTime = new DateTimeOffset(endDateTime, TimeSpan.Zero)
+                };
+            }
+
             var onlineMeeting = new OnlineMeeting
             {
                 StartDateTime = new DateTimeOffset(startDateTime, TimeSpan.Zero),
@@ -145,6 +188,11 @@ public class TeamsMeetingService : BaseService, ITeamsMeetingService
             if (string.IsNullOrWhiteSpace(lecturerEntraObjectId))
             {
                 return Error.Validation("InvalidLecturerEntraId", "Lecturer Entra Object ID is required.");
+            }
+
+            if (!_isConfigured || _graphClient == null)
+            {
+                return Result.Deleted;
             }
 
             _logger.LogInformation("Deleting Teams Online Meeting: {MeetingId} for Lecturer: {LecturerId}", meetingId, lecturerEntraObjectId);

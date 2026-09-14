@@ -15,5 +15,6 @@ publish/
 .kilo/
 .kilocode/
 Library/
+.aspnet/
 *.DS_Store
 .DS_Store
