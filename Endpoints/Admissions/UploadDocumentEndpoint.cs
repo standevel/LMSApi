@@ -1,8 +1,10 @@
 using FastEndpoints;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
+using LMS.Api.Data;
 using LMS.Api.Data.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Admissions;
 
@@ -14,7 +16,7 @@ public sealed class UploadDocumentRequest
     public List<IFormFile> Files { get; set; } = new();
 }
 
-public sealed class UploadDocumentEndpoint(IDocumentService documentService, IFileStorageService fileStorageService)
+public sealed class UploadDocumentEndpoint(IDocumentService documentService, IFileStorageService fileStorageService, LmsDbContext dbContext)
     : ApiEndpoint<UploadDocumentRequest, UploadMultipleDocumentsResponse>
 {
     public override void Configure()
@@ -56,6 +58,31 @@ public sealed class UploadDocumentEndpoint(IDocumentService documentService, IFi
                 file.Length,
                 file.ContentType
             );
+
+            // Link document to application if referenceId or OwnerId is an AdmissionApplication ID
+            Guid? appIdToLink = null;
+            if (Guid.TryParse(refId, out var parsedRefId))
+            {
+                appIdToLink = parsedRefId;
+            }
+            else if (req.OwnerId.HasValue && req.OwnerId.Value != Guid.Empty)
+            {
+                appIdToLink = req.OwnerId.Value;
+            }
+
+            if (appIdToLink.HasValue)
+            {
+                var app = await dbContext.AdmissionApplications
+                    .Include(a => a.Documents)
+                    .FirstOrDefaultAsync(a => a.Id == appIdToLink.Value, ct);
+
+                if (app != null && !app.Documents.Any(d => d.Id == record.Id))
+                {
+                    app.Documents.Add(record);
+                    app.UpdatedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(ct);
+                }
+            }
 
             responses.Add(new DocumentResponse(
                 record.Id,

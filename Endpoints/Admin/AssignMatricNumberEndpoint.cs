@@ -40,12 +40,16 @@ public sealed class AssignMatricNumberEndpoint(LmsDbContext dbContext, ILogger<A
 
         // Load configured format
         var config = await dbContext.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct);
-        var format = config?.MatricNumberFormat ?? "WU/{YY}/{PROGRAM}/{SEQ}";
+        var format = config?.MatricNumberFormat ?? "WU/{PROGRAM}/{YYYY}/{SEQ}";
 
         // Build dynamic regex pattern from template format
         var pattern = BuildRegexFromTemplate(format);
 
-        if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, pattern))
+        // Also allow legacy/alternate WU formats (e.g. WU/{YY}/{PROGRAM}/{SEQ} or WU/{YYYY}/{PROGRAM}/{SEQ})
+        var isLegacyMatch = System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, @"^WU/\d{2,4}/[A-Z0-9]{2,6}/\d{3,5}$") ||
+                            System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, @"^WU/[A-Z0-9]{2,6}/\d{2,4}/\d{3,5}$");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(normalizedMatric, pattern) && !isLegacyMatch)
         {
             await SendFailureAsync(400, "Invalid matric number format", "INVALID_FORMAT", 
                 $"Matric number must follow the configured format: {format}", ct);
@@ -109,8 +113,8 @@ public sealed class AssignMatricNumberEndpoint(LmsDbContext dbContext, ILogger<A
         pattern = pattern
             .Replace(@"\{YYYY\}", @"\d{4}")
             .Replace(@"\{YY\}", @"\d{2}")
-            .Replace(@"\{PROGRAM\}", @"[A-Z0-9]{2,4}")
-            .Replace(@"\{SEQ\}", @"\d{4}");
+            .Replace(@"\{PROGRAM\}", @"[A-Z0-9]{2,6}")
+            .Replace(@"\{SEQ\}", @"\d{3,5}");
         return $"^{pattern}$";
     }
 }

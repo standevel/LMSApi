@@ -137,7 +137,14 @@ public sealed class UnpublishGradesEndpoint : ApiEndpointWithoutRequest<object>
 
         if (result.IsError)
         {
-            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            var error = result.FirstError;
+            var statusCode = error.Type switch
+            {
+                ErrorType.NotFound => 404,
+                ErrorType.Forbidden => 403,
+                _ => 400
+            };
+            await SendFailureAsync(statusCode, error.Description, error.Code, error.Description, ct);
             return;
         }
 

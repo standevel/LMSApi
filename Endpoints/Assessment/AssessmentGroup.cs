@@ -8,7 +8,7 @@ public class AssessmentGroup : Group
     {
         Configure("assessment", ep =>
         {
-            ep.AllowAnonymous();
+            // Endpoints in this group require authentication by default
         });
     }
 }

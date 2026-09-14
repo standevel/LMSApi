@@ -12,7 +12,7 @@ public sealed class SendTestEmailEndpoint(IEmailService emailService)
     public override void Configure()
     {
         Post("admin/send-test-email");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin");
         Tags("Administration");
     }
 

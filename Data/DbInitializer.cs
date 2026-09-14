@@ -114,11 +114,11 @@ await SeedCountriesAsync(ct);
             [LmsRoles.Lecturer] = [LmsPermissions.CoursesTeach, LmsPermissions.GradesSubmit, LmsPermissions.QuizzesManage, LmsPermissions.ProfileView, LmsPermissions.AdvisingAccess],
             [LmsRoles.Adviser] = [LmsPermissions.ProfileView, LmsPermissions.AdvisingAccess],
             [LmsRoles.Student] = [LmsPermissions.ProfileView],
-            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.AdmissionsManage, LmsPermissions.TimetableManage, LmsPermissions.HostelsView, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.Registrar] = [LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.AdmissionsManage, LmsPermissions.TimetableManage, LmsPermissions.HostelsView, LmsPermissions.ReportsView, LmsPermissions.ProfileView, LmsPermissions.ResultsPublish],
             [LmsRoles.Finance] = [LmsPermissions.FeesManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
             [LmsRoles.Parent] = [LmsPermissions.ProfileView],
             [LmsRoles.AdmissionOfficer] = [LmsPermissions.AdmissionsManage, LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
-            [LmsRoles.AcademicAdmin] = [LmsPermissions.CoursesManage, LmsPermissions.TimetableManage, LmsPermissions.EnrollmentsManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.AcademicAdmin] = [LmsPermissions.CoursesManage, LmsPermissions.TimetableManage, LmsPermissions.EnrollmentsManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView, LmsPermissions.ResultsPublish],
             [LmsRoles.HostelWarden] = [LmsPermissions.HostelsManage, LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
             [LmsRoles.StudentWelfare] = [LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView]
         };
@@ -198,6 +198,7 @@ await SeedCountriesAsync(ct);
                 EndDate = new DateTime(2025, 8, 31),
                 IsActive = true,
                 IsAdmissionOpen = true,
+                IsRegistrationOpen = true,
                 ActiveSemester = Semester.First
             },
             new AcademicSession
@@ -341,8 +342,6 @@ await SeedCountriesAsync(ct);
         {
             // Engineering College
             new() { Name = "B.Eng. Electrical Engineering", Code = "BEE", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
-            new() { Name = "B.Eng. Mechatronics Engineering", Code = "BMECH", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
-            new() { Name = "Specialization Track Energy & Environment", Code = "BSEE", DepartmentId = eeDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
             new() { Name = "B.Eng. Mechanical Engineering", Code = "BME", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
             new() { Name = "B.Eng. Mechatronics Engineering", Code = "BMEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
             new() { Name = "Specialization Track Energy & Environment", Code = "BSEN", DepartmentId = meDept!.Id, Type = ProgramType.Undergraduate, DurationYears = 5 },
@@ -843,8 +842,16 @@ await SeedCountriesAsync(ct);
 
         private async Task SeedRegistrationConfigurationAsync(CancellationToken ct)
         {
-            if (await dbContext.SystemRegistrationConfigurations.AnyAsync(ct))
+            var existingConfig = await dbContext.SystemRegistrationConfigurations.FirstOrDefaultAsync(ct);
+            if (existingConfig != null)
             {
+                if (existingConfig.MatricNumberFormat == "WU/{YY}/{PROGRAM}/{SEQ}")
+                {
+                    logger.LogInformation("Migrating MatricNumberFormat from legacy default to 'WU/{{PROGRAM}}/{{YYYY}}/{{SEQ}}'...");
+                    existingConfig.MatricNumberFormat = "WU/{PROGRAM}/{YYYY}/{SEQ}";
+                    existingConfig.UpdatedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(ct);
+                }
                 return;
             }
 
@@ -852,7 +859,8 @@ await SeedCountriesAsync(ct);
             dbContext.SystemRegistrationConfigurations.Add(new SystemRegistrationConfiguration
             {
                 Strategy = "Single",
-                EnforceMinCredits = true
+                EnforceMinCredits = true,
+                MatricNumberFormat = "WU/{PROGRAM}/{YYYY}/{SEQ}"
             });
             await dbContext.SaveChangesAsync(ct);
         }
@@ -907,27 +915,43 @@ await SeedCountriesAsync(ct);
                     DefaultExamPercentage = 70,
                     ApprovalWorkflowEnabled = false,
                     GpaScale = 5.0m,
-                    DefaultCA1Weight = 15m,
-                    DefaultCA2Weight = 15m,
+                    DefaultCA1Weight = 10m,
+                    DefaultCA2Weight = 10m,
                     DefaultCA3Weight = 10m,
-                    DefaultExamWeight = 60m,
+                    DefaultExamWeight = 70m,
+                    RoundingStrategy = RoundingStrategy.Ceiling,
+                    RoundingDecimalPlaces = 0,
                     LetterGradesMappingJson = defaultLetterGradesJson
                 });
                 await dbContext.SaveChangesAsync(ct);
-                logger.LogInformation("Seeded default system grading configuration with letter grade mappings.");
-            }
-            else if (existing.LetterGradesMappingJson is "[]" or "" or null)
-            {
-                // Already exists but letter grades weren't seeded — patch it
-                existing.LetterGradesMappingJson = defaultLetterGradesJson;
-                existing.GpaScale = 5.0m;
-                existing.UpdatedAt = DateTime.UtcNow;
-                await dbContext.SaveChangesAsync(ct);
-                logger.LogInformation("Patched existing system grading configuration with default letter grade mappings.");
+                logger.LogInformation("Seeded default system grading configuration with letter grade mappings and Ceiling rounding.");
             }
             else
             {
-                logger.LogInformation("System grading configuration already has letter grade mappings. Skipping.");
+                bool modified = false;
+                if (existing.LetterGradesMappingJson is "[]" or "" or null)
+                {
+                    existing.LetterGradesMappingJson = defaultLetterGradesJson;
+                    existing.GpaScale = 5.0m;
+                    modified = true;
+                }
+                if (existing.RoundingStrategy != RoundingStrategy.Ceiling)
+                {
+                    existing.RoundingStrategy = RoundingStrategy.Ceiling;
+                    existing.RoundingDecimalPlaces = 0;
+                    modified = true;
+                }
+
+                if (modified)
+                {
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(ct);
+                    logger.LogInformation("Patched existing system grading configuration with Ceiling rounding and default mappings.");
+                }
+                else
+                {
+                    logger.LogInformation("System grading configuration already up-to-date. Skipping.");
+                }
             }
         }
 

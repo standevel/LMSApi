@@ -87,6 +87,13 @@ public interface IAdmissionService
     // Offer letter & rejection management
     Task<AdmissionApplication> ResendOfferLetterAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default);
     Task<AdmissionApplication> UndoRejectionAsync(Guid applicationId, Guid? updatedBy = null, CancellationToken ct = default);
+
+    // Offer letter PDF generation for download / share (no email sent)
+    Task<byte[]> GenerateOfferLetterPdfAsync(Guid applicationId, CancellationToken ct = default);
+    Task<byte[]> GenerateAdvancePaymentMemoPdfAsync(Guid applicationId, CancellationToken ct = default);
+
+    // Applicant Profile Management
+    Task<AdmissionApplication> UpdateApplicantEmailAsync(Guid applicationId, string newEmail, Guid? updatedBy = null, CancellationToken ct = default);
 }
 
 public record VisaValidationResult(

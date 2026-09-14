@@ -55,14 +55,18 @@ public record TranscriptCourseRecord(
     string AcademicSessionName,
     string? GradeLetter,
     decimal? GradePoints,
-    int AttendancePercentage);
+    int AttendancePercentage = 0,
+    decimal? Score = null);
 
 public record CreateTranscriptRequestDto(
     Guid? StudentId,
     bool IsOfficial,
     string? DeliveryEmail,
     string? DeliveryMethod,
-    string? Remarks);
+    string? Remarks,
+    string? InstitutionName = null,
+    string? InstitutionEmail = null,
+    string? InstitutionAddress = null);
 
 public record TranscriptRequestDto(
     Guid Id,
@@ -77,7 +81,10 @@ public record TranscriptRequestDto(
     string? DocumentUrl,
     string? ProcessedBy,
     DateTime CreatedAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    string? InstitutionName = null,
+    string? InstitutionEmail = null,
+    string? InstitutionAddress = null);
 
 // ==================== DEGREE AUDIT ====================
 

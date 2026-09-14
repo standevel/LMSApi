@@ -90,7 +90,13 @@ public sealed class GetRegistrationSummaryEndpoint(IRegistrationService registra
         }
         var sessionIdStr = HttpContext.Request.Query["academicSessionId"].FirstOrDefault();
         Guid.TryParse(sessionIdStr, out var sessionId);
-        await SendAsync(await registrationService.GetRegistrationSummaryAsync(userId.Value, sessionId == Guid.Empty ? null : sessionId, ct), ct);
+        var semesterStr = HttpContext.Request.Query["semester"].FirstOrDefault();
+        LMS.Api.Data.Enums.Semester? semester = null;
+        if (int.TryParse(semesterStr, out var semInt) && Enum.IsDefined(typeof(LMS.Api.Data.Enums.Semester), semInt))
+        {
+            semester = (LMS.Api.Data.Enums.Semester)semInt;
+        }
+        await SendAsync(await registrationService.GetRegistrationSummaryAsync(userId.Value, sessionId == Guid.Empty ? null : sessionId, semester, ct), ct);
     }
 }
 

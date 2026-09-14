@@ -82,7 +82,7 @@ public sealed class GetStudentBillEndpoint(IFeeService feeService, LmsDbContext 
         await SendSuccessAsync(MapBill(record), ct);
     }
 
-    internal static StudentBillResponse MapBill(Data.Entities.StudentFeeRecord record) => new(
+    public static StudentBillResponse MapBill(Data.Entities.StudentFeeRecord record) => new(
         record.Id,
         record.StudentId,
         GetStudentDisplayName(record.Student),

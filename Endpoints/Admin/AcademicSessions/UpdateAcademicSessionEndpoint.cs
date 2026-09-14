@@ -35,7 +35,10 @@ public sealed class UpdateAcademicSessionEndpoint(IAcademicSessionService sessio
             IsActive = req.IsActive,
             IsAdmissionOpen = req.IsAdmissionOpen,
             IsAdmissionActive = req.IsAdmissionActive,
-            ActiveSemester = req.ActiveSemester
+            ActiveSemester = req.ActiveSemester,
+            IsRegistrationOpen = req.IsRegistrationOpen,
+            RegistrationStartDate = req.RegistrationStartDate,
+            RegistrationEndDate = req.RegistrationEndDate
         };
 
         var result = await sessionService.UpdateAsync(req.Id, request, ct);
@@ -56,4 +59,7 @@ public class UpdateAcademicSessionRequestWrapper
     public bool IsAdmissionOpen { get; set; }
     public bool IsAdmissionActive { get; set; }
     public LMS.Api.Data.Enums.Semester ActiveSemester { get; set; }
+    public bool IsRegistrationOpen { get; set; }
+    public DateTime? RegistrationStartDate { get; set; }
+    public DateTime? RegistrationEndDate { get; set; }
 }

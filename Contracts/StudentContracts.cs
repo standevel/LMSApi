@@ -13,9 +13,11 @@ public sealed class StudentSummaryDto
     public string PersonalEmail { get; set; } = string.Empty;
     public string OfficialEmail { get; set; } = string.Empty;
     public string? Phone { get; set; }
+    public Guid? ProgramId { get; set; }
     public string? ProgramName { get; set; }
     public string? DepartmentName { get; set; }
     public string? FacultyName { get; set; }
+    public Guid? LevelId { get; set; }
     public string? LevelName { get; set; }
     public string? SessionName { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -47,8 +49,11 @@ public sealed class StudentDetailDto
     public string? EmergencyContactName { get; set; }
     public string? EmergencyContactPhone { get; set; }
     public string? EmergencyContactEmail { get; set; }
+    public Guid? ProgramId { get; set; }
     public string? ProgramName { get; set; }
+    public Guid? FacultyId { get; set; }
     public string? FacultyName { get; set; }
+    public Guid? LevelId { get; set; }
     public string? LevelName { get; set; }
     public string? SessionName { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -162,3 +167,72 @@ public sealed class StudentEnrollmentDto
     public string SessionName { get; set; } = string.Empty;
     public DateTime EnrolledAt { get; set; }
 }
+
+public sealed record ChangeStudentLevelRequest(
+    Guid? TargetLevelId = null,
+    string? TargetLevelName = null,
+    bool UpdateCurrentEnrollment = true
+);
+
+public sealed record BatchChangeStudentLevelRequest(
+    IReadOnlyList<Guid> StudentIds,
+    Guid? TargetLevelId = null,
+    string? TargetLevelName = null,
+    bool UpdateCurrentEnrollment = true
+);
+
+public sealed record ChangeStudentLevelItemResult(
+    Guid StudentId,
+    string StudentName,
+    string? StudentNumber,
+    string? OldLevelName,
+    string? NewLevelName,
+    bool Success,
+    string? Message
+);
+
+public sealed record BatchChangeStudentLevelResponse(
+    int TotalRequested,
+    int Successful,
+    int Failed,
+    IReadOnlyList<ChangeStudentLevelItemResult> Results
+);
+
+public sealed record ChangeStudentProgramRequest(
+    Guid TargetProgramId,
+    Guid? TargetLevelId = null,
+    string? TargetLevelName = null,
+    bool UpdateCurrentEnrollment = true,
+    string? Reason = null,
+    string? NewJambRegistrationNumber = null,
+    string? JambDocumentUrl = null
+);
+
+public sealed record BatchChangeStudentProgramRequest(
+    IReadOnlyList<Guid> StudentIds,
+    Guid TargetProgramId,
+    Guid? TargetLevelId = null,
+    string? TargetLevelName = null,
+    bool UpdateCurrentEnrollment = true,
+    string? Reason = null,
+    string? NewJambRegistrationNumber = null,
+    string? JambDocumentUrl = null
+);
+
+public sealed record ChangeStudentProgramItemResult(
+    Guid StudentId,
+    string StudentName,
+    string? StudentNumber,
+    string? OldProgramName,
+    string? NewProgramName,
+    bool IsTransfer,
+    bool Success,
+    string? Message
+);
+
+public sealed record BatchChangeStudentProgramResponse(
+    int TotalRequested,
+    int Successful,
+    int Failed,
+    IReadOnlyList<ChangeStudentProgramItemResult> Results
+);

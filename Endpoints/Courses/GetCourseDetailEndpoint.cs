@@ -55,7 +55,10 @@ public sealed class GetCourseDetailEndpoint : ApiEndpointWithoutRequest<CourseDe
             return;
         }
 
-        var result = await _courseService.GetCourseDetailAsync(offeringId, userId.Value, ct);
+        var isAdminOrStaffLeader = userRoles.Any(r =>
+            new[] { "Admin", "SuperAdmin", "Dean", "HOD", "Registry" }.Contains(r, StringComparer.OrdinalIgnoreCase));
+
+        var result = await _courseService.GetCourseDetailAsync(offeringId, userId.Value, isAdminOrStaffLeader, ct);
 
         if (result.IsError)
         {

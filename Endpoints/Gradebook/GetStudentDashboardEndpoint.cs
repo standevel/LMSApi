@@ -91,18 +91,19 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
 
         var enrolledCoursesCount = enrollments.Count;
 
-        // Calculate cumulative GPA from letter grades
-        var gpaPoints = new Dictionary<string, decimal>
-        {
-            { "A", 5.0m }, { "B", 4.0m }, { "C", 3.0m }, { "D", 2.0m }, { "E", 1.0m }, { "F", 0.0m }
-        };
+        // Calculate cumulative GPA from published student course results (credit-weighted)
+        var publishedCourseResults = await _dbContext.StudentCourseResults
+            .Where(r => r.StudentId == userId.Value && r.IsPublished)
+            .ToListAsync(ct);
 
         decimal cumulativeGpa = 0;
-        if (gradeViews.Any())
+        if (publishedCourseResults.Any())
         {
-            cumulativeGpa = gradeViews
-                .Select(g => gpaPoints.GetValueOrDefault(g.LetterGrade ?? "", 0m))
-                .Average();
+            decimal totalQualityPoints = publishedCourseResults.Sum(r => r.GradePoints * r.CreditUnits);
+            int totalCredits = publishedCourseResults.Sum(r => r.CreditUnits);
+            cumulativeGpa = totalCredits > 0
+                ? totalQualityPoints / totalCredits
+                : publishedCourseResults.Average(r => r.GradePoints);
         }
 
         // Count assignments due this week from assessments

@@ -57,6 +57,10 @@ public static class DomainErrors
         public static Error DuplicateCode => Error.Conflict(
             "Course.DuplicateCode",
             "A course with this code already exists");
+
+        public static Error OfferingNotFound => Error.NotFound(
+            "CourseOffering.NotFound",
+            "Course offering not found");
     }
 
     public static class Faculty

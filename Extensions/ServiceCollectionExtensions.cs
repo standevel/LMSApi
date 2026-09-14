@@ -176,6 +176,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<IGradeCalculationEngine, GradeCalculationEngine>();
         services.AddScoped<IGradebookService, GradebookService>();
         services.AddScoped<ITurnitinService, TurnitinService>();
         services.AddScoped<IAssignmentService, AssignmentService>();
@@ -187,6 +188,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageService, MessageService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IParentPortalService, ParentPortalService>();
+        services.AddScoped<IParentAuthorizationService, ParentAccessAuthorizationService>();
         services.AddScoped<IGuardianProvisioningService, GuardianProvisioningService>();
         services.AddScoped<IPrerequisiteValidationService, PrerequisiteValidationService>();
         services.AddScoped<IProctoringService, ProctoringService>();
@@ -196,6 +198,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWaitlistService, WaitlistService>();
         services.AddScoped<IAdmissionService, AdmissionService>();
         services.AddScoped<IRegistrationService, RegistrationService>();
+        services.AddScoped<IAutoRegistrationService, AutoRegistrationService>();
         services.AddScoped<IAdviserService, AdviserService>();
         services.AddScoped<IProgramSwitchService, ProgramSwitchService>();
         services.AddScoped<IMajorSelectionService, MajorSelectionService>();
@@ -203,11 +206,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IActiveDirectoryService, EntraIdService>();
         services.AddScoped<IPdfService, OfferLetterPdfService>();
         services.AddScoped<ILetterTemplateService, LetterTemplateService>();
+        services.AddScoped<ITranscriptCoverLetterPdfService, TranscriptCoverLetterPdfService>();
 
 // Fee Management
          services.AddScoped<IFeeService, FeeService>();
         services.AddScoped<IScholarshipService, ScholarshipService>();
         services.AddScoped<ISponsorOrganizationService, SponsorOrganizationService>();
+        services.AddScoped<ICafeteriaWalletService, CafeteriaWalletService>();
          services.AddHttpClient<PaystackService>();
          services.AddHttpClient<HydrogenService>();
 
@@ -247,6 +252,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDegreeAuditService, DegreeAuditService>();
         services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IReportSchedulerService, ReportSchedulerService>();
+        services.AddScoped<LMS.Api.Services.Reporting.IDynamicReportService, LMS.Api.Services.Reporting.DynamicReportService>();
 
         // Student Management
         services.AddScoped<IStudentService, StudentService>();
@@ -356,20 +362,8 @@ public static class ServiceCollectionExtensions
                         }
                         return Task.CompletedTask;
                     },
-                    OnAuthenticationFailed = context =>
-                    {
-                        Console.WriteLine($"[Auth Failed] {context.Exception.Message}");
-                        return Task.CompletedTask;
-                    },
-                    OnTokenValidated = context =>
-                    {
-                        Console.WriteLine("[Auth Success] Token validated successfully.");
-                        foreach (var claim in context.Principal?.Claims ?? [])
-                        {
-                            Console.WriteLine($"  Claim: {claim.Type} = {claim.Value}");
-                        }
-                        return Task.CompletedTask;
-                    }
+                    OnAuthenticationFailed = _ => Task.CompletedTask,
+                    OnTokenValidated = _ => Task.CompletedTask
                 };
             })
             .AddJwtBearer(LocalJwtScheme, options =>

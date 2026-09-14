@@ -32,6 +32,7 @@ public static class LmsPolicies
     public const string AcademicManagement = "AcademicManagement";
     public const string AdmissionsManagement = "AdmissionsManagement";
     public const string FinanceManagement = "FinanceManagement";
+    public const string ReportBuilderAccess = "ReportBuilderAccess";
 }
 
 public static class LmsAuthorizationExtensions
@@ -65,7 +66,7 @@ public static class LmsAuthorizationExtensions
 
             options.AddPolicy(
                 LmsPolicies.CourseManagement,
-                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.Lecturer, LmsRoles.AcademicAdmin));
+                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.Lecturer, LmsRoles.AcademicAdmin, LmsRoles.HOD));
 
             options.AddPolicy(
                 LmsPolicies.AcademicManagement,
@@ -78,6 +79,23 @@ public static class LmsAuthorizationExtensions
             options.AddPolicy(
                 LmsPolicies.FinanceManagement,
                 policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.Finance));
+
+            options.AddPolicy(
+                LmsPolicies.ReportBuilderAccess,
+                policy => policy.RequireRole(
+                    LmsRoles.SuperAdmin,
+                    LmsRoles.Admin,
+                    LmsRoles.ViceChancellor,
+                    LmsRoles.Dean,
+                    LmsRoles.Lecturer,
+                    LmsRoles.Adviser,
+                    LmsRoles.Registrar,
+                    LmsRoles.Finance,
+                    LmsRoles.HOD,
+                    LmsRoles.AcademicAdmin,
+                    LmsRoles.AdmissionOfficer,
+                    LmsRoles.HostelWarden,
+                    LmsRoles.StudentWelfare));
         });
 
         return services;

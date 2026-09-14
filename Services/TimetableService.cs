@@ -877,7 +877,7 @@ public class TimetableService : ITimetableService
                 .OrderByDescending(x => x.UpdatedAt)
                 .FirstOrDefaultAsync(ct);
 
-            var weight = sysConfig?.DefaultExamWeight ?? 55m;
+            var weight = sysConfig?.DefaultExamWeight ?? 70m;
 
             category = new AssessmentCategory
             {

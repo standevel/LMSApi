@@ -11,7 +11,8 @@ public interface IRegistrationService
 {
     Task<ErrorOr<CourseRegistrationDto>> RegisterStudent(Guid studentId, Guid courseOfferingId, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> DropCourse(Guid studentId, Guid enrollmentId, CancellationToken ct = default);
-    Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default);
+    Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId, CancellationToken ct);
+    Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId = null, LMS.Api.Data.Enums.Semester? semester = null, CancellationToken ct = default);
     Task<ErrorOr<RegistrationSummaryDto>> RegisterCoursesBulk(Guid studentId, List<Guid> courseOfferingIds, CancellationToken ct = default);
     Task<ErrorOr<CourseSwapRequestDto>> RequestCourseSwapAsync(Guid studentId, Guid currentCourseOfferingId, Guid newCourseOfferingId, CancellationToken ct = default);
     Task<ErrorOr<CourseSwapOptionsDto>> GetCourseSwapOptionsAsync(Guid studentId, CancellationToken ct = default);

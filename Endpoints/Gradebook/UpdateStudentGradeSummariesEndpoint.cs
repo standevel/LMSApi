@@ -8,31 +8,39 @@ namespace LMS.Api.Endpoints.Gradebook;
 public sealed class UpdateStudentGradeSummariesEndpoint : ApiEndpoint<UpdateStudentGradeSummaryRequest, int>
 {
     private readonly IGradebookService _gradebookService;
+    private readonly ICurrentUserContext _currentUserContext;
 
-    public UpdateStudentGradeSummariesEndpoint(IGradebookService gradebookService)
+    public UpdateStudentGradeSummariesEndpoint(IGradebookService gradebookService, ICurrentUserContext currentUserContext)
     {
         _gradebookService = gradebookService;
+        _currentUserContext = currentUserContext;
     }
 
     public override void Configure()
     {
         Post("gradebook/courses/{offeringId:guid}/students/grades/bulk");
-        Roles("SuperAdmin", "Admin", "Lecturer");
+        AllowAnonymous();
         Tags("Gradebook");
     }
 
     public override async Task HandleAsync(UpdateStudentGradeSummaryRequest req, CancellationToken ct)
     {
-        var userIdString = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        if (HttpContext.User?.Identity?.IsAuthenticated != true)
         {
-            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User ID not found in token", ct);
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userId = await _currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Could not resolve your identity.", ct);
             return;
         }
 
         var offeringId = Route<Guid>("offeringId");
 
-        var result = await _gradebookService.UpdateStudentGradeSummariesAsync(offeringId, req, userId, ct);
+        var result = await _gradebookService.UpdateStudentGradeSummariesAsync(offeringId, req, userId.Value, ct);
 
         if (result.IsError)
         {
@@ -47,6 +55,6 @@ public sealed class UpdateStudentGradeSummariesEndpoint : ApiEndpoint<UpdateStud
             return;
         }
 
-        await SendSuccessAsync(result.Value, ct);
+        await SendSuccessAsync(result.Value, ct, "Grades updated successfully");
     }
 }

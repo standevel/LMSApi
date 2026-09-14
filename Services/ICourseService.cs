@@ -42,7 +42,7 @@ public interface ICourseService
 
     // ─── Course Detail (Lecturer-facing) ───────────────────────────────────────
     Task<ErrorOr<CourseDetailResponse>> GetCourseDetailAsync(
-        Guid offeringId, Guid lecturerId, CancellationToken ct = default);
+        Guid offeringId, Guid lecturerId, bool bypassLecturerCheck = false, CancellationToken ct = default);
 
     Task<ErrorOr<AddCourseMaterialResponse>> AddCourseMaterialAsync(
         Guid offeringId, Guid lecturerId,
@@ -54,4 +54,15 @@ public interface ICourseService
     // ─── Student-facing ────────────────────────────────────────────────────────
     Task<ErrorOr<StudentCourseDetailResponse>> GetStudentCourseDetailAsync(
         Guid offeringId, Guid studentId, CancellationToken ct = default);
+
+    // ─── Batch Registration & Enrolled Students ───────────────────────────────
+    Task<ErrorOr<BatchRegistrationResultDto>> BatchRegisterStudentsAsync(
+        BatchRegisterStudentsRequest request, Guid currentUserId, bool bypassLecturerCheck = false, CancellationToken ct = default);
+
+    Task<ErrorOr<BatchUnregisterResultDto>> BatchUnregisterStudentsAsync(
+        BatchUnregisterStudentsRequest request, Guid currentUserId, bool bypassLecturerCheck = false, CancellationToken ct = default);
+
+    Task<ErrorOr<List<OfferingEnrolledStudentDto>>> GetOfferingEnrolledStudentsAsync(
+        Guid offeringId, Guid? lecturerId = null, bool bypassLecturerCheck = true, CancellationToken ct = default);
 }
+

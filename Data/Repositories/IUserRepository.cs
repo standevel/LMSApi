@@ -8,6 +8,7 @@ public interface IUserRepository
     Task<AppUser?> GetByEntraObjectIdAsync(string entraObjectId, CancellationToken ct = default);
     Task<AppUser?> GetManagementProfileByEntraObjectIdAsync(string entraObjectId, CancellationToken ct = default);
     Task<AppUser?> GetActiveByUsernameAsync(string username, CancellationToken ct = default);
+    Task<AppUser?> GetByEmailOrUsernameAsync(string emailOrUsername, CancellationToken ct = default);
     Task<bool> UsernameExistsAsync(string username, Guid? excludingUserId = null, CancellationToken ct = default);
     Task<Guid?> GetIdByEntraObjectIdAsync(string entraObjectId, CancellationToken ct = default);
     Task<Guid?> GetIdBySubjectAsync(Guid subjectUserId, CancellationToken ct = default);

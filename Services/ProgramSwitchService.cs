@@ -63,13 +63,21 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
             return Error.Conflict("ProgramSwitch.OpenRequest",
                 "An open program switch request already exists. Please wait for it to be processed or withdraw it before submitting a new one.");
 
+        var sysConfig = await _db.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct);
+        var globalRequireJamb = sysConfig?.RequireJambForProgramTransfer ?? true;
+        var requiresJamb = globalRequireJamb && request.RequiresJambAdmission;
+
+        var initialStatus = requiresJamb ? ProgramSwitchStatus.Draft : ProgramSwitchStatus.PendingHoDReview;
+
         var switchRequest = new ProgramSwitchRequest
         {
             StudentId = studentId,
             FromProgramId = student.AcademicProgramId.Value,
             ToProgramId = request.TargetProgramId,
             Reason = request.Reason,
-            Status = ProgramSwitchStatus.Draft,
+            RequiresJambAdmission = requiresJamb,
+            NewJambRegistrationNumber = request.NewJambRegistrationNumber,
+            Status = initialStatus,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -78,7 +86,7 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         await _db.SaveChangesAsync(ct);
 
         await LogActionAsync("CreateProgramSwitchRequest", "ProgramSwitchRequest", switchRequest.Id.ToString(),
-            $"Student {studentId} requested switch from {student.AcademicProgram?.Name} to {targetProgram.Name}", ct);
+            $"Student {studentId} requested switch from {student.AcademicProgram?.Name} to {targetProgram.Name} (Requires JAMB: {requiresJamb})", ct);
 
         return await GetByIdAsync(switchRequest.Id, ct);
     }
@@ -152,11 +160,10 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         // Enforce: must be in PendingHoDReview (ensures prior stages are complete)
         if (switchRequest.Status != ProgramSwitchStatus.PendingHoDReview)
             return Error.Conflict("ProgramSwitchRequest.InvalidStatus",
-                $"This request cannot be reviewed by HoD in its current state ({switchRequest.Status}). " +
-                "The student must upload the JAMB admission letter first.");
+                $"This request cannot be reviewed by HoD in its current state ({switchRequest.Status}).");
 
-        // Enforce: JAMB document gate
-        if (string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
+        // Enforce: JAMB document gate only if compulsory
+        if (switchRequest.RequiresJambAdmission && string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
             return Error.Validation("ProgramSwitchRequest.MissingDocument",
                 "Cannot proceed with approval — the student has not yet uploaded the JAMB admission letter.");
 
@@ -212,8 +219,8 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
                 $"This request cannot be reviewed by the Dean in its current state ({switchRequest.Status}). " +
                 "Head of Department approval must be completed first.");
 
-        // Enforce: JAMB document gate (double-check)
-        if (string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
+        // Enforce: JAMB document gate only if compulsory
+        if (switchRequest.RequiresJambAdmission && string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
             return Error.Validation("ProgramSwitchRequest.MissingDocument",
                 "Cannot proceed with approval — the JAMB admission letter document is missing.");
 
@@ -262,11 +269,6 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
                 $"Cannot complete switch in current state ({switchRequest.Status}). " +
                 "Both HoD and Dean approval must be completed first.");
 
-        // Enforce: JAMB document gate
-        if (string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
-            return Error.Validation("ProgramSwitchRequest.MissingDocument",
-                "Cannot complete program switch — the JAMB admission letter document is missing.");
-
         var student = switchRequest.Student;
         var targetProgram = switchRequest.ToProgram;
 
@@ -275,6 +277,10 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         student.FacultyId = targetProgram.DepartmentId != Guid.Empty
             ? (await _db.Departments.FirstOrDefaultAsync(d => d.Id == targetProgram.DepartmentId, ct))?.FacultyId
             : student.FacultyId;
+        if (!string.IsNullOrWhiteSpace(switchRequest.NewJambRegistrationNumber))
+        {
+            student.JambRegistrationNumber = switchRequest.NewJambRegistrationNumber;
+        }
         student.UpdatedAt = DateTime.UtcNow;
 
         // ── 2. Update current active session's ProgramEnrollment ──────────
@@ -323,7 +329,7 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         await _db.SaveChangesAsync(ct);
 
         await LogActionAsync("AdminCompleteProgramSwitch", "ProgramSwitchRequest", requestId.ToString(),
-            $"Admin {adminId} completed program switch for student {student.Id} to program {targetProgram.Name}", ct);
+            $"Admin/Registry {adminId} completed program switch for student {student.Id} to program {targetProgram.Name}", ct);
 
         return await GetByIdAsync(requestId, ct);
     }
@@ -340,10 +346,6 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
         if (switchRequest.Status != ProgramSwitchStatus.PendingAdminAction)
             return Error.Conflict("ProgramSwitchRequest.InvalidStatus",
                 $"Cannot reject in current state ({switchRequest.Status}).");
-
-        if (string.IsNullOrEmpty(switchRequest.JambDocumentUrl))
-            return Error.Validation("ProgramSwitchRequest.MissingDocument",
-                "Cannot process rejection — the JAMB admission letter document is missing.");
 
         switchRequest.Status = ProgramSwitchStatus.RejectedByAdmin;
         switchRequest.RejectionReason = rejectionReason;
@@ -473,6 +475,8 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
             r.JambDocumentUrl,
             r.JambDocumentFileName,
             r.JambDocumentUploadedAt,
+            r.RequiresJambAdmission,
+            r.NewJambRegistrationNumber,
             r.HoDReviewedBy?.DisplayName ?? r.HoDReviewedBy?.Email,
             r.HoDReviewedAt,
             r.HoDNotes,
@@ -498,5 +502,6 @@ public class ProgramSwitchService : BaseService, IProgramSwitchService
             r.ToProgram?.Name ?? "N/A",
             r.Status.ToString(),
             !string.IsNullOrEmpty(r.JambDocumentUrl),
+            r.RequiresJambAdmission,
             r.CreatedAt);
 }

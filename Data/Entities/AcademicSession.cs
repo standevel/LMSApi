@@ -13,5 +13,7 @@ public sealed class AcademicSession
     public bool IsAdmissionOpen { get; set; }
     public bool IsAdmissionActive { get; set; }
     public Semester ActiveSemester { get; set; } = Semester.First;
-
+    public bool IsRegistrationOpen { get; set; }
+    public DateTime? RegistrationStartDate { get; set; }
+    public DateTime? RegistrationEndDate { get; set; }
 }

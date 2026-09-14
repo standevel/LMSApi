@@ -94,6 +94,12 @@ public class RegistrationService : BaseService, IRegistrationService
         if (session == null || !session.IsActive || DateTime.UtcNow > session.EndDate)
             return Error.Conflict("Registration.SemesterEnded", "You cannot drop a course after the academic session has ended.");
 
+        if (!session.IsRegistrationOpen)
+            return Error.Conflict("Registration.Closed", "Course registration has ended for this academic session. Courses can no longer be dropped.");
+
+        if (session.RegistrationEndDate.HasValue && DateTime.UtcNow > session.RegistrationEndDate.Value)
+            return Error.Conflict("Registration.Ended", $"Course registration closed on {session.RegistrationEndDate.Value:d}. Courses can no longer be dropped.");
+
         if (await IsRegistrationLockedAsync(studentId, session.Id, ct))
             return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
 
@@ -124,9 +130,18 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         var currentOffering = await _context.CourseOfferings.AsNoTracking()
+            .Include(x => x.AcademicSession)
             .FirstOrDefaultAsync(x => x.Id == currentCourseOfferingId, ct);
         if (currentOffering is null)
             return Error.NotFound("CourseOffering.NotFound", "Current course offering not found.");
+
+        if (currentOffering.AcademicSession != null && !currentOffering.AcademicSession.IsRegistrationOpen)
+            return Error.Conflict("Registration.Closed", "Course registration is closed for this session. Course swap requests cannot be submitted.");
+
+        var newOffering = await _context.CourseOfferings.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == newCourseOfferingId, ct);
+        if (newOffering != null && newOffering.IsRegistrationClosed)
+            return Error.Conflict("Registration.CourseClosed", "The course offering to add is closed for registration.");
 
         if (await IsRegistrationLockedAsync(studentId, currentOffering.AcademicSessionId, ct))
             return Error.Conflict("Registration.VerifiedLocked", "Your registration has been verified by your course adviser and can no longer be changed by you.");
@@ -208,7 +223,7 @@ public class RegistrationService : BaseService, IRegistrationService
             return Error.NotFound("Enrollment.NotFound", "No active programme enrollment was found for this student.");
         }
 
-        var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+        var session = await GetActiveAcademicSessionAsync(ct);
         if (session is null)
             return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
 
@@ -362,11 +377,18 @@ public class RegistrationService : BaseService, IRegistrationService
         return await filteredQuery
             .Select(x => new CourseRegistrationDto(x.Id, x.StudentId, x.CourseOfferingId,
                 x.CourseOffering.Course.Code, x.CourseOffering.Course.Title, x.RegisteredAtUtc,
-                x.DroppedAtUtc, x.Status, x.CourseOffering.Course.CreditUnits))
+                x.DroppedAtUtc, x.Status, x.CourseOffering.Course.CreditUnits, (int)x.CourseOffering.Semester))
             .ToListAsync(ct);
     }
 
-    public async Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default)
+    public Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId, CancellationToken ct) =>
+        GetRegistrationSummaryAsync(studentId, academicSessionId, null, ct);
+
+    public async Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(
+        Guid studentId,
+        Guid? academicSessionId = null,
+        LMS.Api.Data.Enums.Semester? semester = null,
+        CancellationToken ct = default)
     {
         AcademicSession? session;
         if (academicSessionId.HasValue)
@@ -377,7 +399,7 @@ public class RegistrationService : BaseService, IRegistrationService
         }
         else
         {
-            session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+            session = await GetActiveAcademicSessionAsync(ct);
             if (session is null)
                 return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
         }
@@ -429,25 +451,27 @@ public class RegistrationService : BaseService, IRegistrationService
                 .OrderBy(x => x.DayOfWeek).ThenBy(x => x.StartTime)
                 .ToListAsync(ct);
 
+            var configEmpty = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
+                ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
+
             var emptyOptionDtos = new List<RegistrationOfferingDto>();
             foreach (var offering in emptyOfferings)
             {
-                var blockers = await GetBlockersAsync(studentId, offering, ct);
+                var blockers = await GetBlockersAsync(studentId, offering, ct, configEmpty);
                 emptyOptionDtos.Add(new RegistrationOfferingDto(
                     offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty, offering.Course?.CreditUnits ?? 0,
                     (int)offering.Semester, "To be announced",
                     emptySlots.Where(s => s.CourseOfferingId == offering.Id)
                         .Select(s => $"{s.DayOfWeek} {s.StartTime:HH\\:mm}–{s.EndTime:HH\\:mm}").ToList(),
-                    false, false, blockers));
+                    false, false, blockers, false, false, offering.IsRegistrationClosed));
             }
-
-            var configEmpty = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
-                ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
 
             var emptyVerification = await GetRegistrationVerificationAsync(studentId, session.Id, ct);
             return new RegistrationSummaryDto(studentId, studentName, session.Id, session.Name,
                 0, 0, new List<CourseRegistrationDto>(), emptyOptionDtos, programName, levelName,
-                configEmpty.Strategy, 0, emptyVerification is not null, emptyVerification?.VerifiedAtUtc);
+                configEmpty.Strategy, 0, emptyVerification is not null, emptyVerification?.VerifiedAtUtc,
+                session.IsRegistrationOpen, session.RegistrationStartDate, session.RegistrationEndDate,
+                configEmpty.AllowMultiSemesterRegistration, (int)session.ActiveSemester);
         }
 
         var levels = await _context.Levels.AsNoTracking()
@@ -486,13 +510,26 @@ public class RegistrationService : BaseService, IRegistrationService
             curriculumCourseLevels = distinctCCs.ToDictionary(x => x.CourseId, x => x.LevelId);
         }
 
-        var offerings = await _context.CourseOfferings.AsNoTracking()
+        var config = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
+            ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
+
+        var offeringsQuery = _context.CourseOfferings.AsNoTracking()
             .Where(x => x.AcademicSessionId == session.Id &&
-                        x.Semester == session.ActiveSemester &&
                         _context.CourseOfferingPrograms.Any(p =>
                             p.CourseOfferingId == x.Id &&
                             p.ProgramId == programmeEnrollment.ProgramId &&
-                            (p.LevelId == programmeEnrollment.LevelId || lowerLevelIds.Contains(p.LevelId))))
+                            (p.LevelId == programmeEnrollment.LevelId || lowerLevelIds.Contains(p.LevelId))));
+
+        if (semester.HasValue)
+        {
+            offeringsQuery = offeringsQuery.Where(x => x.Semester == semester.Value);
+        }
+        else if (!config.AllowMultiSemesterRegistration)
+        {
+            offeringsQuery = offeringsQuery.Where(x => x.Semester == session.ActiveSemester);
+        }
+
+        var offerings = await offeringsQuery
             .Include(x => x.Course)
             .Include(x => x.AcademicSession)
             .Include(x => x.Programs).ThenInclude(p => p.Level)
@@ -512,7 +549,9 @@ public class RegistrationService : BaseService, IRegistrationService
             var curriculumFiltered = offerings.Where(x => 
                 curriculumCreditMap.ContainsKey(x.CourseId) && 
                 curriculumCourseSemesters.TryGetValue(x.CourseId, out var sem) && 
-                sem == session.ActiveSemester &&
+                (config.AllowMultiSemesterRegistration
+                    ? (semester.HasValue ? sem == semester.Value : sem == x.Semester)
+                    : sem == session.ActiveSemester) &&
                 curriculumCourseLevels.TryGetValue(x.CourseId, out var lvl) && 
                 (lvl == programmeEnrollment.LevelId || lowerLevelIds.Contains(lvl))
             ).ToList();
@@ -534,9 +573,14 @@ public class RegistrationService : BaseService, IRegistrationService
             .Where(x => x.StudentId == studentId && offeringIds.Contains(x.CourseOfferingId) && x.Status == "Registered")
             .Include(x => x.CourseOffering).ThenInclude(x => x.Course).ToListAsync(ct);
 
-        var maxCredits = await _context.LevelSemesterConfigs.AsNoTracking()
-            .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive)
-            .Select(x => (int?)x.MaxCreditLoad).MaxAsync(ct) ?? 24;
+        var maxCreditsQuery = _context.LevelSemesterConfigs.AsNoTracking()
+            .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive);
+        if (semester.HasValue)
+            maxCreditsQuery = maxCreditsQuery.Where(x => x.Semester == semester.Value);
+        else if (!config.AllowMultiSemesterRegistration)
+            maxCreditsQuery = maxCreditsQuery.Where(x => x.Semester == session.ActiveSemester);
+
+        var maxCredits = await maxCreditsQuery.Select(x => (int?)x.MaxCreditLoad).MaxAsync(ct) ?? 24;
 
         var registeredDtos = registrations.Select(x => 
         {
@@ -550,7 +594,7 @@ public class RegistrationService : BaseService, IRegistrationService
             var isRegistered = registrations.Any(x => x.CourseOfferingId == offering.Id);
             var blockers = isRegistered
                 ? new List<RegistrationBlockerDto> { new("Registration.AlreadyRegistered", "Already registered.") }
-                : await GetBlockersAsync(studentId, offering, ct);
+                : await GetBlockersAsync(studentId, offering, ct, config);
 
             var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
 
@@ -561,35 +605,45 @@ public class RegistrationService : BaseService, IRegistrationService
                 slots.Where(x => x.CourseOfferingId == offering.Id)
                     .Select(x => $"{x.DayOfWeek} {x.StartTime:HH\\:mm}–{x.EndTime:HH\\:mm}").ToList(),
                 isRegistered, blockers.Count == 0, blockers,
-                offering.Programs.Any(p => lowerLevelIds.Contains(p.LevelId))));
+                offering.Programs.Any(p => lowerLevelIds.Contains(p.LevelId)), false, offering.IsRegistrationClosed));
         }
 
-        // Resolve active semester and dynamic min expected credit units requirement
-        var activeSemester = session.ActiveSemester;
-
+        // Resolve dynamic min expected credit units requirement
         int minCredits = 0;
-        var config = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
-            ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
-
         if (config.EnforceMinCredits && programmeEnrollment.CurriculumId != Guid.Empty)
         {
-            minCredits = await _context.CurriculumCourses.AsNoTracking()
+            var targetSem = semester ?? (config.AllowMultiSemesterRegistration ? null : (LMS.Api.Data.Enums.Semester?)session.ActiveSemester);
+            var minCreditsQuery = _context.CurriculumCourses.AsNoTracking()
                 .Where(cc => cc.CurriculumId == programmeEnrollment.CurriculumId &&
-                             cc.LevelId == programmeEnrollment.LevelId &&
-                             cc.Semester == activeSemester)
-                .SumAsync(cc => (int?)cc.CreditUnits, ct) ?? 0;
+                             cc.LevelId == programmeEnrollment.LevelId);
+
+            if (targetSem.HasValue)
+            {
+                minCreditsQuery = minCreditsQuery.Where(cc => cc.Semester == targetSem.Value);
+            }
+
+            minCredits = await minCreditsQuery.SumAsync(cc => (int?)cc.CreditUnits, ct) ?? 0;
         }
 
         var verification = await GetRegistrationVerificationAsync(studentId, session.Id, ct);
         return new RegistrationSummaryDto(studentId, studentName, session.Id, session.Name,
             registeredDtos.Sum(x => x.CreditUnits), maxCredits, registeredDtos, optionDtos, programName, levelName,
-            config.Strategy, minCredits, verification is not null, verification?.VerifiedAtUtc);
+            config.Strategy, minCredits, verification is not null, verification?.VerifiedAtUtc,
+            session.IsRegistrationOpen, session.RegistrationStartDate, session.RegistrationEndDate,
+            config.AllowMultiSemesterRegistration, (int)session.ActiveSemester);
     }
 
-    private async Task<List<RegistrationBlockerDto>> GetBlockersAsync(Guid studentId, CourseOffering offering, CancellationToken ct)
+    private async Task<List<RegistrationBlockerDto>> GetBlockersAsync(
+        Guid studentId,
+        CourseOffering offering,
+        CancellationToken ct,
+        SystemRegistrationConfiguration? config = null)
     {
         var blockers = new List<RegistrationBlockerDto>();
         var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, offering.AcademicSessionId, ct);
+
+        config ??= await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
+            ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
 
         var lowerLevelIds = new List<Guid>();
         var offeringLevelIds = new List<Guid>();
@@ -624,7 +678,29 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         if (offering.AcademicSession == null || !offering.AcademicSession.IsActive)
+        {
             blockers.Add(new("Registration.InactiveSession", "Registration is limited to the active academic session."));
+        }
+        else
+        {
+            if (!offering.AcademicSession.IsRegistrationOpen)
+            {
+                blockers.Add(new("Registration.Closed", $"Course registration is currently closed for the {offering.AcademicSession.Name} academic session."));
+            }
+            else if (offering.AcademicSession.RegistrationStartDate.HasValue && DateTime.UtcNow < offering.AcademicSession.RegistrationStartDate.Value)
+            {
+                blockers.Add(new("Registration.NotStarted", $"Course registration opens on {offering.AcademicSession.RegistrationStartDate.Value:d}."));
+            }
+            else if (offering.AcademicSession.RegistrationEndDate.HasValue && DateTime.UtcNow > offering.AcademicSession.RegistrationEndDate.Value)
+            {
+                blockers.Add(new("Registration.Ended", $"Course registration closed on {offering.AcademicSession.RegistrationEndDate.Value:d}."));
+            }
+        }
+
+        if (offering.IsRegistrationClosed)
+        {
+            blockers.Add(new("Registration.CourseClosed", "Registration for this course offering is closed."));
+        }
 
         if (await _context.CourseEnrollments.AnyAsync(x => x.StudentId == studentId &&
             x.CourseOfferingId == offering.Id && x.Status == "Registered", ct))
@@ -660,9 +736,16 @@ public class RegistrationService : BaseService, IRegistrationService
             {
                 blockers.Add(new("Registration.NotInCurriculum", "This course is not in your assigned curriculum."));
             }
-            else if (offering.AcademicSession != null && curriculumCourseSemesters.TryGetValue(offering.CourseId, out var mappedSem) && mappedSem != offering.AcademicSession.ActiveSemester)
+            else if (offering.AcademicSession != null && curriculumCourseSemesters.TryGetValue(offering.CourseId, out var mappedSem))
             {
-                blockers.Add(new("Registration.WrongSemester", $"This course is scheduled for {mappedSem} semester in your curriculum."));
+                var isWrongSemester = config.AllowMultiSemesterRegistration
+                    ? mappedSem != offering.Semester
+                    : mappedSem != offering.AcademicSession.ActiveSemester;
+
+                if (isWrongSemester)
+                {
+                    blockers.Add(new("Registration.WrongSemester", $"This course is scheduled for {mappedSem} semester in your curriculum."));
+                }
             }
         }
 
@@ -837,7 +920,7 @@ public class RegistrationService : BaseService, IRegistrationService
 
     private async Task<int> GetCurriculumCreditsAsync(Guid studentId, Guid courseId, CancellationToken ct)
     {
-        var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+        var session = await GetActiveAcademicSessionAsync(ct);
         if (session != null)
         {
             var enrollment = await _context.Enrollments.AsNoTracking()
@@ -880,7 +963,7 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         // Get active session
-        var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+        var session = await GetActiveAcademicSessionAsync(ct);
         if (session is null)
             return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
 
@@ -916,8 +999,15 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         // Load all requested offerings
-        var requestedOfferings = await _context.CourseOfferings
-            .Where(o => courseOfferingIds.Contains(o.Id) && o.AcademicSessionId == session.Id && o.Semester == session.ActiveSemester)
+        var requestedOfferingsQuery = _context.CourseOfferings
+            .Where(o => courseOfferingIds.Contains(o.Id) && o.AcademicSessionId == session.Id);
+
+        if (!config.AllowMultiSemesterRegistration)
+        {
+            requestedOfferingsQuery = requestedOfferingsQuery.Where(o => o.Semester == session.ActiveSemester);
+        }
+
+        var requestedOfferings = await requestedOfferingsQuery
             .Include(o => o.Course)
             .Include(o => o.AcademicSession)
             .ToListAsync(ct);
@@ -936,14 +1026,25 @@ public class RegistrationService : BaseService, IRegistrationService
             .Select(g => g.Key.CourseId).ToHashSet();
 
         // Carryover offerings for the semesters present in the student's program levels below current
-        var carryoverOfferings = await _context.CourseOfferings.AsNoTracking()
+        var carryoverQuery = _context.CourseOfferings.AsNoTracking()
             .Where(x => x.AcademicSessionId == session.Id &&
-                        x.Semester == session.ActiveSemester &&
                         _context.CourseOfferingPrograms.Any(p =>
                             p.CourseOfferingId == x.Id &&
                             p.ProgramId == programmeEnrollment.ProgramId &&
                             lowerLevelIds.Contains(p.LevelId)) &&
-                        !passedCourseIds.Contains(x.CourseId))
+                        !passedCourseIds.Contains(x.CourseId));
+
+        if (!config.AllowMultiSemesterRegistration)
+        {
+            carryoverQuery = carryoverQuery.Where(x => x.Semester == session.ActiveSemester);
+        }
+        else
+        {
+            var targetSemesters = requestedOfferings.Select(o => o.Semester).Distinct().ToList();
+            carryoverQuery = carryoverQuery.Where(x => targetSemesters.Contains(x.Semester));
+        }
+
+        var carryoverOfferings = await carryoverQuery
             .Include(x => x.Course)
             .ToListAsync(ct);
 
@@ -952,7 +1053,7 @@ public class RegistrationService : BaseService, IRegistrationService
             carryoverOfferings = carryoverOfferings.Where(x => 
                 curriculumCreditMap.ContainsKey(x.CourseId) && 
                 curriculumCourseSemesters.TryGetValue(x.CourseId, out var sem) && 
-                sem == session.ActiveSemester
+                (config.AllowMultiSemesterRegistration ? sem == x.Semester : sem == session.ActiveSemester)
             ).ToList();
         }
 
@@ -1111,35 +1212,43 @@ public class RegistrationService : BaseService, IRegistrationService
             await LogActionAsync("RegisterCoursesBulk", "CourseEnrollment", studentId.ToString(),
                 $"Student {studentId} submitted bulk registration for {courseOfferingIds.Count} courses.", ct);
 
-            return await GetRegistrationSummaryAsync(studentId, null, ct);
+            return await GetRegistrationSummaryAsync(studentId, null, null, ct);
         });
     }
 
     public async Task<ErrorOr<List<RegistrationOfferingDto>>> GetGlobalCourseOfferingsAsync(Guid studentId, string? search = null, CancellationToken ct = default)
     {
-        var session = await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct);
+        var session = await GetActiveAcademicSessionAsync(ct);
         if (session is null)
             return Error.NotFound("AcademicSession.ActiveNotFound", "No active academic session was found.");
 
         var programmeEnrollment = await ResolveProgrammeEnrollmentAsync(studentId, session.Id, ct);
 
+        var config = await _context.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct)
+            ?? new SystemRegistrationConfiguration { Strategy = "Single", EnforceMinCredits = true };
+
         var query = _context.CourseOfferings.AsNoTracking()
-            .Where(x => x.AcademicSessionId == session.Id && x.Semester == session.ActiveSemester)
+            .Where(x => x.AcademicSessionId == session.Id)
             .Include(x => x.Course)
             .Include(x => x.AcademicSession)
             .Include(x => x.Programs).ThenInclude(p => p.Level)
             .Include(x => x.Lecturers).ThenInclude(l => l.Lecturer)
             .AsQueryable();
 
+        if (!config.AllowMultiSemesterRegistration)
+        {
+            query = query.Where(x => x.Semester == session.ActiveSemester);
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
             query = query.Where(x =>
                 (x.Course != null && (x.Course.Code.ToLower().Contains(s) || x.Course.Title.ToLower().Contains(s))) ||
-                x.Lecturers.Any(l => l.Lecturer != null && (l.Lecturer.DisplayName.ToLower().Contains(s) || l.Lecturer.Email.ToLower().Contains(s))));
+                x.Lecturers.Any(l => l.Lecturer != null && ((l.Lecturer.DisplayName != null && l.Lecturer.DisplayName.ToLower().Contains(s)) || (l.Lecturer.Email != null && l.Lecturer.Email.ToLower().Contains(s)))));
         }
 
-        var offerings = await query.OrderBy(x => x.Course.Code).ToListAsync(ct);
+        var offerings = await query.OrderBy(x => x.Course != null ? x.Course.Code : string.Empty).ToListAsync(ct);
         var offeringIds = offerings.Select(x => x.Id).ToList();
 
         var slots = await _context.LectureTimetableSlots.AsNoTracking()
@@ -1269,5 +1378,12 @@ public class RegistrationService : BaseService, IRegistrationService
         }
 
         return null;
+    }
+
+    private async Task<AcademicSession?> GetActiveAcademicSessionAsync(CancellationToken ct = default)
+    {
+        return await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct)
+            ?? await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.Name == "2025/2026", ct)
+            ?? await _context.AcademicSessions.AsNoTracking().OrderByDescending(x => x.StartDate).FirstOrDefaultAsync(ct);
     }
 }

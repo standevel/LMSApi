@@ -10,7 +10,7 @@ public sealed class SystemGradingConfiguration
     public Guid Id { get; set; } = Guid.NewGuid();
     
     /// <summary>
-    /// Grading style: Weighted (CA1+CA2+CA3+Exam) or Unweighted (Simple Average)
+    /// Grading style: Weighted (CA1*w1 + CA2*w2 + CA3*w3 + Exam*wExam) or Unweighted (Simple Sum: CA1+CA2+CA3+Exam)
     /// </summary>
     public GradingStyle DefaultGradingStyle { get; set; } = GradingStyle.Weighted;
     
@@ -27,12 +27,12 @@ public sealed class SystemGradingConfiguration
     /// <summary>
     /// Default CA1 weight (typically 15%)
     /// </summary>
-    public decimal DefaultCA1Weight { get; set; } = 15m;
+    public decimal DefaultCA1Weight { get; set; } = 10m;
     
     /// <summary>
-    /// Default CA2 weight (typically 15%)
+    /// Default CA2 weight (typically 10%)
     /// </summary>
-    public decimal DefaultCA2Weight { get; set; } = 15m;
+    public decimal DefaultCA2Weight { get; set; } = 10m;
     
     /// <summary>
     /// Default CA3 weight (typically 10%)
@@ -40,9 +40,9 @@ public sealed class SystemGradingConfiguration
     public decimal DefaultCA3Weight { get; set; } = 10m;
     
     /// <summary>
-    /// Default Exam weight (typically 60%)
+    /// Default Exam weight (typically 70%)
     /// </summary>
-    public decimal DefaultExamWeight { get; set; } = 60m;
+    public decimal DefaultExamWeight { get; set; } = 70m;
 
     public decimal GpaScale { get; set; } = 4.0m;
     
@@ -52,9 +52,9 @@ public sealed class SystemGradingConfiguration
     public string LetterGradesMappingJson { get; set; } = "[]";
 
     /// <summary>
-    /// Rounding strategy for grades
+    /// Rounding strategy for grades (defaults to Ceiling to round up values)
     /// </summary>
-    public RoundingStrategy RoundingStrategy { get; set; } = RoundingStrategy.Standard;
+    public RoundingStrategy RoundingStrategy { get; set; } = RoundingStrategy.Ceiling;
 
     /// <summary>
     /// Number of decimal places to round to

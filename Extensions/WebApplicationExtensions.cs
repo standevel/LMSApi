@@ -22,7 +22,14 @@ public static class WebApplicationExtensions
 
         using var scope = app.Services.CreateScope();
         var dbInitializer = scope.ServiceProvider.GetRequiredService<IDbInitializer>();
-        await dbInitializer.InitializeAsync(CancellationToken.None);
+        try
+        {
+            await dbInitializer.InitializeAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Database initialization failed. The backend will continue to start; runtime DB errors may occur if the schema is incomplete.");
+        }
         return app;
     }
     public static WebApplication UseApplicationMiddleware(this WebApplication app)
@@ -55,8 +62,11 @@ public static class WebApplicationExtensions
             exceptionHandlerApp.Run(async context =>
             {
                 var exceptionFeature = context.Features.Get<IExceptionHandlerPathFeature>();
+                var error = exceptionFeature?.Error;
+                app.Logger.LogError(error, "Unhandled exception processing {Path}", context.Request.Path);
+
                 var errorMessage = app.Environment.IsDevelopment()
-                    ? exceptionFeature?.Error.Message ?? "An unexpected error occurred."
+                    ? (error?.InnerException?.Message ?? error?.Message) ?? "An unexpected error occurred."
                     : "An unexpected error occurred.";
 
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
@@ -114,6 +124,7 @@ public static class WebApplicationExtensions
         app.UseFastEndpoints(c =>
         {
             c.Serializer.Options.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+            c.Serializer.Options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
             c.Endpoints.RoutePrefix = "api";
         });
 

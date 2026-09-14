@@ -21,7 +21,12 @@ public sealed class GetParentPortalConfigurationEndpoint(IGuardianProvisioningSe
         await SendSuccessAsync(new SystemParentPortalConfigurationDto(
             config.AutoCreateGuardianAccountsOnStudentCreation,
             config.SendGuardianInvitationEmail,
-            config.DefaultRelationship), ct);
+            config.DefaultRelationship,
+            string.IsNullOrWhiteSpace(config.AllowedCategoriesJson) || config.AllowedCategoriesJson == "[]"
+                ? new List<int>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<int>>(config.AllowedCategoriesJson) ?? new List<int>(),
+            config.RequireStudentConsentForSensitive,
+            config.TreatAdultStudentsAsRestricted), ct);
     }
 }
 

@@ -33,7 +33,14 @@ public sealed class DownloadGradebookTemplateEndpoint : ApiEndpointWithoutReques
 
         var offeringId = Route<Guid>("offeringId");
 
-        var result = await _gradebookService.GenerateExcelTemplateAsync(offeringId, ct);
+        Guid? collegeId = null;
+        var collegeIdStr = Query<string?>("collegeId", isRequired: false);
+        if (!string.IsNullOrWhiteSpace(collegeIdStr) && Guid.TryParse(collegeIdStr, out var parsedCollegeId))
+        {
+            collegeId = parsedCollegeId;
+        }
+
+        var result = await _gradebookService.GenerateExcelTemplateAsync(offeringId, collegeId, ct);
 
         if (result.IsError)
         {
@@ -170,6 +177,52 @@ public sealed class MigrateClassterResultsEndpoint : ApiEndpointWithoutRequest<G
         }
 
         await SendSuccessAsync(result.Value, ct, "Classter migration completed successfully");
+    }
+}
+
+public sealed class BatchMigrateClassterFolderEndpoint : ApiEndpointWithoutRequest<string>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly ICurrentUserContext _currentUserContext;
+
+    public BatchMigrateClassterFolderEndpoint(IGradebookService gradebookService, ICurrentUserContext currentUserContext)
+    {
+        _gradebookService = gradebookService;
+        _currentUserContext = currentUserContext;
+    }
+
+    public override void Configure()
+    {
+        Post("gradebook/classter-folder-migration");
+        AllowAnonymous();
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        if (HttpContext.User?.Identity?.IsAuthenticated != true)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userId = await _currentUserContext.GetUserIdAsync(ct);
+
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Could not resolve your identity.", ct);
+            return;
+        }
+
+        var result = await _gradebookService.BatchMigrateClassterFolderAsync(userId.Value, ct);
+
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(result.Value, ct, "Classter data folder batch migration completed");
     }
 }
 
@@ -340,3 +393,36 @@ public sealed class AutoImportClassterDataEndpoint : ApiEndpointWithoutRequest<o
         }, ct);
     }
 }
+
+public sealed class RepairMigratedResultsEndpoint : ApiEndpointWithoutRequest<object>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly ICurrentUserContext _currentUserContext;
+
+    public RepairMigratedResultsEndpoint(IGradebookService gradebookService, ICurrentUserContext currentUserContext)
+    {
+        _gradebookService = gradebookService;
+        _currentUserContext = currentUserContext;
+    }
+
+    public override void Configure()
+    {
+        Post("gradebook/repair-migrated-results");
+        AllowAnonymous();
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await _currentUserContext.GetUserIdAsync(ct) ?? Guid.Empty;
+        var result = await _gradebookService.RepairMigratedGradesAndResultsAsync(userId, ct);
+        if (result.IsError)
+        {
+            await SendFailureAsync(400, result.FirstError.Description, result.FirstError.Code, result.FirstError.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(new { Message = result.Value }, ct);
+    }
+}
+

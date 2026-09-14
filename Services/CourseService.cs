@@ -18,8 +18,32 @@ public sealed class CourseService(
     IFileStorageService fileStorageService,
     INotificationService notificationService,
     IEmailService emailService,
+    IGradeCalculationEngine gradeCalculationEngine,
     Microsoft.Extensions.Logging.ILogger<CourseService> logger) : BaseService(auditService), ICourseService
 {
+    public static int? InferLevelOrderFromCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(code, @"\d{3}");
+        if (match.Success)
+        {
+            return match.Value[0] - '0';
+        }
+        return null;
+    }
+
+    public static Semester? InferSemesterFromCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(code, @"\d{3}");
+        if (match.Success)
+        {
+            int lastDigit = match.Value[^1] - '0';
+            return (lastDigit % 2 == 1) ? Semester.First : Semester.Second;
+        }
+        return null;
+    }
+
     // ─── Query helpers ────────────────────────────────────────────────────────
 
     private IQueryable<CourseOffering> OfferingsWithNavigations() =>
@@ -131,6 +155,8 @@ public sealed class CourseService(
             return Error.Validation("Course.ProgramRequired", "A program must be selected for the course.");
 
         var sanitizedCode = request.Code?.Replace("-", " ") ?? string.Empty;
+        var inferredLevelOrder = InferLevelOrderFromCode(sanitizedCode);
+        var inferredSemester = InferSemesterFromCode(sanitizedCode);
 
         // Check for duplicate course code within the same program
         var existingCourse = await dbContext.Courses
@@ -139,6 +165,17 @@ public sealed class CourseService(
         {
             return Error.Conflict("Course.DuplicateCode", $"Course code '{sanitizedCode}' already exists for the selected program.");
         }
+
+        var resolvedLevelId = request.LevelId;
+        if ((!resolvedLevelId.HasValue || resolvedLevelId.Value == Guid.Empty) && inferredLevelOrder.HasValue && resolvedProgramId != Guid.Empty)
+        {
+            resolvedLevelId = await dbContext.Levels
+                .Where(l => l.ProgramId == resolvedProgramId && l.Order == inferredLevelOrder.Value)
+                .Select(l => (Guid?)l.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var resolvedSemester = request.Semester ?? inferredSemester ?? Semester.First;
 
         var course = new Course
         {
@@ -149,14 +186,14 @@ public sealed class CourseService(
                 ? $"A comprehensive {request.CreditUnits}-unit course on {request.Title} ({sanitizedCode})."
                 : request.Description,
             CreditUnits = request.CreditUnits,
-            LevelId     = request.LevelId,
-            Semester    = request.Semester,
+            LevelId     = resolvedLevelId,
+            Semester    = resolvedSemester,
             IsActive    = true,
-            // Offerings with session, semester, and optional program+level
+            // Offerings with session, semester, and optional program+level and lecturer
             Offerings = request.Offerings
-                .GroupBy(o => new { o.AcademicSessionId, o.Semester })
+                .GroupBy(o => new { o.AcademicSessionId, Semester = resolvedSemester })
                 .Select(g => {
-                    var progs = g.Where(r => r.ProgramId.HasValue && r.LevelId.HasValue)
+                    var progs = g.Where(r => r.ProgramId.HasValue && r.LevelId.HasValue && r.LevelId.Value != Guid.Empty)
                                 .Select(r => new { r.ProgramId, r.LevelId })
                                 .Distinct()
                                 .Select(rp => new CourseOfferingProgram
@@ -165,20 +202,32 @@ public sealed class CourseService(
                                     LevelId = rp.LevelId!.Value
                                 }).ToList();
 
-                    if (progs.Count == 0 && resolvedProgramId != Guid.Empty && request.LevelId.HasValue)
+                    if (progs.Count == 0 && resolvedProgramId != Guid.Empty && resolvedLevelId.HasValue)
                     {
                         progs.Add(new CourseOfferingProgram
                         {
                             ProgramId = resolvedProgramId,
-                            LevelId = request.LevelId.Value
+                            LevelId = resolvedLevelId.Value
+                        });
+                    }
+
+                    var lecs = new List<CourseOfferingLecturer>();
+                    var mainLecId = g.FirstOrDefault(r => r.LecturerId.HasValue && r.LecturerId.Value != Guid.Empty)?.LecturerId;
+                    if (mainLecId.HasValue)
+                    {
+                        lecs.Add(new CourseOfferingLecturer
+                        {
+                            LecturerId = mainLecId.Value,
+                            Role = CourseLecturerRole.Main
                         });
                     }
 
                     return new CourseOffering
                     {
                         AcademicSessionId = g.Key.AcademicSessionId,
-                        Semester          = (Semester)g.Key.Semester,
-                        Programs          = progs
+                        Semester          = g.Key.Semester,
+                        Programs          = progs,
+                        Lecturers         = lecs
                     };
                 }).ToList()
         };
@@ -198,9 +247,67 @@ public sealed class CourseService(
         var course = await courseRepository.GetByIdAsync(id, ct);
         if (course == null) return DomainErrors.Course.NotFound;
 
+        // Validate FK references up front so we return a clear error instead of a 500
+        // when a program/level GUID from the client doesn't exist in the database.
+        var requestedPairs = request.Offerings
+            .Where(o => o.ProgramId.HasValue && o.LevelId.HasValue)
+            .Select(o => new { ProgramId = o.ProgramId!.Value, LevelId = o.LevelId!.Value })
+            .Distinct()
+            .ToList();
+
+        if (requestedPairs.Count > 0)
+        {
+            var programIds = requestedPairs.Select(p => p.ProgramId).ToHashSet();
+            var levelIds = requestedPairs.Select(p => p.LevelId).ToHashSet();
+
+            var existingProgramIds = (await dbContext.Programs
+                .Where(p => programIds.Contains(p.Id))
+                .Select(p => p.Id)
+                .ToListAsync(ct)).ToHashSet();
+
+            var existingLevelIds = (await dbContext.Levels
+                .Where(l => levelIds.Contains(l.Id))
+                .Select(l => l.Id)
+                .ToListAsync(ct)).ToHashSet();
+
+            var missingPrograms = programIds.Except(existingProgramIds).ToList();
+            var missingLevels = levelIds.Except(existingLevelIds).ToList();
+
+            if (missingPrograms.Count > 0 || missingLevels.Count > 0)
+            {
+                var messages = new List<string>();
+                if (missingPrograms.Count > 0)
+                    messages.Add($"Program(s) not found: {string.Join(", ", missingPrograms)}");
+                if (missingLevels.Count > 0)
+                    messages.Add($"Level(s) not found: {string.Join(", ", missingLevels)}");
+                return Error.Validation("Course.OfferingReferenceNotFound",
+                    string.Join("; ", messages));
+            }
+        }
+
+        // Validate the top-level owning program/level as well (used by the unique index + fallback).
+        if (request.ProgramId.HasValue && request.ProgramId.Value != Guid.Empty)
+        {
+            var programExists = await dbContext.Programs
+                .AnyAsync(p => p.Id == request.ProgramId.Value, ct);
+            if (!programExists)
+            {
+                return Error.Validation("Course.ProgramNotFound",
+                    $"Program not found: {request.ProgramId.Value}");
+            }
+        }
+
         if (request.ProgramId.HasValue && request.ProgramId.Value != Guid.Empty)
         {
             course.ProgramId = request.ProgramId.Value;
+        }
+        else
+        {
+            var fallbackProgId = request.Offerings.FirstOrDefault(o => o.ProgramId.HasValue && o.ProgramId != Guid.Empty)?.ProgramId;
+            if (fallbackProgId.HasValue && fallbackProgId.Value != Guid.Empty)
+            {
+                course.ProgramId = fallbackProgId.Value;
+            }
         }
 
         course.Code        = request.Code?.Replace("-", " ") ?? string.Empty;
@@ -209,32 +316,60 @@ public sealed class CourseService(
             ? $"A comprehensive {request.CreditUnits}-unit course on {request.Title} ({course.Code})."
             : request.Description;
         course.CreditUnits = request.CreditUnits;
-        course.LevelId     = request.LevelId;
-        course.Semester    = request.Semester;
+
+        var inferredLevelOrder = InferLevelOrderFromCode(course.Code);
+        var inferredSemester = InferSemesterFromCode(course.Code);
+        
+        var resolvedLevelId = request.LevelId.HasValue && request.LevelId.Value != Guid.Empty
+            ? request.LevelId
+            : request.Offerings.FirstOrDefault(o => o.LevelId.HasValue && o.LevelId != Guid.Empty)?.LevelId;
+
+        if ((!resolvedLevelId.HasValue || resolvedLevelId.Value == Guid.Empty) && inferredLevelOrder.HasValue && course.ProgramId != Guid.Empty)
+        {
+            resolvedLevelId = await dbContext.Levels
+                .Where(l => l.ProgramId == course.ProgramId && l.Order == inferredLevelOrder.Value)
+                .Select(l => (Guid?)l.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var targetSemester = inferredSemester ?? request.Semester ?? course.Semester ?? Semester.First;
+        course.LevelId     = resolvedLevelId;
+        course.Semester    = targetSemester;
 
         var uniqueOfferingRequests = request.Offerings
-            .GroupBy(r => new { r.AcademicSessionId, r.Semester })
+            .GroupBy(r => new { r.AcademicSessionId, Semester = (int)targetSemester })
             .ToList();
 
-        // 1. Add or Update offerings and sync programs
+        // 1. Add or Update offerings and sync programs and lecturers
         foreach (var offeringGroup in uniqueOfferingRequests)
         {
             var session = offeringGroup.Key.AcademicSessionId;
-            var sem = (Semester)offeringGroup.Key.Semester;
+            var sem = targetSemester;
 
             var offering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == session && o.Semester == sem);
             
             if (offering == null)
             {
-                offering = new CourseOffering
+                // Repurpose an existing wrong-semester offering for this session if available
+                var wrongSemOffering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == session && o.Semester != sem);
+                if (wrongSemOffering != null)
                 {
-                    Id = Guid.NewGuid(),
-                    CourseId = id,
-                    AcademicSessionId = session,
-                    Semester = sem,
-                    Programs = new List<CourseOfferingProgram>()
-                };
-                course.Offerings.Add(offering);
+                    wrongSemOffering.Semester = sem;
+                    offering = wrongSemOffering;
+                }
+                else
+                {
+                    offering = new CourseOffering
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseId = id,
+                        AcademicSessionId = session,
+                        Semester = sem,
+                        Programs = new List<CourseOfferingProgram>(),
+                        Lecturers = new List<CourseOfferingLecturer>()
+                    };
+                    course.Offerings.Add(offering);
+                }
             }
 
             // Sync programs for this offering
@@ -249,24 +384,136 @@ public sealed class CourseService(
                 requestedPrograms.Add(new { ProgramId = course.ProgramId, LevelId = course.LevelId.Value });
             }
 
-            // Additive-only: never remove existing program-level links during an update.
-            // Only add new ones that aren't already attached. Removals must be explicit.
+            var existingPrograms = offering.Programs.ToList();
+            if (offering.Id != Guid.Empty)
+            {
+                var dbPrograms = await dbContext.CourseOfferingPrograms
+                    .Where(p => p.CourseOfferingId == offering.Id)
+                    .ToListAsync(ct);
+                foreach (var dbp in dbPrograms)
+                {
+                    if (!existingPrograms.Any(p => p.Id == dbp.Id))
+                    {
+                        existingPrograms.Add(dbp);
+                        offering.Programs.Add(dbp);
+                    }
+                }
+            }
+
+            // Remove program-level links that are no longer requested
+            var programsToRemove = existingPrograms
+                .Where(ep => !requestedPrograms.Any(rp => rp.ProgramId == ep.ProgramId && rp.LevelId == ep.LevelId))
+                .ToList();
+
+            foreach (var toRemove in programsToRemove)
+            {
+                offering.Programs.Remove(toRemove);
+                dbContext.CourseOfferingPrograms.Remove(toRemove);
+                existingPrograms.Remove(toRemove);
+            }
+
+            // Add newly requested program-level links
             foreach (var rp in requestedPrograms)
             {
-                if (!offering.Programs.Any(p => p.ProgramId == rp.ProgramId && p.LevelId == rp.LevelId))
+                if (!existingPrograms.Any(p => p.ProgramId == rp.ProgramId && p.LevelId == rp.LevelId))
                 {
-                    offering.Programs.Add(new CourseOfferingProgram
+                    var newProg = new CourseOfferingProgram
                     {
                         Id = Guid.NewGuid(),
                         CourseOfferingId = offering.Id,
                         ProgramId = rp.ProgramId,
                         LevelId = rp.LevelId
-                    });
+                    };
+                    offering.Programs.Add(newProg);
+                    dbContext.CourseOfferingPrograms.Add(newProg);
+                    existingPrograms.Add(newProg);
+                }
+            }
+
+            // Sync main lecturer for this offering
+            var existingLecturers = offering.Lecturers.ToList();
+            if (offering.Id != Guid.Empty)
+            {
+                var dbLecturers = await dbContext.CourseOfferingLecturers
+                    .Where(l => l.CourseOfferingId == offering.Id)
+                    .ToListAsync(ct);
+                foreach (var dbl in dbLecturers)
+                {
+                    if (!existingLecturers.Any(l => l.Id == dbl.Id))
+                    {
+                        existingLecturers.Add(dbl);
+                    }
+                }
+            }
+
+            var requestedLecturerItem = offeringGroup
+                .FirstOrDefault(r => r.LecturerId.HasValue && r.LecturerId.Value != Guid.Empty);
+            var requestedLecturerId = requestedLecturerItem?.LecturerId;
+
+            if (requestedLecturerId.HasValue && requestedLecturerId.Value != Guid.Empty)
+            {
+                var targetId = requestedLecturerId.Value;
+
+                // 1. Remove any other lecturer previously assigned as Main
+                var otherMains = existingLecturers
+                    .Where(l => l.LecturerId != targetId && l.Role == CourseLecturerRole.Main)
+                    .ToList();
+                foreach (var otherMain in otherMains)
+                {
+                    offering.Lecturers.Remove(otherMain);
+                    dbContext.CourseOfferingLecturers.Remove(otherMain);
+                    existingLecturers.Remove(otherMain);
+                }
+
+                // 2. Check if target lecturer is already assigned to this offering (e.g. as CoLecturer)
+                var targetLecturerRows = existingLecturers.Where(l => l.LecturerId == targetId).ToList();
+                if (targetLecturerRows.Count > 0)
+                {
+                    var primary = targetLecturerRows[0];
+                    primary.Role = CourseLecturerRole.Main;
+                    if (!offering.Lecturers.Contains(primary))
+                    {
+                        offering.Lecturers.Add(primary);
+                    }
+
+                    // Clean up any extraneous duplicate rows if they somehow existed
+                    for (int i = 1; i < targetLecturerRows.Count; i++)
+                    {
+                        offering.Lecturers.Remove(targetLecturerRows[i]);
+                        dbContext.CourseOfferingLecturers.Remove(targetLecturerRows[i]);
+                        existingLecturers.Remove(targetLecturerRows[i]);
+                    }
+                }
+                else
+                {
+                    var newLecturer = new CourseOfferingLecturer
+                    {
+                        Id = Guid.NewGuid(),
+                        CourseOfferingId = offering.Id,
+                        LecturerId = targetId,
+                        Role = CourseLecturerRole.Main
+                    };
+                    offering.Lecturers.Add(newLecturer);
+                    dbContext.CourseOfferingLecturers.Add(newLecturer);
+                    existingLecturers.Add(newLecturer);
+                }
+            }
+            else
+            {
+                // No lecturer requested (or cleared): remove any existing Main lecturer
+                var existingMains = existingLecturers
+                    .Where(l => l.Role == CourseLecturerRole.Main)
+                    .ToList();
+                foreach (var main in existingMains)
+                {
+                    offering.Lecturers.Remove(main);
+                    dbContext.CourseOfferingLecturers.Remove(main);
+                    existingLecturers.Remove(main);
                 }
             }
         }
 
-        // 2. Remove offerings (and their program links) that are not in the request.
+        // 2. Remove offerings (and their related links) that are not in the request.
         //    Use ExecuteDeleteAsync (direct SQL) to bypass the EF change tracker — this avoids
         //    DbUpdateConcurrencyException caused by auto-provisioned in-memory offerings whose
         //    rows may not actually exist in the DB yet.
@@ -280,10 +527,51 @@ public sealed class CourseService(
 
         foreach (var toRemove in offeringsToRemove)
         {
-            var hasEnrollments = await dbContext.CourseEnrollments.AnyAsync(e => e.CourseOfferingId == toRemove.Id, ct);
-            if (hasEnrollments) continue;
+            var validOffering = course.Offerings.FirstOrDefault(o => o.AcademicSessionId == toRemove.AcademicSessionId && o.Semester == targetSemester && o.Id != toRemove.Id);
+            if (validOffering != null)
+            {
+                var wrongEnrollments = await dbContext.CourseEnrollments.Where(e => e.CourseOfferingId == toRemove.Id).ToListAsync(ct);
+                var validStudentIds = (await dbContext.CourseEnrollments.Where(e => e.CourseOfferingId == validOffering.Id).Select(e => e.StudentId).ToListAsync(ct)).ToHashSet();
+                foreach (var we in wrongEnrollments)
+                {
+                    if (validStudentIds.Contains(we.StudentId))
+                    {
+                        dbContext.CourseEnrollments.Remove(we);
+                    }
+                    else
+                    {
+                        we.CourseOfferingId = validOffering.Id;
+                    }
+                }
 
-            // Step 1: Direct SQL deletes — bypasses change tracker, won't throw if row is already gone.
+                var categories = await dbContext.AssessmentCategories.Where(c => c.CourseOfferingId == toRemove.Id).ToListAsync(ct);
+                foreach (var cat in categories)
+                {
+                    cat.CourseOfferingId = validOffering.Id;
+                }
+
+                var assessments = await dbContext.Assessments.Where(a => a.CourseOfferingId == toRemove.Id).ToListAsync(ct);
+                foreach (var a in assessments)
+                {
+                    a.CourseOfferingId = validOffering.Id;
+                }
+
+                await dbContext.SaveChangesAsync(ct);
+            }
+            else
+            {
+                var hasEnrollments = await dbContext.CourseEnrollments.AnyAsync(e => e.CourseOfferingId == toRemove.Id, ct);
+                if (hasEnrollments)
+                {
+                    continue;
+                }
+            }
+
+            // Step 1: Direct SQL deletes for all related child tables first to prevent FK constraint failures
+            await dbContext.CourseOfferingLecturers
+                .Where(l => l.CourseOfferingId == toRemove.Id)
+                .ExecuteDeleteAsync(ct);
+
             await dbContext.CourseOfferingPrograms
                 .Where(p => p.CourseOfferingId == toRemove.Id)
                 .ExecuteDeleteAsync(ct);
@@ -293,15 +581,31 @@ public sealed class CourseService(
                 .ExecuteDeleteAsync(ct);
 
             // Step 2: Detach ALL related entities from the change tracker BEFORE touching the collection.
-            // Without this, course.Offerings.Remove() causes EF to re-queue a DELETE for these
-            // already-gone rows, resulting in DbUpdateConcurrencyException (0 rows affected).
+            // Without this, EF re-queues a DELETE for already-deleted rows during SaveChanges,
+            // resulting in DbUpdateConcurrencyException (0 rows affected).
             foreach (var prog in toRemove.Programs?.ToList() ?? [])
             {
                 dbContext.Entry(prog).State = EntityState.Detached;
             }
+            foreach (var lec in toRemove.Lecturers?.ToList() ?? [])
+            {
+                dbContext.Entry(lec).State = EntityState.Detached;
+            }
             dbContext.Entry(toRemove).State = EntityState.Detached;
 
-            // Step 3: Remove from the in-memory collection (now safe — entity is detached).
+            var orphanEntries = dbContext.ChangeTracker.Entries()
+                .Where(e =>
+                    (e.Entity is CourseOffering co && co.Id == toRemove.Id) ||
+                    (e.Entity is CourseOfferingProgram cop && cop.CourseOfferingId == toRemove.Id) ||
+                    (e.Entity is CourseOfferingLecturer col && col.CourseOfferingId == toRemove.Id))
+                .ToList();
+
+            foreach (var entry in orphanEntries)
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            // Step 3: Remove from the in-memory collection (now safe — entity and children are detached).
             course.Offerings.Remove(toRemove);
         }
 
@@ -310,10 +614,23 @@ public sealed class CourseService(
             await courseRepository.UpdateAsync(course, ct);
             await courseRepository.SaveChangesAsync(ct);
         }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException concEx)
+        {
+            logger.LogError(concEx, "DbUpdateConcurrencyException updating course {CourseId}: {Message}", id, concEx.Message);
+            return Error.Conflict("Course.ConcurrencyConflict",
+                "The course or its offerings were modified concurrently. Please refresh and try again.");
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+        {
+            logger.LogError(dbEx, "DbUpdateException updating course {CourseId}: {Message}", id, dbEx.InnerException?.Message ?? dbEx.Message);
+            return Error.Failure("Course.UpdateFailed",
+                $"Failed to save course changes: {dbEx.InnerException?.Message ?? dbEx.Message}");
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error updating course {CourseId}: {Message}", id, ex.InnerException?.Message ?? ex.Message);
-            throw;
+            return Error.Failure("Course.UpdateFailed",
+                "An unexpected error occurred while updating the course.");
         }
 
         await LogActionAsync("Update", "Course", id.ToString(), $"Updated course: {course.Code}", ct);
@@ -674,15 +991,17 @@ public sealed class CourseService(
     // ─── Course detail (Lecturer-facing) ─────────────────────────────────────
 
     public async Task<ErrorOr<CourseDetailResponse>> GetCourseDetailAsync(
-        Guid offeringId, Guid lecturerId, CancellationToken ct = default)
+        Guid offeringId, Guid lecturerId, bool bypassLecturerCheck = false, CancellationToken ct = default)
     {
-        // Must be assigned to this offering (or admin will pass a dummy lecturerId)
-        var isAssigned = await dbContext.CourseOfferingLecturers
-            .AnyAsync(col => col.CourseOfferingId == offeringId && col.LecturerId == lecturerId, ct);
+        if (!bypassLecturerCheck)
+        {
+            var isAssigned = await dbContext.CourseOfferingLecturers
+                .AnyAsync(col => col.CourseOfferingId == offeringId && col.LecturerId == lecturerId, ct);
 
-        if (!isAssigned)
-            return Error.NotFound("Course.NotFound",
-                "Course offering not found or you don't have access to it.");
+            if (!isAssigned)
+                return Error.NotFound("Course.NotFound",
+                    "Course offering not found or you don't have access to it.");
+        }
 
         var offering = await OfferingsWithNavigations()
             .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
@@ -895,160 +1214,91 @@ public sealed class CourseService(
 
         if (isPublished)
         {
-            var assessments = await dbContext.Assessments
+            var savedResult = await dbContext.StudentCourseResults
                 .AsNoTracking()
-                .Where(a => a.CourseOfferingId == offeringId)
-                .Include(a => a.AssessmentCategory)
-                .Include(a => a.Grades.Where(g => g.StudentId == studentId))
-                .ToListAsync(ct);
+                .FirstOrDefaultAsync(r => r.CourseOfferingId == offeringId && r.StudentId == studentId && r.IsPublished, ct);
 
-            if (assessments.Any())
+            if (savedResult != null)
             {
-                double ca1Obtained = 0, ca1Max = 0;
-                double ca2Obtained = 0, ca2Max = 0;
-                double ca3Obtained = 0, ca3Max = 0;
-                double examObtained = 0, examMax = 0;
-
-                foreach (var assessment in assessments)
-                {
-                    var studentGrade = assessment.Grades.FirstOrDefault();
-                    if (studentGrade == null) continue;
-
-                    double maxMarks = (double)assessment.MaxMarks;
-                    double obtained = (double)studentGrade.MarksObtained;
-
-                    var catType = assessment.AssessmentCategory.CategoryType;
-                    if (catType == AssessmentCategoryType.CA1)
-                    {
-                        ca1Obtained += obtained;
-                        ca1Max += maxMarks;
-                    }
-                    else if (catType == AssessmentCategoryType.CA2)
-                    {
-                        ca2Obtained += obtained;
-                        ca2Max += maxMarks;
-                    }
-                    else if (catType == AssessmentCategoryType.CA3)
-                    {
-                        ca3Obtained += obtained;
-                        ca3Max += maxMarks;
-                    }
-                    else if (assessment.AssessmentCategory.IsExamCategory || catType == AssessmentCategoryType.Exam)
-                    {
-                        examObtained += obtained;
-                        examMax += maxMarks;
-                    }
-                }
-
-                double ca1 = ca1Max > 0 ? (ca1Obtained / ca1Max) * 100 : 0;
-                double ca2 = ca2Max > 0 ? (ca2Obtained / ca2Max) * 100 : 0;
-                double ca3 = ca3Max > 0 ? (ca3Obtained / ca3Max) * 100 : 0;
-                double exam = examMax > 0 ? (examObtained / examMax) * 100 : 0;
-
-                var sysConfig = await dbContext.SystemGradingConfigurations
-                    .AsNoTracking()
-                    .OrderByDescending(x => x.UpdatedAt)
-                    .FirstOrDefaultAsync(ct);
-
-                double ca1Weight = sysConfig != null ? (double)sysConfig.DefaultCA1Weight : 15.0;
-                double ca2Weight = sysConfig != null ? (double)sysConfig.DefaultCA2Weight : 15.0;
-                double ca3Weight = sysConfig != null ? (double)sysConfig.DefaultCA3Weight : 15.0;
-                double examWeight = sysConfig != null ? (double)sysConfig.DefaultExamWeight : 55.0;
-
-                double total = 0;
-                if (sysConfig != null && sysConfig.DefaultGradingStyle == GradingStyle.Unweighted)
-                {
-                    var activeScores = new List<double>();
-                    if (ca1Max > 0) activeScores.Add(ca1);
-                    if (ca2Max > 0) activeScores.Add(ca2);
-                    if (ca3Max > 0) activeScores.Add(ca3);
-                    if (examMax > 0) activeScores.Add(exam);
-                    total = activeScores.Any() ? activeScores.Average() : 0;
-                }
-                else
-                {
-                    total = (ca1 * ca1Weight / 100.0) +
-                            (ca2 * ca2Weight / 100.0) +
-                            (ca3 * ca3Weight / 100.0) +
-                            (exam * examWeight / 100.0);
-                }
-
-                var mappings = string.IsNullOrEmpty(sysConfig?.LetterGradesMappingJson) || sysConfig.LetterGradesMappingJson == "[]"
-                    ? new List<GradeMappingDto>()
-                    : System.Text.Json.JsonSerializer.Deserialize<List<GradeMappingDto>>(sysConfig.LetterGradesMappingJson, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                      ?? new List<GradeMappingDto>();
-
-                var rStrategy = sysConfig?.RoundingStrategy ?? RoundingStrategy.Standard;
-                var decimalPlaces = sysConfig?.RoundingDecimalPlaces ?? 0;
-                var graceThreshold = sysConfig?.GraceThreshold ?? 0.0m;
-
-                var gradeResult = GradeCalculator.CalculateGrade(
-                    (decimal)total,
-                    rStrategy,
-                    decimalPlaces,
-                    graceThreshold,
-                    mappings);
-
                 gradeDto = new StudentCourseGradeDto(
-                    Math.Round(ca1, 2), Math.Round(ca2, 2), Math.Round(ca3, 2),
-                    Math.Round(exam, 2), (double)gradeResult.Score, gradeResult.LetterGrade, (double)gradeResult.GradePoints, true);
+                    (double?)savedResult.Ca1Score,
+                    (double?)savedResult.Ca2Score,
+                    (double?)savedResult.Ca3Score,
+                    (double?)savedResult.ExamScore,
+                    (double)savedResult.TotalScore,
+                    savedResult.LetterGrade,
+                    (double)savedResult.GradePoints,
+                    true);
             }
-
-            // Class analytics
-            var enrolledStudentIds = await dbContext.CourseEnrollments
-                .AsNoTracking()
-                .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
-                .Select(e => e.StudentId)
-                .ToListAsync(ct);
-
-            if (enrolledStudentIds.Count > 1)
+            else
             {
-                var allAssessments = await dbContext.Assessments
+                var assessments = await dbContext.Assessments
                     .AsNoTracking()
                     .Where(a => a.CourseOfferingId == offeringId)
                     .Include(a => a.AssessmentCategory)
-                    .Include(a => a.Grades.Where(g => enrolledStudentIds.Contains(g.StudentId)))
+                    .Include(a => a.Grades.Where(g => g.StudentId == studentId))
                     .ToListAsync(ct);
 
-                var studentTotals = new Dictionary<Guid, double>();
-                foreach (var sid in enrolledStudentIds)
+                if (assessments.Any())
                 {
-                    double t = 0;
-                    foreach (var assessment in allAssessments)
-                    {
-                        var g = assessment.Grades.FirstOrDefault(gr => gr.StudentId == sid);
-                        if (g == null) continue;
-                        double maxM = (double)assessment.MaxMarks;
-                        double w    = (double)assessment.AssessmentCategory.Weight;
-                        if (maxM > 0) t += ((double)g.MarksObtained / maxM) * w;
-                    }
-                    studentTotals[sid] = Math.Round(t, 1);
+                    var categories = await dbContext.AssessmentCategories
+                        .AsNoTracking()
+                        .Where(c => c.CourseOfferingId == offeringId)
+                        .ToListAsync(ct);
+
+                    var sysConfig = await dbContext.SystemGradingConfigurations
+                        .AsNoTracking()
+                        .OrderByDescending(x => x.UpdatedAt)
+                        .FirstOrDefaultAsync(ct) ?? new SystemGradingConfiguration();
+
+                    var calculated = gradeCalculationEngine.CalculateStudentGrade(
+                        studentId,
+                        assessments,
+                        categories,
+                        assessments.SelectMany(a => a.Grades).ToList(),
+                        sysConfig);
+
+                    gradeDto = new StudentCourseGradeDto(
+                        (double?)calculated.Ca1Score,
+                        (double?)calculated.Ca2Score,
+                        (double?)calculated.Ca3Score,
+                        (double?)calculated.ExamScore,
+                        (double)calculated.TotalScore,
+                        calculated.LetterGrade,
+                        (double)calculated.GradePoints,
+                        true);
+                }
+            }
+
+            // Class analytics from published student results
+            var publishedResults = await dbContext.StudentCourseResults
+                .AsNoTracking()
+                .Where(r => r.CourseOfferingId == offeringId && r.IsPublished)
+                .ToListAsync(ct);
+
+            if (publishedResults.Count > 1)
+            {
+                var scores = publishedResults.Select(r => (double)r.TotalScore).ToList();
+                double classAverage = scores.Average();
+                double? myScore = gradeDto?.TotalScore;
+
+                var buckets = new List<ScoreBucketDto>();
+                for (int start = 0; start < 100; start += 10)
+                {
+                    int end = start == 90 ? 100 : start + 9;
+                    int count = scores.Count(s => s >= start && s <= end);
+                    buckets.Add(new ScoreBucketDto(start, end, count));
                 }
 
-                var scores = studentTotals.Values.ToList();
-                if (scores.Count > 0)
+                int? percentile = null;
+                if (myScore.HasValue && scores.Count > 0)
                 {
-                    double classAverage = scores.Average();
-                    double? myScore     = studentTotals.TryGetValue(studentId, out var ms) ? ms : null;
-
-                    var buckets = new List<ScoreBucketDto>();
-                    for (int start = 0; start < 100; start += 10)
-                    {
-                        int end   = start == 90 ? 100 : start + 9;
-                        int count = scores.Count(s => s >= start && s <= end);
-                        buckets.Add(new ScoreBucketDto(start, end, count));
-                    }
-
-                    int? percentile = null;
-                    if (myScore.HasValue)
-                    {
-                        int below = scores.Count(s => s < myScore.Value);
-                        percentile = (int)Math.Round((double)below / scores.Count * 100);
-                    }
-
-                    analytics = new CourseClassAnalyticsDto(
-                        Math.Round(classAverage, 1), myScore, percentile, scores.Count, buckets);
+                    int below = scores.Count(s => s < myScore.Value);
+                    percentile = (int)Math.Round((double)below / scores.Count * 100);
                 }
+
+                analytics = new CourseClassAnalyticsDto(
+                    Math.Round(classAverage, 1), myScore, percentile, scores.Count, buckets);
             }
         }
 
@@ -1076,17 +1326,38 @@ public sealed class CourseService(
     {
         var roleLabel = role == CourseLecturerRole.Main ? "Main Lecturer" : "Co-Lecturer";
 
-        await notificationService.CreateAsync(new CreateNotificationRequest(
-            lecturer.Id, null,
-            "New Course Assignment",
-            $"You have been assigned as {roleLabel} for {course.Code} – {course.Title} ({sessionName}).",
-            "System",
-            "/dashboard/lecturer/courses"), ct);
+        try
+        {
+            await notificationService.CreateAsync(new CreateNotificationRequest(
+                lecturer.Id, null,
+                "New Course Assignment",
+                $"You have been assigned as {roleLabel} for {course.Code} – {course.Title} ({sessionName}).",
+                "System",
+                "/dashboard/lecturer/courses"), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to create notification for lecturer {LecturerId} on course {CourseCode}",
+                lecturer.Id, course.Code);
+        }
 
         if (!string.IsNullOrEmpty(lecturer.Email))
-            await emailService.SendCourseAssignmentEmailAsync(
-                lecturer.Email, lecturer.DisplayName ?? "Lecturer",
-                course.Code, course.Title, sessionName);
+        {
+            try
+            {
+                await emailService.SendCourseAssignmentEmailAsync(
+                    lecturer.Email, lecturer.DisplayName ?? "Lecturer",
+                    course.Code, course.Title, sessionName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send assignment email to lecturer {LecturerId} ({Email})",
+                    lecturer.Id, lecturer.Email);
+
+                await LogActionAsync("EmailFailed", "CourseOfferingLecturer", lecturer.Id.ToString(),
+                    $"Failed to send assignment email to lecturer {lecturer.DisplayName ?? "Lecturer"} ({lecturer.Email}) for {course.Code}: {ex.Message}", ct);
+            }
+        }
     }
 
     private static LecturerCourseOfferingDto BuildLecturerCourseOfferingDto(
@@ -1111,4 +1382,375 @@ public sealed class CourseService(
             sessionCount,
             isPublished);
     }
+
+    // ─── Admin Batch Registration ──────────────────────────────────────────────
+
+    public async Task<ErrorOr<List<OfferingEnrolledStudentDto>>> GetOfferingEnrolledStudentsAsync(
+        Guid offeringId, Guid? lecturerId = null, bool bypassLecturerCheck = true, CancellationToken ct = default)
+    {
+        if (!bypassLecturerCheck && lecturerId.HasValue)
+        {
+            var isAssigned = await dbContext.CourseOfferingLecturers
+                .AnyAsync(col => col.CourseOfferingId == offeringId && col.LecturerId == lecturerId.Value, ct);
+
+            if (!isAssigned)
+                return Error.Forbidden("Course.NotAssigned", "You are not assigned to this course offering.");
+        }
+
+        var offering = await dbContext.CourseOfferings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        if (offering is null)
+            return DomainErrors.Course.OfferingNotFound;
+
+        var enrollments = await dbContext.CourseEnrollments
+            .AsNoTracking()
+            .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
+            .Include(e => e.Student)
+            .OrderByDescending(e => e.RegisteredAtUtc)
+            .ToListAsync(ct);
+
+        var studentUserIds = enrollments.Select(e => e.StudentId).Distinct().ToList();
+
+        var students = await dbContext.Students
+            .AsNoTracking()
+            .Include(s => s.AcademicProgram)
+            .Include(s => s.Level)
+            .Where(s => studentUserIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        var result = new List<OfferingEnrolledStudentDto>();
+        foreach (var e in enrollments)
+        {
+            students.TryGetValue(e.StudentId, out var s);
+            var firstName = s?.FirstName ?? e.Student?.DisplayName?.Split(' ').FirstOrDefault() ?? "Unknown";
+            var lastName = s?.LastName ?? (e.Student?.DisplayName?.Split(' ').Length > 1 ? string.Join(" ", e.Student.DisplayName.Split(' ').Skip(1)) : "");
+            var middleName = s?.MiddleName;
+            var matricNumber = s?.StudentNumber ?? "N/A";
+            var email = s?.OfficialEmail ?? e.Student?.Email ?? "";
+            var programName = s?.AcademicProgram?.Name;
+            var levelName = s?.Level?.Name;
+
+            result.Add(new OfferingEnrolledStudentDto(
+                e.StudentId,
+                matricNumber,
+                firstName,
+                lastName,
+                middleName,
+                email,
+                programName,
+                levelName,
+                e.Status,
+                e.RegisteredAtUtc));
+        }
+
+        return result;
+    }
+
+    public async Task<ErrorOr<BatchRegistrationResultDto>> BatchRegisterStudentsAsync(
+        BatchRegisterStudentsRequest request, Guid currentUserId, bool bypassLecturerCheck = false, CancellationToken ct = default)
+    {
+        if (request.CourseOfferingId == Guid.Empty)
+        {
+            return Error.Validation("CourseOfferingId.Required", "Course offering ID is required.");
+        }
+
+        if (request.StudentIds == null || request.StudentIds.Count == 0)
+        {
+            return Error.Validation("StudentIds.Required", "At least one student must be selected.");
+        }
+
+        if (!bypassLecturerCheck)
+        {
+            var isAssigned = await dbContext.CourseOfferingLecturers
+                .AnyAsync(col => col.CourseOfferingId == request.CourseOfferingId && col.LecturerId == currentUserId, ct);
+
+            if (!isAssigned)
+            {
+                return Error.Forbidden("Course.NotAssigned", "You are not assigned to this course offering.");
+            }
+        }
+
+        var offering = await dbContext.CourseOfferings
+            .Include(co => co.Course)
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == request.CourseOfferingId, ct);
+
+        if (offering is null)
+            return DomainErrors.Course.OfferingNotFound;
+
+        var studentIds = request.StudentIds.Distinct().ToList();
+
+        // Query students
+        var students = await dbContext.Students
+            .Include(s => s.AcademicProgram)
+            .Include(s => s.Level)
+            .Where(s => studentIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        // Fetch existing enrollments for this offering
+        var existingEnrollments = await dbContext.CourseEnrollments
+            .Where(e => e.CourseOfferingId == offering.Id && studentIds.Contains(e.StudentId))
+            .ToDictionaryAsync(e => e.StudentId, ct);
+
+        // Also fetch existing users to ensure foreign key constraint on CourseEnrollment.StudentId (AppUser)
+        var existingUsers = await dbContext.Users
+            .Where(u => studentIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        // Get Student Role if needed
+        var studentRoleId = await dbContext.Roles
+            .Where(r => r.Name == "Student")
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(ct);
+
+        var results = new List<BatchRegistrationStudentResultDto>();
+        int successfullyRegistered = 0;
+        int alreadyRegistered = 0;
+        int failed = 0;
+        var now = DateTime.UtcNow;
+
+        foreach (var studentId in studentIds)
+        {
+            if (!students.TryGetValue(studentId, out var student) && !existingUsers.ContainsKey(studentId))
+            {
+                failed++;
+                results.Add(new BatchRegistrationStudentResultDto(
+                    studentId,
+                    "Unknown",
+                    "N/A",
+                    "Failed",
+                    "Student record not found."));
+                continue;
+            }
+
+            var studentName = student != null 
+                ? $"{student.FirstName} {student.LastName}".Trim() 
+                : (existingUsers.TryGetValue(studentId, out var u) ? u.DisplayName ?? u.Email : "Unknown");
+            var matricNumber = student?.StudentNumber ?? "N/A";
+
+            // Ensure AppUser exists for this studentId
+            if (!existingUsers.ContainsKey(studentId) && student != null)
+            {
+                var newUser = new AppUser
+                {
+                    Id = student.Id,
+                    EntraObjectId = string.IsNullOrWhiteSpace(student.EntraObjectId) ? $"student:{student.Id}" : student.EntraObjectId,
+                    Username = !string.IsNullOrWhiteSpace(student.OfficialEmail) ? student.OfficialEmail : $"student_{student.Id:N}",
+                    Email = !string.IsNullOrWhiteSpace(student.OfficialEmail) ? student.OfficialEmail : student.PersonalEmail,
+                    DisplayName = studentName,
+                    IsActive = true,
+                    CreatedUtc = now,
+                    UpdatedUtc = now
+                };
+                dbContext.Users.Add(newUser);
+                existingUsers[student.Id] = newUser;
+
+                if (studentRoleId.HasValue)
+                {
+                    dbContext.UserRoles.Add(new UserRole
+                    {
+                        UserId = newUser.Id,
+                        RoleId = studentRoleId.Value,
+                        AssignedUtc = now
+                    });
+                }
+            }
+
+            // Check existing enrollment
+            if (existingEnrollments.TryGetValue(studentId, out var existingEnrollment))
+            {
+                if (existingEnrollment.Status == "Registered")
+                {
+                    alreadyRegistered++;
+                    results.Add(new BatchRegistrationStudentResultDto(
+                        studentId,
+                        studentName,
+                        matricNumber,
+                        "AlreadyRegistered",
+                        "Student is already registered for this course offering."));
+                    continue;
+                }
+
+                // If Dropped or any other status, reinstate to Registered
+                existingEnrollment.Status = "Registered";
+                existingEnrollment.RegisteredAtUtc = now;
+                existingEnrollment.DroppedAtUtc = null;
+                existingEnrollment.UpdatedById = currentUserId;
+
+                successfullyRegistered++;
+                results.Add(new BatchRegistrationStudentResultDto(
+                    studentId,
+                    studentName,
+                    matricNumber,
+                    "Registered",
+                    "Student registration reactivated."));
+            }
+            else
+            {
+                var newEnrollment = new CourseEnrollment
+                {
+                    Id = Guid.NewGuid(),
+                    StudentId = studentId,
+                    CourseOfferingId = offering.Id,
+                    Status = "Registered",
+                    RegisteredAtUtc = now,
+                    CreatedById = currentUserId
+                };
+                dbContext.CourseEnrollments.Add(newEnrollment);
+                existingEnrollments[studentId] = newEnrollment;
+
+                successfullyRegistered++;
+                results.Add(new BatchRegistrationStudentResultDto(
+                    studentId,
+                    studentName,
+                    matricNumber,
+                    "Registered",
+                    "Student successfully registered."));
+            }
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        await LogActionAsync("BatchRegisterStudents", "CourseOffering", offering.Id.ToString(),
+            $"Batch registered {successfullyRegistered} student(s) to offering {offering.Course.Code} ({offering.Id}) by user {currentUserId}", ct);
+
+        return new BatchRegistrationResultDto(
+            offering.Id,
+            offering.Course.Code,
+            offering.Course.Title,
+            offering.AcademicSession?.Name ?? "Unknown Session",
+            (int)offering.Semester,
+            studentIds.Count,
+            successfullyRegistered,
+            alreadyRegistered,
+            failed,
+            results);
+    }
+
+    public async Task<ErrorOr<BatchUnregisterResultDto>> BatchUnregisterStudentsAsync(
+        BatchUnregisterStudentsRequest request, Guid currentUserId, bool bypassLecturerCheck = false, CancellationToken ct = default)
+    {
+        if (request.CourseOfferingId == Guid.Empty)
+        {
+            return Error.Validation("CourseOfferingId.Required", "Course offering ID is required.");
+        }
+
+        if (request.StudentIds == null || request.StudentIds.Count == 0)
+        {
+            return Error.Validation("StudentIds.Required", "At least one student must be selected.");
+        }
+
+        if (!bypassLecturerCheck)
+        {
+            var isAssigned = await dbContext.CourseOfferingLecturers
+                .AnyAsync(col => col.CourseOfferingId == request.CourseOfferingId && col.LecturerId == currentUserId, ct);
+
+            if (!isAssigned)
+            {
+                return Error.Forbidden("Course.NotAssigned", "You are not assigned to this course offering.");
+            }
+        }
+
+        var offering = await dbContext.CourseOfferings
+            .Include(co => co.Course)
+            .Include(co => co.AcademicSession)
+            .FirstOrDefaultAsync(co => co.Id == request.CourseOfferingId, ct);
+
+        if (offering is null)
+            return DomainErrors.Course.OfferingNotFound;
+
+        var isPublished = await dbContext.GradePublications
+            .AnyAsync(x => x.CourseOfferingId == offering.Id && x.IsVisibleToStudents, ct);
+        if (isPublished)
+        {
+            return Error.Conflict("Registration.GradesPublished", "You cannot drop a course once its results have been published.");
+        }
+
+        var studentIds = request.StudentIds.Distinct().ToList();
+
+        var students = await dbContext.Students
+            .Where(s => studentIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        var existingUsers = await dbContext.Users
+            .Where(u => studentIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, ct);
+
+        var enrollments = await dbContext.CourseEnrollments
+            .Where(e => e.CourseOfferingId == offering.Id && studentIds.Contains(e.StudentId))
+            .ToDictionaryAsync(e => e.StudentId, ct);
+
+        var results = new List<BatchUnregisterStudentResultDto>();
+        int successfullyUnregistered = 0;
+        int alreadyUnregistered = 0;
+        int failed = 0;
+        var now = DateTime.UtcNow;
+
+        foreach (var studentId in studentIds)
+        {
+            students.TryGetValue(studentId, out var student);
+            existingUsers.TryGetValue(studentId, out var user);
+
+            var studentName = student != null 
+                ? $"{student.FirstName} {student.LastName}".Trim() 
+                : (user?.DisplayName ?? user?.Email ?? "Unknown");
+            var matricNumber = student?.StudentNumber ?? "N/A";
+
+            if (!enrollments.TryGetValue(studentId, out var enrollment))
+            {
+                alreadyUnregistered++;
+                results.Add(new BatchUnregisterStudentResultDto(
+                    studentId,
+                    studentName,
+                    matricNumber,
+                    "NotEnrolled",
+                    "Student is not enrolled in this course offering."));
+                continue;
+            }
+
+            if (enrollment.Status == "Dropped")
+            {
+                alreadyUnregistered++;
+                results.Add(new BatchUnregisterStudentResultDto(
+                    studentId,
+                    studentName,
+                    matricNumber,
+                    "AlreadyDropped",
+                    "Student enrollment is already dropped."));
+                continue;
+            }
+
+            enrollment.Status = "Dropped";
+            enrollment.DroppedAtUtc = now;
+            enrollment.UpdatedById = currentUserId;
+
+            successfullyUnregistered++;
+            results.Add(new BatchUnregisterStudentResultDto(
+                studentId,
+                studentName,
+                matricNumber,
+                "Dropped",
+                "Student course enrollment successfully dropped."));
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+
+        await LogActionAsync("BatchUnregisterStudents", "CourseOffering", offering.Id.ToString(),
+            $"Batch dropped/unregistered {successfullyUnregistered} student(s) from offering {offering.Course.Code} ({offering.Id}) by user {currentUserId}", ct);
+
+        return new BatchUnregisterResultDto(
+            offering.Id,
+            offering.Course.Code,
+            offering.Course.Title,
+            offering.AcademicSession?.Name ?? "Unknown Session",
+            (int)offering.Semester,
+            studentIds.Count,
+            successfullyUnregistered,
+            alreadyUnregistered,
+            failed,
+            results);
+    }
 }
+

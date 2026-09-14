@@ -722,15 +722,22 @@ public sealed class AdmissionService(
         var memoPdf = await pdfService.GenerateAdvancePaymentMemoAsync();
         var fullName = $"{app.FirstName} {app.MiddleName} {app.LastName}".Trim();
 
-        await emailService.SendAdmissionOfferEmailAsync(
-            toEmail: app.StudentEmail,
-            studentName: fullName,
-            programName: app.AcademicProgram?.Name ?? "Selected Program",
-            pdfAttachment: pdf,
-            fileName: "Admission_Letter.pdf",
-            secondAttachment: memoPdf,
-            secondFileName: "Advance_Payment_Memo.pdf"
-        );
+        try
+        {
+            await emailService.SendAdmissionOfferEmailAsync(
+                toEmail: app.StudentEmail,
+                studentName: fullName,
+                programName: app.AcademicProgram?.Name ?? "Selected Program",
+                pdfAttachment: pdf,
+                fileName: "Admission_Letter.pdf",
+                secondAttachment: memoPdf,
+                secondFileName: "Advance_Payment_Memo.pdf"
+            );
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[RESEND-OFFER-ERROR] Failed to resend offer letter email to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
+        }
 
         // Refresh offer expiry to give another 14 days from resend
         app.OfferExpiresAt = DateTime.UtcNow.AddDays(14);
@@ -747,6 +754,41 @@ public sealed class AdmissionService(
 
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("[RESEND-OFFER] Offer letter resent to {Email} for application {Id}", app.StudentEmail, app.Id);
+
+        return app;
+    }
+
+    public async Task<byte[]> GenerateOfferLetterPdfAsync(Guid applicationId, CancellationToken ct = default)
+    {
+        var app = await LoadAdmittedApplicationAsync(applicationId, ct);
+        var templateType = app.AcademicProgram?.Type switch
+        {
+            LMS.Api.Data.Enums.ProgramType.Postgraduate => "Postgraduate",
+            _ => "Undergraduate"
+        };
+        return await pdfService.GenerateOfferLetterAsync(app, templateType);
+    }
+
+    public async Task<byte[]> GenerateAdvancePaymentMemoPdfAsync(Guid applicationId, CancellationToken ct = default)
+    {
+        _ = await LoadAdmittedApplicationAsync(applicationId, ct);
+        return await pdfService.GenerateAdvancePaymentMemoAsync();
+    }
+
+    private async Task<AdmissionApplication> LoadAdmittedApplicationAsync(Guid applicationId, CancellationToken ct)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.Faculty)
+            .Include(a => a.AcademicProgram)
+            .Include(a => a.Documents).ThenInclude(d => d.DocumentType)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+            throw new KeyNotFoundException("Application not found.");
+
+        if (app.Status != AdmissionStatus.Admitted && app.Status != AdmissionStatus.OfferAccepted && app.Status != AdmissionStatus.FeePaid)
+            throw new InvalidOperationException($"Offer letter can only be generated for applications with status 'Admitted', 'OfferAccepted' or 'FeePaid'. Current status: {app.Status}.");
 
         return app;
     }
@@ -781,6 +823,74 @@ public sealed class AdmissionService(
 
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("[UNDO-REJECTION] Application {Id} restored from Rejected to {Status}", app.Id, previousStatus);
+
+        return app;
+    }
+
+    public async Task<AdmissionApplication> UpdateApplicantEmailAsync(Guid applicationId, string newEmail, Guid? updatedBy = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(newEmail))
+        {
+            throw new ArgumentException("Email address cannot be empty.", nameof(newEmail));
+        }
+
+        var normalizedEmail = newEmail.Trim().ToLowerInvariant();
+        if (!Regex.IsMatch(normalizedEmail, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            throw new ArgumentException("Provided email address format is invalid.", nameof(newEmail));
+        }
+
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.Faculty)
+            .Include(a => a.AcademicProgram)
+            .Include(a => a.StartingLevel)
+            .Include(a => a.Documents).ThenInclude(d => d.DocumentType)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+            throw new KeyNotFoundException("Application not found.");
+
+        var oldEmail = app.StudentEmail;
+        if (string.Equals(oldEmail, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return app;
+        }
+
+        app.StudentEmail = normalizedEmail;
+        app.UpdatedAt = DateTime.UtcNow;
+
+        // Synchronize linked Student record if already created
+        var student = await dbContext.Students
+            .FirstOrDefaultAsync(s => s.AdmissionApplicationId == app.Id || (app.StudentId.HasValue && s.Id == app.StudentId.Value), ct);
+        if (student != null)
+        {
+            student.PersonalEmail = normalizedEmail;
+            student.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Synchronize temporary applicant user record if exists
+        var user = await dbContext.Users
+            .FirstOrDefaultAsync(u => u.Email == oldEmail || u.EntraObjectId == $"admission:{app.Id}", ct);
+        if (user != null)
+        {
+            user.Email = normalizedEmail;
+            user.UpdatedUtc = DateTime.UtcNow;
+        }
+
+        dbContext.AuditLogs.Add(new AuditLog
+        {
+            Action = "Update Applicant Email",
+            EntityName = nameof(AdmissionApplication),
+            EntityId = app.Id.ToString(),
+            Changes = $"Applicant email updated from '{oldEmail}' to '{normalizedEmail}' for Application {app.ApplicationNumber}",
+            UserId = updatedBy,
+            Timestamp = DateTime.UtcNow
+        });
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("[UPDATE-APPLICANT-EMAIL] Application {Id} ({AppNo}) email updated from {OldEmail} to {NewEmail} by User {UserId}",
+            app.Id, app.ApplicationNumber, oldEmail, normalizedEmail, updatedBy);
 
         return app;
     }
@@ -834,7 +944,6 @@ public sealed class AdmissionService(
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "[ADMITTED-ERROR] Failed to send admission offer email to {Email} for application {ApplicationId}", app.StudentEmail, app.Id);
-                        throw;
                     }
                     break;
 

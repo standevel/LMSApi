@@ -20,8 +20,7 @@ public sealed class BulkPublishGradesEndpoint : ApiEndpoint<BulkPublishGradesReq
     public override void Configure()
     {
         Post("gradebook/bulk-publish");
-        Roles("SuperAdmin", "Admin", "Dean");
-        AllowAnonymous(); // Handled by Roles validation but allows token validation to occur
+        Roles("SuperAdmin", "Admin", "Lecturer");
         Tags("Gradebook");
     }
 

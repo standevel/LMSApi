@@ -260,7 +260,7 @@ public class GpaCalculationService : BaseService, IGpaCalculationService
 
         if (sysConfig.DefaultGradingStyle == GradingStyle.Unweighted)
         {
-            return percentages.Average(x => x.Percentage);
+            return usableGrades.Sum(x => x.MarksObtained);
         }
 
         return percentages

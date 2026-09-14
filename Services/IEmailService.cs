@@ -21,6 +21,8 @@ public interface IEmailService
     Task SendTestEmailAsync(string toEmail, string subject, string message);
     Task SendApplicationReminderEmailAsync(string toEmail, string studentName, string applicationNumber, AdmissionStatus status);
     Task SendBulkApplicationRemindersAsync(IEnumerable<(string Email, string StudentName, string ApplicationNumber, AdmissionStatus Status)> recipients);
-    Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, bool isNewAccount);
+    Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, string? temporaryPassword, bool isNewAccount, string? portalUrl = null);
+    Task SendGuardianCredentialsResentEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, string temporaryPassword, string? portalUrl = null);
+    Task SendPasswordResetEmailAsync(string toEmail, string userName, string resetUrl);
     Task SendCourseAssignmentEmailAsync(string toEmail, string lecturerName, string courseCode, string courseTitle, string sessionName);
 }

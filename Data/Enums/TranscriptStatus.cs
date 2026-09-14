@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
+
 namespace LMS.Api.Data.Enums;
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TranscriptStatus
 {
     Pending = 1,

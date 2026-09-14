@@ -4,9 +4,11 @@ using LMS.Api.Contracts;
 using LMS.Api.Security;
 using LMS.Api.Services;
 using LMS.Api.Data;
+using LMS.Api.Data.Entities;
 using LMS.Api.Data.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 
 namespace LMS.Api.Endpoints.Parents;
 
@@ -59,7 +61,8 @@ public sealed class GetLinkedStudentsEndpoint(
 public sealed class GetStudentProgressEndpoint(
     IParentPortalService parentPortalService,
     ICurrentUserContext currentUserContext,
-    LmsDbContext dbContext)
+    LmsDbContext dbContext,
+    IParentAuthorizationService authService)
     : ApiEndpoint<GetStudentProgressEndpoint.GetStudentProgressRequest, StudentProgressDto>
 {
     public class GetStudentProgressRequest
@@ -83,9 +86,17 @@ public sealed class GetStudentProgressEndpoint(
             return;
         }
 
-        if (!await ParentPortalAuthorization.IsParentLinkedToStudentAsync(dbContext, userId.Value, req.StudentId, ct))
+        var guardian = await dbContext.ParentGuardians.FirstOrDefaultAsync(pg => pg.UserId == userId.Value, ct);
+        if (guardian == null)
         {
             await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Parent is not linked to this student.", ct);
+            return;
+        }
+
+        var access = await authService.CanAccessAsync(guardian.Id, req.StudentId, ParentAccessCategory.AcademicResults, ct);
+        if (access.IsError)
+        {
+            await SendFailureAsync(403, "Forbidden", access.FirstError.Code, access.FirstError.Description, ct);
             return;
         }
 
@@ -101,7 +112,8 @@ public sealed class GetStudentProgressEndpoint(
 public sealed class GetStudentGradesEndpoint(
     IParentPortalService parentPortalService,
     ICurrentUserContext currentUserContext,
-    LmsDbContext dbContext)
+    LmsDbContext dbContext,
+    IParentAuthorizationService authService)
     : ApiEndpoint<GetStudentGradesEndpoint.GetStudentGradesRequest, StudentGradesDto>
 {
     public class GetStudentGradesRequest
@@ -125,9 +137,17 @@ public sealed class GetStudentGradesEndpoint(
             return;
         }
 
-        if (!await ParentPortalAuthorization.IsParentLinkedToStudentAsync(dbContext, userId.Value, req.StudentId, ct))
+        var guardian = await dbContext.ParentGuardians.FirstOrDefaultAsync(pg => pg.UserId == userId.Value, ct);
+        if (guardian == null)
         {
             await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Parent is not linked to this student.", ct);
+            return;
+        }
+
+        var access = await authService.CanAccessAsync(guardian.Id, req.StudentId, ParentAccessCategory.AcademicResults, ct);
+        if (access.IsError)
+        {
+            await SendFailureAsync(403, "Forbidden", access.FirstError.Code, access.FirstError.Description, ct);
             return;
         }
 
@@ -140,7 +160,11 @@ public sealed class GetStudentGradesEndpoint(
     }
 }
 
-public sealed class SendMessageToStudentEndpoint(IParentPortalService parentPortalService, ICurrentUserContext currentUserContext)
+public sealed class SendMessageToStudentEndpoint(
+    IParentPortalService parentPortalService,
+    ICurrentUserContext currentUserContext,
+    LmsDbContext dbContext,
+    IParentAuthorizationService authService)
     : ApiEndpoint<SendMessageToStudentEndpoint.SendMessageToStudentRequest, bool>
 {
     public class SendMessageToStudentRequest
@@ -166,6 +190,20 @@ public sealed class SendMessageToStudentEndpoint(IParentPortalService parentPort
             return;
         }
 
+        var guardian = await dbContext.ParentGuardians.FirstOrDefaultAsync(pg => pg.UserId == userId.Value, ct);
+        if (guardian == null)
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Parent is not linked to this student.", ct);
+            return;
+        }
+
+        var access = await authService.CanAccessAsync(guardian.Id, req.StudentId, ParentAccessCategory.PrivateMessages, ct);
+        if (access.IsError)
+        {
+            await SendFailureAsync(403, "Forbidden", access.FirstError.Code, access.FirstError.Description, ct);
+            return;
+        }
+
         var content = string.IsNullOrWhiteSpace(req.Subject)
             ? req.Content
             : $"{req.Subject.Trim()}\n\n{req.Content}";
@@ -174,7 +212,7 @@ public sealed class SendMessageToStudentEndpoint(IParentPortalService parentPort
     }
 }
 
-public sealed class CreateParentGuardianEndpoint(LmsDbContext dbContext)
+public sealed class CreateParentGuardianEndpoint(LmsDbContext dbContext, IPasswordHasher<AppUser> passwordHasher)
     : ApiEndpoint<CreateParentGuardianRequest, ParentGuardianDto>
 {
     public override void Configure()
@@ -212,7 +250,18 @@ public sealed class CreateParentGuardianEndpoint(LmsDbContext dbContext)
                 CreatedUtc = now,
                 UpdatedUtc = now
             };
+            var tempPass = "Parent@" + Guid.NewGuid().ToString("N")[..6] + "!";
+            user.PasswordHash = passwordHasher.HashPassword(user, tempPass);
             dbContext.Users.Add(user);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(user.PasswordHash))
+            {
+                var tempPass = "Parent@" + Guid.NewGuid().ToString("N")[..6] + "!";
+                user.PasswordHash = passwordHasher.HashPassword(user, tempPass);
+                user.UpdatedUtc = now;
+            }
         }
 
         var parentRoleId = await dbContext.Roles
@@ -238,6 +287,14 @@ public sealed class CreateParentGuardianEndpoint(LmsDbContext dbContext)
                 DateAddedUtc = now
             };
             dbContext.ParentGuardians.Add(guardian);
+        }
+        else
+        {
+            guardian.UserId = user.Id;
+            guardian.FirstName = string.IsNullOrWhiteSpace(guardian.FirstName) ? firstName : guardian.FirstName;
+            guardian.LastName = string.IsNullOrWhiteSpace(guardian.LastName) ? lastName : guardian.LastName;
+            guardian.PhoneNumber = string.IsNullOrWhiteSpace(guardian.PhoneNumber) ? (req.Phone?.Trim() ?? string.Empty) : guardian.PhoneNumber;
+            guardian.Email = string.IsNullOrWhiteSpace(guardian.Email) ? email : guardian.Email;
         }
 
         if (!await dbContext.FamilyCommunicationPreferences.AnyAsync(p => p.ParentGuardianId == guardian.Id, ct))
@@ -354,6 +411,125 @@ public sealed class UpdateFamilyCommunicationPreferenceEndpoint(LmsDbContext dbC
             preference.ReceiveAcademicUpdates,
             preference.ReceiveAttendanceAlerts,
             preference.ReceiveGradeUpdates), ct);
+    }
+}
+
+public sealed class GetParentAccessPolicyEndpoint(
+    ICurrentUserContext currentUserContext,
+    LmsDbContext dbContext,
+    IParentAuthorizationService authService)
+    : ApiEndpointWithoutRequest<List<ParentAccessPolicyEntry>>
+{
+    public override void Configure()
+    {
+        Get("parents/students/{StudentId:guid}/access-policy");
+        Roles("Parent");
+        Tags("Parents");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var studentId = Route<Guid>("StudentId");
+        var guardian = await dbContext.ParentGuardians.FirstOrDefaultAsync(pg => pg.UserId == userId.Value, ct);
+        if (guardian == null)
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Parent is not linked to this student.", ct);
+            return;
+        }
+
+        var categories = Enum.GetValues<ParentAccessCategory>().Cast<ParentAccessCategory>().ToList();
+        var policy = new List<ParentAccessPolicyEntry>();
+        foreach (var category in categories)
+        {
+            var access = await authService.CanAccessAsync(guardian.Id, studentId, category, ct);
+            policy.Add(new ParentAccessPolicyEntry((int)category, access.IsError ? false : access.Value));
+        }
+
+        await SendSuccessAsync(policy, ct);
+    }
+}
+
+public sealed class SetStudentConsentEndpoint(LmsDbContext dbContext, ICurrentUserContext currentUserContext)
+    : ApiEndpoint<SetStudentConsentEndpoint.SetStudentConsentRequest, ParentAccessPolicyEntry>
+{
+    public class SetStudentConsentRequest
+    {
+        [Microsoft.AspNetCore.Mvc.FromRoute] public Guid StudentId { get; set; }
+        public int Category { get; set; }
+        public bool IsAllowed { get; set; }
+    }
+
+    public override void Configure()
+    {
+        Post("students/{StudentId:guid}/parent-access-consent");
+        Roles("Student", "Admin", "SuperAdmin", "Registrar");
+        Tags("Students");
+    }
+
+    public override async Task HandleAsync(SetStudentConsentRequest req, CancellationToken ct)
+    {
+        if (!Enum.IsDefined(typeof(ParentAccessCategory), req.Category))
+        {
+            await SendFailureAsync(400, "Invalid category", "INVALID_CATEGORY", "Unknown access category.", ct);
+            return;
+        }
+
+        var userId = await currentUserContext.GetUserIdAsync(ct);
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User not authenticated", ct);
+            return;
+        }
+
+        var student = await dbContext.Students.FirstOrDefaultAsync(s => s.Id == req.StudentId, ct);
+        if (student == null)
+        {
+            await SendFailureAsync(404, "Student not found.", "NOT_FOUND", "Student not found.", ct);
+            return;
+        }
+
+        var isStudentSelf = await dbContext.Users.AnyAsync(u =>
+            u.Id == userId.Value && (
+                (!string.IsNullOrWhiteSpace(student.EntraObjectId) && u.EntraObjectId == student.EntraObjectId) ||
+                u.EntraObjectId == $"student:{student.Id}" ||
+                (!string.IsNullOrWhiteSpace(student.OfficialEmail) && u.Email == student.OfficialEmail)),
+            ct);
+
+        var isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin") || User.IsInRole("Registrar");
+        if (!isStudentSelf && !isAdmin)
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Only the student can set their own consent.", ct);
+            return;
+        }
+
+        var existing = await dbContext.ParentStudentConsents
+            .FirstOrDefaultAsync(c => c.StudentId == req.StudentId && c.Category == req.Category, ct);
+
+        if (existing == null)
+        {
+            existing = new ParentStudentConsent
+            {
+                Id = Guid.NewGuid(),
+                StudentId = req.StudentId,
+                Category = req.Category,
+                SetById = userId.Value
+            };
+            dbContext.ParentStudentConsents.Add(existing);
+        }
+
+        existing.IsAllowed = req.IsAllowed;
+        existing.SetAtUtc = DateTime.UtcNow;
+        existing.SetById = userId.Value;
+
+        await dbContext.SaveChangesAsync(ct);
+        await SendSuccessAsync(new ParentAccessPolicyEntry(req.Category, req.IsAllowed), ct);
     }
 }
 

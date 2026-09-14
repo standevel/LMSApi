@@ -12,10 +12,24 @@ public sealed class AcademicSessionDto
     public bool IsAdmissionOpen { get; set; }
     public bool IsAdmissionActive { get; set; }
     public LMS.Api.Data.Enums.Semester ActiveSemester { get; set; }
+    public bool IsRegistrationOpen { get; set; }
+    public DateTime? RegistrationStartDate { get; set; }
+    public DateTime? RegistrationEndDate { get; set; }
 
     public AcademicSessionDto() { }
 
-    public AcademicSessionDto(Guid id, string name, DateTime startDate, DateTime endDate, bool isActive, LMS.Api.Data.Enums.Semester activeSemester, bool isAdmissionOpen, bool isAdmissionActive)
+    public AcademicSessionDto(
+        Guid id,
+        string name,
+        DateTime startDate,
+        DateTime endDate,
+        bool isActive,
+        LMS.Api.Data.Enums.Semester activeSemester,
+        bool isAdmissionOpen,
+        bool isAdmissionActive,
+        bool isRegistrationOpen = false,
+        DateTime? registrationStartDate = null,
+        DateTime? registrationEndDate = null)
     {
         Id = id;
         Name = name;
@@ -25,6 +39,9 @@ public sealed class AcademicSessionDto
         ActiveSemester = activeSemester;
         IsAdmissionOpen = isAdmissionOpen;
         IsAdmissionActive = isAdmissionActive;
+        IsRegistrationOpen = isRegistrationOpen;
+        RegistrationStartDate = registrationStartDate;
+        RegistrationEndDate = registrationEndDate;
     }
 }
 
@@ -37,6 +54,9 @@ public sealed class CreateAcademicSessionRequest
     public bool IsAdmissionOpen { get; set; }
     public bool IsAdmissionActive { get; set; }
     public LMS.Api.Data.Enums.Semester ActiveSemester { get; set; }
+    public bool IsRegistrationOpen { get; set; }
+    public DateTime? RegistrationStartDate { get; set; }
+    public DateTime? RegistrationEndDate { get; set; }
 }
 
 public sealed class UpdateAcademicSessionRequest
@@ -48,6 +68,16 @@ public sealed class UpdateAcademicSessionRequest
     public bool IsAdmissionOpen { get; set; }
     public bool IsAdmissionActive { get; set; }
     public LMS.Api.Data.Enums.Semester ActiveSemester { get; set; }
+    public bool IsRegistrationOpen { get; set; }
+    public DateTime? RegistrationStartDate { get; set; }
+    public DateTime? RegistrationEndDate { get; set; }
+}
+
+public sealed class StartRegistrationRequest
+{
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public bool RunAutoRegistration { get; set; }
 }
 
 public sealed class SessionRolloverRequest

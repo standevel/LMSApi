@@ -57,7 +57,8 @@ public record CreateCourseOfferingRequest(
     Guid AcademicSessionId,
     int Semester,
     Guid? ProgramId = null,
-    Guid? LevelId = null);
+    Guid? LevelId = null,
+    Guid? LecturerId = null);
 
 /// <summary>Creates a course. If offerings include program+level, they will be attached automatically.</summary>
 public record CreateCourseRequest(
@@ -106,3 +107,64 @@ public record BulkAssignLecturersRequest(List<OfferingAssignment> Assignments);
 public record BulkAssignLecturersResult(
     List<CourseOfferingDto> Updated,
     List<string> Errors);
+
+// ─── Admin Batch Course Registration ──────────────────────────────────────────
+
+public record BatchRegisterStudentsRequest(
+    Guid CourseOfferingId,
+    List<Guid> StudentIds);
+
+public record BatchRegistrationStudentResultDto(
+    Guid StudentId,
+    string? StudentName,
+    string? StudentNumber,
+    string Status,
+    string? Message);
+
+public record BatchRegistrationResultDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    string AcademicSessionName,
+    int Semester,
+    int TotalRequested,
+    int SuccessfullyRegistered,
+    int AlreadyRegistered,
+    int Failed,
+    List<BatchRegistrationStudentResultDto> Results);
+
+public record BatchUnregisterStudentsRequest(
+    Guid CourseOfferingId,
+    List<Guid> StudentIds);
+
+public record BatchUnregisterStudentResultDto(
+    Guid StudentId,
+    string? StudentName,
+    string? StudentNumber,
+    string Status,
+    string? Message);
+
+public record BatchUnregisterResultDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    string AcademicSessionName,
+    int Semester,
+    int TotalRequested,
+    int SuccessfullyUnregistered,
+    int AlreadyUnregistered,
+    int Failed,
+    List<BatchUnregisterStudentResultDto> Results);
+
+public record OfferingEnrolledStudentDto(
+    Guid StudentId,
+    string StudentNumber,
+    string FirstName,
+    string LastName,
+    string? MiddleName,
+    string OfficialEmail,
+    string? ProgramName,
+    string? LevelName,
+    string Status,
+    DateTime RegisteredAtUtc);
+

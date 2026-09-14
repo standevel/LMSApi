@@ -20,7 +20,7 @@ public sealed class UpdateSystemGradingConfigurationEndpoint : ApiEndpoint<Updat
     public override void Configure()
     {
         Put("gradebook/system-configuration");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin");
         Tags("Gradebook");
     }
 

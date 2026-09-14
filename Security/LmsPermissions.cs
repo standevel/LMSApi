@@ -24,6 +24,7 @@ public static class LmsPermissions
     public const string TimetableManage = "timetable.manage";
     public const string IntegrationsManage = "integrations.manage";
     public const string QuizzesManage = "quizzes.manage";
+    public const string ResultsPublish = "results.publish";
 
     public static readonly IReadOnlyList<string> All =
     [
@@ -34,6 +35,7 @@ public static class LmsPermissions
         CoursesManage,
         CoursesTeach,
         GradesSubmit,
+        ResultsPublish,
         RecordsManage,
         ReportsView,
         EnrollmentsManage,

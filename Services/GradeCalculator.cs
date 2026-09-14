@@ -31,7 +31,7 @@ public static class GradeCalculator
         List<GradeMappingDto> mappings)
     {
         // 1. Apply decimal rounding first
-        decimal score = RoundScore(rawScore, strategy, decimalPlaces);
+        decimal score = Math.Clamp(RoundScore(rawScore, strategy, decimalPlaces), 0m, 100m);
 
         if (mappings == null || !mappings.Any())
         {

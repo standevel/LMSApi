@@ -6,7 +6,7 @@ echo.
 
 REM Clean previous publish
 echo [1/4] Cleaning previous build...
-dotnet clean LMS.Api.csproj -c Release > nul 2>&1
+dotnet clean LMS.Api.csproj -c Release
 if %errorlevel% neq 0 (
     echo ERROR: dotnet clean failed
     exit /b 1
@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
 
 REM Publish
 echo [2/4] Publishing to publish\iis-output...
-dotnet publish LMS.Api.csproj -c Release -r win-x64 --self-contained false -o publish\iis-output > nul 2>&1
+dotnet publish LMS.Api.csproj -c Release -r win-x64 --self-contained false -o publish\iis-output
 if %errorlevel% neq 0 (
     echo ERROR: dotnet publish failed
     exit /b 1
@@ -44,11 +44,10 @@ echo  Backend published to: publish\iis-output
 echo ==========================================
 echo.
 echo Next steps for IIS deployment:
-echo  1. Copy the 'publish\iis-output' folder to your IIS server
-echo  2. Create an Application Pool (Integrated Pipeline, .NET No-Code)
-echo  3. Create a site/virtual directory pointing to the publish folder
-echo  4. Ensure web.config is present in the deploy directory
-echo  5. Update appsettings.json with production connection strings
-echo     (see appsettings.Production.json.template for reference)
-echo  6. Restart the application pool
+echo  1. Copy the 'publish\iis-output' folder to your IIS server (e.g. C:\inetpub\wwwroot\WUPortal\WUStudentPortalAPI)
+echo  2. In IIS Manager, right-click the folder and select 'Convert to Application'
+echo  3. Create a dedicated Application Pool (.NET CLR Version: 'No Managed Code', Managed Pipeline: Integrated)
+echo  4. Ensure the ASP.NET Core Hosting Bundle (AspNetCoreModuleV2) is installed on Windows Server
+echo  5. Update appsettings.json with production database connection strings and credentials
+echo  6. Restart/recycle the application pool
 echo.

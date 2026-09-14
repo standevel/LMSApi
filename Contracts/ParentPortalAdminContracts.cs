@@ -3,15 +3,23 @@ using System.Collections.Generic;
 
 namespace LMS.Api.Contracts;
 
+public record ParentAccessPolicyEntry(int Category, bool Allowed);
+
 public record SystemParentPortalConfigurationDto(
     bool AutoCreateGuardianAccountsOnStudentCreation,
     bool SendGuardianInvitationEmail,
-    string DefaultRelationship);
+    string DefaultRelationship,
+    List<int> AllowedCategories,
+    bool RequireStudentConsentForSensitive,
+    bool TreatAdultStudentsAsRestricted);
 
 public record UpdateSystemParentPortalConfigurationRequest(
     bool AutoCreateGuardianAccountsOnStudentCreation,
     bool SendGuardianInvitationEmail,
-    string DefaultRelationship);
+    string DefaultRelationship,
+    List<int>? AllowedCategories = null,
+    bool? RequireStudentConsentForSensitive = null,
+    bool? TreatAdultStudentsAsRestricted = null);
 
 public record ProvisionGuardianRequest(
     bool? SendInvitationEmail = null);
@@ -46,3 +54,11 @@ public record ProvisionGuardianBatchResponse(
     int Skipped,
     int Failed,
     IReadOnlyList<ProvisionGuardianResultDto> Results);
+
+public record ResendGuardianCredentialsResponse(
+    bool Success,
+    string Message,
+    string? Email,
+    string? GuardianName,
+    DateTime SentAtUtc);
+

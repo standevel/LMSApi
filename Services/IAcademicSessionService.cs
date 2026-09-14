@@ -12,4 +12,7 @@ public interface IAcademicSessionService
     Task<ErrorOr<AcademicSessionDto>> ToggleStatusAsync(Guid id, CancellationToken ct = default);
     Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionStatusAsync(Guid id, CancellationToken ct = default);
     Task<ErrorOr<AcademicSessionDto>> ToggleAdmissionOpenStatusAsync(Guid id, CancellationToken ct = default);
+    Task<ErrorOr<AcademicSessionDto>> ToggleRegistrationOpenStatusAsync(Guid id, CancellationToken ct = default);
+    Task<ErrorOr<AcademicSessionDto>> StartRegistrationAsync(Guid id, StartRegistrationRequest? request = null, CancellationToken ct = default);
+    Task<ErrorOr<AcademicSessionDto>> EndRegistrationAsync(Guid id, CancellationToken ct = default);
 }

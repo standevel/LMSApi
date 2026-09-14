@@ -64,7 +64,10 @@ public static class MappingExtensions
         s.IsActive,
         s.ActiveSemester,
         s.IsAdmissionOpen,
-        s.IsAdmissionActive);
+        s.IsAdmissionActive,
+        s.IsRegistrationOpen,
+        s.RegistrationStartDate,
+        s.RegistrationEndDate);
 
     public static CourseDto ToDto(this Course course, IEnumerable<CurriculumCourse>? extraCurriculumCourses = null)
     {

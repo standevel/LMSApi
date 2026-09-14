@@ -28,8 +28,27 @@ public sealed class UserRepository(LmsDbContext dbContext) : IUserRepository
             .Include(x => x.Faculty)
             .FirstOrDefaultAsync(x => x.EntraObjectId == entraObjectId, ct);
 
-    public Task<AppUser?> GetActiveByUsernameAsync(string username, CancellationToken ct = default) =>
-        dbContext.Users.FirstOrDefaultAsync(x => (x.Username == username || x.Email == username) && x.IsActive, ct);
+    public Task<AppUser?> GetActiveByUsernameAsync(string username, CancellationToken ct = default)
+    {
+        var normalized = (username ?? string.Empty).Trim();
+        return dbContext.Users
+            .Include(x => x.UserRoles)
+                .ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => (x.Username == normalized || x.Email == normalized ||
+                                      (x.Username != null && x.Username.ToLower() == normalized.ToLower()) ||
+                                      (x.Email != null && x.Email.ToLower() == normalized.ToLower())) && x.IsActive, ct);
+    }
+
+    public Task<AppUser?> GetByEmailOrUsernameAsync(string emailOrUsername, CancellationToken ct = default)
+    {
+        var normalized = (emailOrUsername ?? string.Empty).Trim();
+        return dbContext.Users
+            .Include(x => x.UserRoles)
+                .ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.Username == normalized || x.Email == normalized ||
+                                      (x.Username != null && x.Username.ToLower() == normalized.ToLower()) ||
+                                      (x.Email != null && x.Email.ToLower() == normalized.ToLower()), ct);
+    }
 
 
     public Task<bool> UsernameExistsAsync(string username, Guid? excludingUserId = null, CancellationToken ct = default) =>

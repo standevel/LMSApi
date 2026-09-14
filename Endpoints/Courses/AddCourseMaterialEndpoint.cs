@@ -20,7 +20,7 @@ public sealed class AddCourseMaterialEndpoint : ApiEndpoint<AddCourseMaterialReq
     public override void Configure()
     {
         Post("courses/{offeringId:guid}/materials");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer");
         AllowFileUploads();
         Tags("Courses");
     }

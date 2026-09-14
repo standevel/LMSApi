@@ -34,7 +34,8 @@ public record UpdateSystemGradingConfigurationRequest(
     List<GradeMappingDto>? LetterGradesMapping,
     string? RoundingStrategy,
     int? RoundingDecimalPlaces,
-    decimal? GraceThreshold);
+    decimal? GraceThreshold,
+    bool? ApplyToExistingCourses = false);
 
 public record GradeMappingDto(decimal MinPercentage, string LetterGrade, decimal GradePoints);
 
@@ -56,6 +57,17 @@ public record CreateAssessmentCategoryRequest(
     decimal MaxMarks,
     bool IsExamCategory,
     int DisplayOrder);
+
+public record UpdateCourseAssessmentCategoriesRequest(
+    List<CourseCategoryWeightItem> Categories);
+
+public record CourseCategoryWeightItem(
+    AssessmentCategoryType CategoryType,
+    string CategoryName,
+    decimal Weight,
+    decimal MaxMarks = 100m,
+    bool IsExamCategory = false,
+    int DisplayOrder = 0);
 
 // ==================== ASSESSMENTS ====================
 
@@ -176,6 +188,28 @@ public record ApproveGradesRequest(
 public record RejectGradesRequest(
     ApprovalLevel Level,
     string Comments);
+
+public record BulkApproveGradesRequest(
+    ApprovalLevel Level,
+    Guid? AcademicSessionId = null,
+    int? Semester = null,
+    Guid? DepartmentId = null,
+    Guid? FacultyId = null,
+    List<Guid>? CourseOfferingIds = null,
+    string? Comments = null);
+
+public record BulkApproveDetailDto(
+    Guid CourseOfferingId,
+    string CourseCode,
+    string CourseTitle,
+    bool Approved,
+    string StatusMessage);
+
+public record BulkApproveResultDto(
+    int TotalProcessed,
+    int ApprovedCount,
+    int SkippedCount,
+    List<BulkApproveDetailDto> Details);
 
 // ==================== PUBLICATION ====================
 

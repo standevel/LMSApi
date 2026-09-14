@@ -18,7 +18,7 @@ public sealed class UpdateProgramCriteriaEndpoint(IAdmissionService admissionSer
     public override void Configure()
     {
         Put("programs/criteria/{ProgramId}");
-        AllowAnonymous(); // TODO: Restrict to Admin role
+        Roles("SuperAdmin", "Admin");
         Tags("Courses");
     }
 

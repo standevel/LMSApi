@@ -12,6 +12,9 @@ public sealed class TranscriptRequest
     public bool IsOfficial { get; set; } = true;
     public string? DeliveryEmail { get; set; }
     public string? DeliveryMethod { get; set; } = "Email"; // Email, Pickup, Mail
+    public string? InstitutionName { get; set; }
+    public string? InstitutionEmail { get; set; }
+    public string? InstitutionAddress { get; set; }
     public string? Remarks { get; set; }
     public decimal? FeeAmount { get; set; }
     public bool FeePaid { get; set; } = false;

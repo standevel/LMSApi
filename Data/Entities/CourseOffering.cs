@@ -21,6 +21,7 @@ public sealed class CourseOffering
     public Semester Semester { get; set; }
 
     public Guid? CurriculumId { get; set; }
+    public bool IsRegistrationClosed { get; set; } = false;
 
     [JsonIgnore]
     public Course Course { get; set; } = null!;

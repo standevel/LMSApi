@@ -73,13 +73,12 @@ public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionS
                     d.Status.ToString(),
                     d.RejectionReason
                 )),
-                null, // StudentUserId
-                null, // AcceptanceFeeRecordId
-                null, // AcceptanceFeeAmount
-                null, // AcceptanceFeeBalance
-                null, // AcceptanceFeeStatus
-                false, // RequiresAcceptanceFee
-                // New fields
+                null,
+                null,
+                null,
+                null,
+                null,
+                false,
                 app.ApplicantType.ToString(),
                 app.PreviousInstitutionName,
                 app.PreviousInstitutionCountry,
@@ -98,6 +97,14 @@ public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionS
         catch (KeyNotFoundException ex)
         {
             await SendFailureAsync(404, "Application Not Found", "not_found", ex.Message, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await SendFailureAsync(400, "Invalid Status Change", "invalid_status_change", ex.Message, ct);
+        }
+        catch (Exception ex)
+        {
+            await SendFailureAsync(500, "Update Failed", "server_error", $"An error occurred while updating application status: {ex.Message}", ct);
         }
     }
 }

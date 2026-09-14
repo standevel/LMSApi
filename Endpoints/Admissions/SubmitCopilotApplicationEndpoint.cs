@@ -11,6 +11,12 @@ using System.Threading.Tasks;
 
 namespace LMS.Api.Endpoints.Admissions;
 
+public sealed class JambSubjectScoreDto
+{
+    public string Subject { get; set; } = string.Empty;
+    public int? Score { get; set; }
+}
+
 public sealed class SubmitCopilotApplicationRequest
 {
     public string FirstName { get; set; } = string.Empty;
@@ -23,6 +29,7 @@ public sealed class SubmitCopilotApplicationRequest
     public string? JambRegNumber { get; set; }
     public int? JambYear { get; set; } = DateTime.UtcNow.Year;
     public int? JambScore { get; set; }
+    public System.Collections.Generic.List<JambSubjectScoreDto>? JambSubjectScores { get; set; }
 }
 
 public sealed class SubmitCopilotApplicationResponse
@@ -113,6 +120,7 @@ public sealed class SubmitCopilotApplicationEndpoint(
         {
             JambYear = req.JambYear ?? DateTime.UtcNow.Year,
             JambScore = req.JambScore,
+            JambSubjectScores = req.JambSubjectScores,
             SubmittedVia = "Copilot AI Assistant"
         });
 

@@ -18,7 +18,7 @@ public sealed class GetGradeApprovalsEndpoint : ApiEndpointWithoutRequest<List<G
     public override void Configure()
     {
         Get("gradebook/courses/{offeringId:guid}/approvals");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer", "Dean", "HOD", "Senate");
         Tags("Gradebook");
     }
 
@@ -58,7 +58,7 @@ public sealed class SubmitForApprovalEndpoint : ApiEndpoint<SubmitForApprovalReq
     public override void Configure()
     {
         Post("gradebook/courses/{offeringId:guid}/submit");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer", "Dean", "HOD", "Senate");
         Tags("Gradebook");
     }
 
@@ -113,7 +113,7 @@ public sealed class ApproveGradesEndpoint : ApiEndpoint<ApproveGradesRequest, Gr
     public override void Configure()
     {
         Post("gradebook/courses/{offeringId:guid}/approve");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer", "Dean", "HOD", "Senate");
         Tags("Gradebook");
     }
 
@@ -168,7 +168,7 @@ public sealed class RejectGradesEndpoint : ApiEndpoint<RejectGradesRequest, Grad
     public override void Configure()
     {
         Post("gradebook/courses/{offeringId:guid}/reject");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer", "Dean", "HOD", "Senate");
         Tags("Gradebook");
     }
 
@@ -206,5 +206,59 @@ public sealed class RejectGradesEndpoint : ApiEndpoint<RejectGradesRequest, Grad
         }
 
         await SendSuccessAsync(result.Value, ct, $"Grades rejected at {req.Level} level");
+    }
+}
+
+public sealed class BulkApproveGradesEndpoint : ApiEndpoint<BulkApproveGradesRequest, BulkApproveResultDto>
+{
+    private readonly IGradebookService _gradebookService;
+    private readonly ICurrentUserContext _currentUserContext;
+
+    public BulkApproveGradesEndpoint(IGradebookService gradebookService, ICurrentUserContext currentUserContext)
+    {
+        _gradebookService = gradebookService;
+        _currentUserContext = currentUserContext;
+    }
+
+    public override void Configure()
+    {
+        Post("gradebook/bulk-approve");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Dean", "HOD", "Senate");
+        Tags("Gradebook");
+    }
+
+    public override async Task HandleAsync(BulkApproveGradesRequest req, CancellationToken ct)
+    {
+        if (HttpContext.User?.Identity?.IsAuthenticated != true)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userId = await _currentUserContext.GetUserIdAsync(ct);
+
+        if (!userId.HasValue)
+        {
+            await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Could not resolve your identity.", ct);
+            return;
+        }
+
+        var result = await _gradebookService.BulkApproveGradesAsync(req, userId.Value, ct);
+
+        if (result.IsError)
+        {
+            var error = result.FirstError;
+            var statusCode = error.Type switch
+            {
+                ErrorType.NotFound => 404,
+                ErrorType.Forbidden => 403,
+                ErrorType.Conflict => 409,
+                _ => 400
+            };
+            await SendFailureAsync(statusCode, error.Description, error.Code, error.Description, ct);
+            return;
+        }
+
+        await SendSuccessAsync(result.Value, ct, $"Bulk grade approval completed for level {req.Level}");
     }
 }

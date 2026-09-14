@@ -62,10 +62,20 @@ public sealed class Student
     public AcademicProgram? AcademicProgram { get; set; }
     public Guid? LevelId { get; set; }
     public AcademicLevel? Level { get; set; }
-    public string? StudentNumber { get; set; } // Matric number - assigned by Registrar after admission
-    
+    private string? _studentNumber;
+    public string? StudentNumber
+    {
+        get => _studentNumber;
+        set => _studentNumber = value?.ToUpperInvariant();
+    } // Matric number - assigned by Registrar after admission
+
     // JAMB / UTME Info (from admission import)
-    public string? JambRegistrationNumber { get; set; }
+    private string? _jambRegistrationNumber;
+    public string? JambRegistrationNumber
+    {
+        get => _jambRegistrationNumber;
+        set => _jambRegistrationNumber = value?.ToUpperInvariant();
+    }
     public int? JambScore { get; set; }
     
     // Status

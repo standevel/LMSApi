@@ -58,7 +58,7 @@ public sealed class GenerateMatricNumbersEndpoint(LmsDbContext dbContext, ILogge
 
         // 1. Load active MatricNumberFormat configuration template
         var config = await dbContext.SystemRegistrationConfigurations.AsNoTracking().FirstOrDefaultAsync(ct);
-        var formatTemplate = config?.MatricNumberFormat ?? "WU/{YY}/{PROGRAM}/{SEQ}";
+        var formatTemplate = config?.MatricNumberFormat ?? "WU/{PROGRAM}/{YYYY}/{SEQ}";
 
         // Verify template has {SEQ}
         if (!formatTemplate.Contains("{SEQ}"))
@@ -168,6 +168,19 @@ public sealed class GenerateMatricNumbersEndpoint(LmsDbContext dbContext, ILogge
                             maxSeq = parsed;
                         }
                     }
+                    else
+                    {
+                        // Support legacy and variant formats (e.g. WU/25/ENG/0001, WU/ENG/2025/022): extract trailing sequence digits
+                        var fallbackMatch = Regex.Match(num, @"[/-](?<seq>\d{3,5})$", RegexOptions.IgnoreCase);
+                        if (fallbackMatch.Success)
+                        {
+                            var seqStr = fallbackMatch.Groups["seq"].Value;
+                            if (int.TryParse(seqStr, out var parsed) && parsed > maxSeq)
+                            {
+                                maxSeq = parsed;
+                            }
+                        }
+                    }
                 }
 
                 nextSeq = maxSeq + 1;
@@ -229,8 +242,8 @@ public sealed class GenerateMatricNumbersEndpoint(LmsDbContext dbContext, ILogge
         pattern = pattern
             .Replace(@"\{YYYY\}", @"\d{4}")
             .Replace(@"\{YY\}", @"\d{2}")
-            .Replace(@"\{PROGRAM\}", @"[A-Z0-9]{2,4}")
-            .Replace(@"\{SEQ\}", @"(?<seq>\d{4})");
+            .Replace(@"\{PROGRAM\}", @"[A-Z0-9]{2,6}")
+            .Replace(@"\{SEQ\}", @"(?<seq>\d{3,5})");
         return $"^{pattern}$";
     }
 }

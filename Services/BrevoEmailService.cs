@@ -8,14 +8,59 @@ using System.Linq;
 
 namespace LMS.Api.Services;
 
-public sealed class BrevoEmailService(
-    HttpClient httpClient,
-    IConfiguration configuration,
-    ILogger<BrevoEmailService> logger) : IEmailService
+public sealed class BrevoEmailService : IEmailService
 {
-    private readonly string _apiKey = configuration["Brevo:ApiKey"] ?? string.Empty;
-    private readonly string _senderEmail = configuration["Brevo:SenderEmail"] ?? "no-reply@wigweuniversity.edu.ng";
-    private readonly string _senderName = configuration["Brevo:SenderName"] ?? "Wigwe University Admissions";
+    private readonly HttpClient _httpClient;
+    private readonly string _apiKey;
+    private readonly string _senderEmail;
+    private readonly string _senderName;
+    private readonly ILogger<BrevoEmailService> _logger;
+
+    public BrevoEmailService(HttpClient httpClient, IConfiguration configuration, ILogger<BrevoEmailService> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+        _apiKey = ResolveApiKey(configuration);
+        _senderEmail = configuration["Brevo:SenderEmail"] ?? "no-reply@wigweuniversity.edu.ng";
+        _senderName = configuration["Brevo:SenderName"] ?? "Wigwe University Admissions";
+
+        var masked = _apiKey.Length > 12 ? $"{_apiKey[..12]}...{_apiKey[^4..]}" : (_apiKey.Length > 0 ? "CONFIGURED" : "EMPTY");
+        _logger.LogInformation("[BREVO] Initialized. MaskedKey={MaskedKey}, HasKey={HasKey}, SenderEmail={SenderEmail}", masked, !string.IsNullOrEmpty(_apiKey), _senderEmail);
+    }
+
+    private static string ResolveApiKey(IConfiguration configuration)
+    {
+        var rawKey = (configuration["Brevo:ApiKey"] ?? string.Empty).Trim().Trim('"');
+        if (!string.IsNullOrWhiteSpace(rawKey))
+        {
+            return rawKey;
+        }
+
+        var mcpKey = (configuration["Brevo:MCPKey"] ?? string.Empty).Trim().Trim('"');
+        if (!string.IsNullOrWhiteSpace(mcpKey))
+        {
+            try
+            {
+                var bytes = Convert.FromBase64String(mcpKey);
+                var decoded = System.Text.Encoding.UTF8.GetString(bytes);
+                using var doc = System.Text.Json.JsonDocument.Parse(decoded);
+                if (doc.RootElement.TryGetProperty("api_key", out var prop))
+                {
+                    var key = prop.GetString()?.Replace(" ", "").Trim();
+                    if (!string.IsNullOrWhiteSpace(key)) return key;
+                }
+            }
+            catch
+            {
+                if (mcpKey.StartsWith("xkeysib-", StringComparison.OrdinalIgnoreCase))
+                {
+                    return mcpKey;
+                }
+            }
+        }
+
+        return string.Empty;
+    }
 
     private static string FormatName(string name)
     {
@@ -30,8 +75,7 @@ public sealed class BrevoEmailService(
             throw new InvalidOperationException("Brevo API Key is not configured. Cannot send emails.");
         }
 
-        // Build payload dynamically so we never send a null attachment field (Brevo rejects it)
-        var payloadDict = new Dictionary<string, object>
+        var payload = (object)new Dictionary<string, object>
         {
             ["sender"] = new { name = _senderName, email = _senderEmail },
             ["to"] = new[] { new { email = toEmail } },
@@ -41,10 +85,16 @@ public sealed class BrevoEmailService(
 
         if (attachment != null)
         {
-            payloadDict["attachment"] = attachment;
+            var payloadDict = new Dictionary<string, object>
+            {
+                ["sender"] = new { name = _senderName, email = _senderEmail },
+                ["to"] = new[] { new { email = toEmail } },
+                ["subject"] = subject,
+                ["htmlContent"] = htmlContent,
+                ["attachment"] = attachment
+            };
+            payload = payloadDict;
         }
-
-        var payload = (object)payloadDict;
 
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email");
         request.Headers.Add("api-key", _apiKey);
@@ -52,18 +102,20 @@ public sealed class BrevoEmailService(
 
         try
         {
-            var response = await httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("[BREVO] Response Status: {Status}, Body: {Body}", response.StatusCode, responseBody);
+
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                logger.LogError("Failed to send email via Brevo. Status: {Status}, Error: {Error}", response.StatusCode, error);
-                throw new InvalidOperationException($"Brevo API returned {response.StatusCode}: {error}");
+                _logger.LogError("Failed to send email via Brevo. Status: {Status}, Error: {Error}", response.StatusCode, responseBody);
+                throw new InvalidOperationException($"Brevo API returned {response.StatusCode}: {responseBody}");
             }
-            logger.LogInformation("Email sent successfully to {Email}", toEmail);
+            _logger.LogInformation("[BREVO] Email sent successfully to {Email}. KeyPrefix={KeyPrefix}", toEmail, _apiKey[..8]);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Exception occurred while sending email to {Email}", toEmail);
+            _logger.LogError(ex, "[BREVO] Exception occurred while sending email to {Email}", toEmail);
             throw;
         }
     }
@@ -256,62 +308,172 @@ public sealed class BrevoEmailService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "[EMAIL-BULK-ERROR] Failed to send reminder email to {Email} for application {ApplicationNumber}", 
+                _logger.LogError(ex, "[EMAIL-BULK-ERROR] Failed to send reminder email to {Email} for application {ApplicationNumber}", 
                     recipient.Email, recipient.ApplicationNumber);
                 throw;
             }
         }
     }
 
-    public Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, bool isNewAccount)
+    public Task SendGuardianCredentialsEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, string? temporaryPassword, bool isNewAccount, string? portalUrl = null)
     {
         guardianName = FormatName(guardianName);
         studentName = FormatName(studentName);
         var subject = "Parent & Guardian Portal Access Credentials - Wigwe University";
+        var loginLink = !string.IsNullOrWhiteSpace(portalUrl) && !portalUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) && !portalUrl.Contains("YOUR_FRONTEND_DOMAIN", StringComparison.OrdinalIgnoreCase)
+            ? portalUrl
+            : "https://portal.wigweuniversity.edu.ng/auth/login";
 
         string body;
         if (isNewAccount)
         {
+            var passwordBlock = !string.IsNullOrWhiteSpace(temporaryPassword)
+                ? $@"<p><strong>Temporary Password:</strong> <span style='font-family:monospace; background:#e2e8f0; padding:2px 8px; border-radius:4px; font-weight:700;'>{temporaryPassword}</span></p>
+                    <p style='margin:0; font-size:13px; color:#4a5568;'><em>Please log in and change your password immediately upon first sign-in.</em></p>"
+                : @"<p style='margin:0;'><strong>Password:</strong> Use the <em>Forgot Password</em> link on the login page to set your initial password.</p>";
+
             body = $@"
-                <p>An account has been created for you on the <strong>Wigwe University Parent/Guardian Portal</strong>.</p>
-                <div style='background:#f9f9f9; padding:15px; border-radius:8px; margin:20px 0;'>
-                    <p><strong>Login Email:</strong> {loginEmail}</p>
-                    <p style='margin:0;'><strong>Password:</strong> Use the <em>Forgot Password</em> link on the portal to set your password.</p>
+                <p>An official account has been created for you on the <strong>Wigwe University Parent & Guardian Portal</strong>.</p>
+                <div style='background:#f8fafc; border:1px solid #e2e8f0; padding:18px; border-radius:12px; margin:20px 0;'>
+                    <p style='margin-bottom:8px;'><strong>Login Email:</strong> {loginEmail}</p>
+                    {passwordBlock}
                 </div>
-                <p>
-                    <a href='https://portal.wigweuniversity.edu.ng/parent'
-                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
-                        Access Parent Portal
+                <p style='margin-top:24px;'>
+                    <a href='{loginLink}'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 24px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Sign In to Parent Portal
                     </a>
                 </p>
-                <p style='font-size:12px; color:#666;'>
+                <p style='font-size:12px; color:#666; margin-top:16px;'>
                     If the button above does not work, copy and paste this link:<br>
-                    https://portal.wigweuniversity.edu.ng/parent
+                    <a href='{loginLink}' style='color:#006B62;'>{loginLink}</a>
                 </p>";
         }
         else
         {
             body = $@"
                 <p>Your existing Wigwe University account has been linked to <strong>{studentName}'s</strong> student profile.</p>
-                <p>You can now monitor your ward's academic progress on the Parent/Guardian Portal using your existing credentials.</p>
-                <p>
-                    <a href='https://portal.wigweuniversity.edu.ng/parent'
-                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700; display:inline-block;'>
+                <p>You can now monitor your ward's academic progress, view course grades, track attendance, and inspect fees on the Parent Portal using your existing account credentials.</p>
+                <p style='margin-top:24px;'>
+                    <a href='{loginLink}'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 24px; border-radius:12px; font-weight:700; display:inline-block;'>
                         Access Parent Portal
                     </a>
                 </p>";
         }
 
         var content = $@"
-            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:10px;'>
-                <h2 style='color:#006B62;'>Parent & Guardian Portal Credentials</h2>
-                <p>Dear {guardianName},</p>
+            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:24px; border:1px solid #e2e8f0; border-radius:16px; background:#ffffff;'>
+                <div style='text-align:center; margin-bottom:20px;'>
+                    <h2 style='color:#006B62; margin:0 0 6px 0;'>Wigwe University</h2>
+                    <p style='color:#64748b; font-size:13px; margin:0;'>Parent & Guardian Portal</p>
+                </div>
+                <hr style='border:0; border-top:1px solid #f1f5f9; margin:16px 0 20px 0;'>
+                <p style='font-size:15px;'>Dear <strong>{guardianName}</strong>,</p>
                 <p>You have been registered as the parent/guardian of <strong>{studentName}</strong> at Wigwe University.</p>
                 {body}
-                <hr style='border:0; border-top:1px solid #eee; margin:20px 0;'>
-                <p style='font-size:12px; color:#666;'>
+                <hr style='border:0; border-top:1px solid #e2e8f0; margin:24px 0 16px 0;'>
+                <p style='font-size:12px; color:#64748b; margin:0;'>
+                    Wigwe University Registry & ICT Support<br>
+                    Email: registry@wigweuniversity.edu.ng
+                </p>
+            </div>";
+
+        return SendEmailAsync(toEmail, subject, content);
+    }
+
+    public Task SendGuardianCredentialsResentEmailAsync(string toEmail, string guardianName, string studentName, string loginEmail, string temporaryPassword, string? portalUrl = null)
+    {
+        guardianName = FormatName(guardianName);
+        studentName = FormatName(studentName);
+        var subject = "Parent Portal Login Credentials Resent - Wigwe University";
+        var loginLink = !string.IsNullOrWhiteSpace(portalUrl) && !portalUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) && !portalUrl.Contains("YOUR_FRONTEND_DOMAIN", StringComparison.OrdinalIgnoreCase)
+            ? portalUrl
+            : "https://portal.wigweuniversity.edu.ng/auth/login";
+
+        var content = $@"
+            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:24px; border:1px solid #e2e8f0; border-radius:16px; background:#ffffff;'>
+                <div style='text-align:center; margin-bottom:20px;'>
+                    <h2 style='color:#006B62; margin:0 0 6px 0;'>Wigwe University</h2>
+                    <p style='color:#64748b; font-size:13px; margin:0;'>Parent & Guardian Portal</p>
+                </div>
+                <hr style='border:0; border-top:1px solid #f1f5f9; margin:16px 0 20px 0;'>
+                <p style='font-size:15px;'>Dear <strong>{guardianName}</strong>,</p>
+                <p>Your login credentials for the Wigwe University Parent Portal have been reset upon administrative request.</p>
+                <p>You are connected as parent/guardian of: <strong>{studentName}</strong>.</p>
+                <div style='background:#f8fafc; border:1px solid #e2e8f0; padding:18px; border-radius:12px; margin:20px 0;'>
+                    <p style='margin-bottom:8px;'><strong>Login Email / Username:</strong> {loginEmail}</p>
+                    <p style='margin-bottom:8px;'><strong>New Temporary Password:</strong> <span style='font-family:monospace; background:#e2e8f0; padding:2px 8px; border-radius:4px; font-weight:700;'>{temporaryPassword}</span></p>
+                    <p style='margin:0; font-size:13px; color:#4a5568;'><em>Please sign in and change this password immediately.</em></p>
+                </div>
+                <p style='margin-top:24px;'>
+                    <a href='{loginLink}'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 24px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Login to Parent Portal
+                    </a>
+                </p>
+                <p style='font-size:12px; color:#666; margin-top:16px;'>
+                    If the button above does not work, copy and paste this URL into your browser:<br>
+                    <a href='{loginLink}' style='color:#006B62;'>{loginLink}</a>
+                </p>
+                <hr style='border:0; border-top:1px solid #e2e8f0; margin:24px 0 16px 0;'>
+                <p style='font-size:12px; color:#64748b; margin:0;'>
                     Wigwe University Registry<br>
                     Email: registry@wigweuniversity.edu.ng
+                </p>
+            </div>";
+
+        return SendEmailAsync(toEmail, subject, content);
+    }
+
+    public Task SendPasswordResetEmailAsync(string toEmail, string userName, string resetUrl)
+    {
+        userName = FormatName(userName);
+        var subject = "Password Reset Request - Wigwe University LMS";
+
+        if (string.IsNullOrWhiteSpace(resetUrl) ||
+            resetUrl.Contains("localhost", StringComparison.OrdinalIgnoreCase) ||
+            resetUrl.Contains("YOUR_FRONTEND_DOMAIN", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Uri.TryCreate(resetUrl, UriKind.Absolute, out var parsedUri))
+            {
+                resetUrl = "https://portal.wigweuniversity.edu.ng" + parsedUri.PathAndQuery;
+            }
+            else
+            {
+                resetUrl = "https://portal.wigweuniversity.edu.ng/auth/forgot-password";
+            }
+        }
+
+        var content = $@"
+            <div style='font-family:sans-serif; max-width:600px; margin:0 auto; padding:24px; border:1px solid #e2e8f0; border-radius:16px; background:#ffffff;'>
+                <div style='text-align:center; margin-bottom:20px;'>
+                    <h2 style='color:#006B62; margin:0 0 6px 0;'>Wigwe University LMS</h2>
+                    <p style='color:#64748b; font-size:13px; margin:0;'>Account Security</p>
+                </div>
+                <hr style='border:0; border-top:1px solid #f1f5f9; margin:16px 0 20px 0;'>
+                <p style='font-size:15px;'>Hello <strong>{userName}</strong>,</p>
+                <p>We received a request to reset the password for your Wigwe University LMS account ({toEmail}).</p>
+                <p>Click the button below to choose a new password. This link is valid for 24 hours.</p>
+                <p style='margin-top:24px; margin-bottom:24px;'>
+                    <a href='{resetUrl}'
+                       style='background:#006B62; color:#ffffff; text-decoration:none; padding:14px 24px; border-radius:12px; font-weight:700; display:inline-block;'>
+                        Reset My Password
+                    </a>
+                </p>
+                <p style='font-size:12px; color:#666;'>
+                    If the button above does not work, copy and paste this URL into your browser:<br>
+                    <a href='{resetUrl}' style='color:#006B62;'>{resetUrl}</a>
+                </p>
+                <div style='background:#fffbeb; border-left:4px solid #f59e0b; padding:12px; margin-top:20px; border-radius:0 8px 8px 0;'>
+                    <p style='font-size:12px; color:#92400e; margin:0;'>
+                        If you did not request this password reset, please ignore this email or contact IT support if you have security concerns.
+                    </p>
+                </div>
+                <hr style='border:0; border-top:1px solid #e2e8f0; margin:24px 0 16px 0;'>
+                <p style='font-size:12px; color:#64748b; margin:0;'>
+                    Wigwe University ICT Department<br>
+                    Email: support@wigweuniversity.edu.ng
                 </p>
             </div>";
 

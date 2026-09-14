@@ -12,7 +12,8 @@ public record CourseRegistrationDto(
     DateTime RegisteredAt,
     DateTime? DroppedAt,
     string Status,
-    int CreditUnits);
+    int CreditUnits,
+    int Semester = 1);
 
 public record CreateRegistrationRequest(
     Guid CourseOfferingId);
@@ -31,7 +32,8 @@ public record RegistrationOfferingDto(
     bool CanRegister,
     IReadOnlyList<RegistrationBlockerDto> Blockers,
     bool IsCarryover = false,
-    bool IsExternalCurriculum = false);
+    bool IsExternalCurriculum = false,
+    bool IsRegistrationClosed = false);
 
 public record RegistrationSummaryDto(
     Guid StudentId,
@@ -47,7 +49,12 @@ public record RegistrationSummaryDto(
     string RegistrationStrategy = "Single",
     int MinCredits = 0,
     bool RegistrationVerified = false,
-    DateTime? RegistrationVerifiedAtUtc = null);
+    DateTime? RegistrationVerifiedAtUtc = null,
+    bool IsRegistrationOpen = true,
+    DateTime? RegistrationStartDate = null,
+    DateTime? RegistrationEndDate = null,
+    bool AllowMultiSemesterRegistration = false,
+    int ActiveSemester = 1);
 
 public record WaitlistDto(
     Guid Id,
@@ -159,7 +166,9 @@ public record CreatePrerequisiteOverrideRequest(
 /// <summary>Request payload to initiate a program switch.</summary>
 public record CreateProgramSwitchRequest(
     Guid TargetProgramId,
-    string Reason);
+    string Reason,
+    bool RequiresJambAdmission = true,
+    string? NewJambRegistrationNumber = null);
 
 /// <summary>Payload used by HoD, Dean, or Admin to approve or reject a switch request.</summary>
 public record ReviewProgramSwitchRequest(
@@ -184,6 +193,8 @@ public record ProgramSwitchRequestDto(
     string? JambDocumentUrl,
     string? JambDocumentFileName,
     DateTime? JambDocumentUploadedAt,
+    bool RequiresJambAdmission,
+    string? NewJambRegistrationNumber,
     // HoD
     string? HoDReviewedByName,
     DateTime? HoDReviewedAt,
@@ -214,6 +225,7 @@ public record ProgramSwitchRequestSummaryDto(
     string ToProgramName,
     string Status,
     bool HasJambDocument,
+    bool RequiresJambAdmission,
     DateTime CreatedAt);
 
 // ==================== MAJOR DECLARATION ====================

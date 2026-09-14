@@ -481,10 +481,34 @@ public sealed class FeeService(
             ? evtEl.GetString() : null;
         if (evt != "payment.successful") return;
 
-        var transactionRef = doc.RootElement
-            .GetProperty("data")
-            .GetProperty("transactionRef").GetString() ?? "";
+        var data = doc.RootElement.GetProperty("data");
 
+        if (data.TryGetProperty("meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
+        {
+            if (meta.TryGetProperty("transcriptRequestId", out var trIdProp) && trIdProp.TryGetGuid(out var trId))
+            {
+                var tr = await db.TranscriptRequests.FindAsync(trId);
+                if (tr != null && !tr.FeePaid)
+                {
+                    tr.FeePaid = true;
+                    await db.SaveChangesAsync();
+                }
+                return;
+            }
+
+            if (meta.TryGetProperty("certificateRequestId", out var crIdProp) && crIdProp.TryGetGuid(out var crId))
+            {
+                var cr = await db.CertificateRequests.FindAsync(crId);
+                if (cr != null && !cr.FeePaid)
+                {
+                    cr.FeePaid = true;
+                    await db.SaveChangesAsync();
+                }
+                return;
+            }
+        }
+
+        var transactionRef = data.TryGetProperty("transactionRef", out var trProp) ? trProp.GetString() ?? "" : "";
         await ConfirmPaymentByGatewayReferenceAsync(transactionRef, "Gateway:Hydrogen");
     }
 

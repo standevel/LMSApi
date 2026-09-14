@@ -10,3 +10,10 @@ appsettings.json
 # secrets should ideally be in User Secrets or environment variables
 Logs/*.log
 publish/
+.dotnet/
+.local/
+.kilo/
+.kilocode/
+Library/
+*.DS_Store
+.DS_Store

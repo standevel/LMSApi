@@ -20,7 +20,7 @@ public sealed class DeleteCourseMaterialEndpoint : ApiEndpointWithoutRequest<obj
     public override void Configure()
     {
         Delete("courses/materials/{materialId:guid}");
-        AllowAnonymous();
+        Roles("SuperAdmin", "Admin", "Lecturer");
         Tags("Courses");
     }
 

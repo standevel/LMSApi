@@ -30,10 +30,12 @@ public sealed class ProgramSwitchRequest
     // ── Request Details ───────────────────────────────────────────────────────
     public string Reason { get; set; } = string.Empty;
     public ProgramSwitchStatus Status { get; set; } = ProgramSwitchStatus.Draft;
+    public bool RequiresJambAdmission { get; set; } = true;
+    public string? NewJambRegistrationNumber { get; set; }
 
     /// <summary>
     /// URL/path to the uploaded JAMB admission letter.
-    /// Required before any approval stage can proceed.
+    /// When RequiresJambAdmission is true, this is required before departmental approval.
     /// </summary>
     public string? JambDocumentUrl { get; set; }
     public string? JambDocumentFileName { get; set; }

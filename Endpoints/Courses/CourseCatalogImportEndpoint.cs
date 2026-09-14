@@ -35,7 +35,7 @@ public override void Configure()
 {
     Post("course-catalog/upload");
     Tags("CourseCatalog");
-    AllowAnonymous();
+    Roles("SuperAdmin", "Admin");
 }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -162,7 +162,7 @@ public override void Configure()
 {
     Get("course-catalog/preview/{uploadId:guid}");
     Tags("CourseCatalog");
-    AllowAnonymous();
+    Roles("SuperAdmin", "Admin");
 }
 
     public override async Task HandleAsync(CancellationToken ct)
@@ -308,7 +308,7 @@ public override void Configure()
 {
     Post("course-catalog/apply/{uploadId:guid}");
     Tags("CourseCatalog");
-    AllowAnonymous();
+    Roles("SuperAdmin", "Admin");
 }
 
     public override async Task HandleAsync(ApplyCourseCatalogImportRequest req, CancellationToken ct)
@@ -358,7 +358,7 @@ public sealed class CourseDeduplicationTempEndpoint(LMS.Api.Data.LmsDbContext db
     public override void Configure()
     {
         Post("course-catalog/deduplicate");
-        AllowAnonymous(); // For manual one-time trigger
+        Roles("SuperAdmin", "Admin");
     }
 
     public override async Task HandleAsync(CancellationToken ct)

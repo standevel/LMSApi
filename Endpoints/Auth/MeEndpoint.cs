@@ -4,10 +4,11 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using LMS.Api.Data.Entities;
 using LMS.Api.Data.Repositories;
+using LMS.Api.Security;
 
 namespace LMS.Api.Endpoints.Auth;
 
-public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithoutRequest<ApiResponse<MeResponse>>
+public sealed class MeEndpoint(IUserRepository userRepository, IPermissionService permissionService) : EndpointWithoutRequest<ApiResponse<MeResponse>>
 {
     public override void Configure()
     {
@@ -147,9 +148,23 @@ public sealed class MeEndpoint(IUserRepository userRepository) : EndpointWithout
             dbUserId = parsedGuid;
         }
 
-        var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId, user?.ThemePreference);
+        List<string>? effectivePermissions = null;
+        if (dbUserId.HasValue)
+        {
+            try
+            {
+                var perms = await permissionService.GetEffectivePermissionsAsync(dbUserId.Value, ct);
+                effectivePermissions = perms.OrderBy(p => p).ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MeEndpoint] Failed to load permissions: {ex.Message}");
+            }
+        }
+
+        var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId, user?.ThemePreference, effectivePermissions);
         await Send.OkAsync(ApiResponse<MeResponse>.Ok(data), ct);
     }
 }
 
-public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles, Guid? DepartmentId = null, Guid? FacultyId = null, string? ThemePreference = null);
+public sealed record MeResponse(Guid? Id, string? Name, string? Email, string? ObjectId, List<string> Roles, Guid? DepartmentId = null, Guid? FacultyId = null, string? ThemePreference = null, List<string>? Permissions = null);

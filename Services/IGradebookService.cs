@@ -13,6 +13,8 @@ public interface IGradebookService
     // Assessment Categories
     Task<ErrorOr<List<AssessmentCategoryDto>>> GetAssessmentCategoriesAsync(Guid courseOfferingId, CancellationToken ct = default);
     Task<ErrorOr<AssessmentCategoryDto>> CreateAssessmentCategoryAsync(Guid courseOfferingId, CreateAssessmentCategoryRequest request, CancellationToken ct = default);
+    Task<ErrorOr<List<AssessmentCategoryDto>>> UpdateCourseAssessmentCategoriesAsync(Guid courseOfferingId, UpdateCourseAssessmentCategoriesRequest request, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<List<AssessmentCategoryDto>>> ResetCourseAssessmentCategoriesToDefaultAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<Deleted>> DeleteAssessmentCategoryAsync(Guid categoryId, CancellationToken ct = default);
     
     // Assessments
@@ -27,7 +29,7 @@ public interface IGradebookService
     Task<ErrorOr<GradeDto>> EnterGradeAsync(EnterGradeRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<int>> UpdateStudentGradeSummariesAsync(Guid courseOfferingId, UpdateStudentGradeSummaryRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradeUploadResultDto>> BulkUploadGradesAsync(Guid courseOfferingId, IFormFile excelFile, Guid userId, CancellationToken ct = default);
-    Task<ErrorOr<GradebookExcelTemplateDto>> GenerateExcelTemplateAsync(Guid courseOfferingId, CancellationToken ct = default);
+    Task<ErrorOr<GradebookExcelTemplateDto>> GenerateExcelTemplateAsync(Guid courseOfferingId, Guid? collegeId = null, CancellationToken ct = default);
     Task<ErrorOr<GradebookExcelTemplateDto>> GenerateSenateResultTemplateAsync(Guid courseOfferingId, string? collegeName = null, CancellationToken ct = default);
     Task<ErrorOr<GradebookExcelTemplateDto>> GenerateCollegeSenateResultAsync(Guid academicSessionId, Data.Enums.Semester semester, Guid collegeId, Guid levelId, CancellationToken ct = default);
     
@@ -40,6 +42,7 @@ public interface IGradebookService
     Task<ErrorOr<GradeApprovalDto>> SubmitForApprovalAsync(Guid courseOfferingId, SubmitForApprovalRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradeApprovalDto>> ApproveGradesAsync(Guid courseOfferingId, ApproveGradesRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<GradeApprovalDto>> RejectGradesAsync(Guid courseOfferingId, RejectGradesRequest request, Guid userId, CancellationToken ct = default);
+    Task<ErrorOr<BulkApproveResultDto>> BulkApproveGradesAsync(BulkApproveGradesRequest request, Guid userId, CancellationToken ct = default);
     
     // Publication
     Task<ErrorOr<GradePublicationDto>> GetPublicationStatusAsync(Guid courseOfferingId, CancellationToken ct = default);
@@ -48,6 +51,7 @@ public interface IGradebookService
     Task<ErrorOr<int>> UnlockGradesAsync(Guid courseOfferingId, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<BulkPublishResultDto>> BulkPublishGradesAsync(BulkPublishGradesRequest request, Guid userId, CancellationToken ct = default);
     Task<ErrorOr<BulkUnpublishResultDto>> BulkUnpublishGradesAsync(BulkUnpublishGradesRequest request, Guid userId, CancellationToken ct = default);
+    Task MaterializeCourseResultsAsync(Guid courseOfferingId, Guid publishedById, CancellationToken ct = default);
     
     // Course Listing (for course selector)
     Task<ErrorOr<List<CourseOfferingSummaryDto>>> GetAllCoursesForGradebookAsync(Guid userId, string? searchTerm = null, CancellationToken ct = default);
@@ -58,4 +62,9 @@ public interface IGradebookService
      
      // Classter Migration
      Task<ErrorOr<GradeUploadResultDto>> MigrateClassterGradesAsync(Guid academicSessionId, Guid courseId, IFormFile excelFile, Guid userId, Guid? uploadId = null, CancellationToken ct = default);
+     Task<ErrorOr<string>> BatchMigrateClassterFolderAsync(Guid userId, CancellationToken ct = default);
+     Task<ErrorOr<string>> RepairMigratedGradesAndResultsAsync(Guid userId, CancellationToken ct = default);
+
+     // Result Upload Reporting & Aggregates
+     Task<ErrorOr<ResultUploadAggregatesResponse>> GetResultUploadAggregatesAsync(ResultUploadAggregatesRequest request, Guid currentUserId, CancellationToken ct = default);
  }
