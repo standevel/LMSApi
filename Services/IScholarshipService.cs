@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using LMS.Api.Contracts;
 using LMS.Api.Data.Entities;
@@ -23,4 +24,8 @@ public interface IScholarshipService
     
     // Batch evaluates and applies JAMB scholarships for all students admitted in a specific session
     Task ApplyJambScholarshipsForAdmissionSessionAsync(Guid admissionSessionId);
+
+    Task<bool> IsFeedingFullyCoveredAsync(Guid studentId, CancellationToken ct = default);
+    Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(string username, CancellationToken ct = default);
+    Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(Guid studentId, CancellationToken ct = default);
 }

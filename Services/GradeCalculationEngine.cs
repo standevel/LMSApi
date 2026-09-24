@@ -74,15 +74,23 @@ public class GradeCalculationEngine : IGradeCalculationEngine
                 ? (categoryTotalMarks / categoryTotalMaxMarks) * 100m
                 : 0m;
 
+            decimal maxContribution = categoryWeight > 0m 
+                ? categoryWeight 
+                : (category.MaxMarks > 0m ? category.MaxMarks : 100m);
+
             decimal categoryContribution = sysConfig.RoundingStrategy == RoundingStrategy.Ceiling
-                ? Math.Clamp(GradeCalculator.RoundScore(categoryPercentage * categoryWeight / 100m, sysConfig.RoundingStrategy, sysConfig.RoundingDecimalPlaces), 0m, category.MaxMarks)
+                ? Math.Clamp(GradeCalculator.RoundScore(categoryPercentage * categoryWeight / 100m, sysConfig.RoundingStrategy, sysConfig.RoundingDecimalPlaces), 0m, maxContribution)
                 : Math.Round(categoryPercentage * categoryWeight / 100m, 2);
+
+            decimal maxUnweighted = categoryTotalMaxMarks > 0m
+                ? categoryTotalMaxMarks
+                : (category.MaxMarks > 0m ? category.MaxMarks : 100m);
 
             SetCategoryScore(
                 category.CategoryType,
                 isUnweighted
                     ? (sysConfig.RoundingStrategy == RoundingStrategy.Ceiling
-                        ? Math.Clamp(GradeCalculator.RoundScore(categoryTotalMarks, sysConfig.RoundingStrategy, sysConfig.RoundingDecimalPlaces), 0m, category.MaxMarks)
+                        ? Math.Clamp(GradeCalculator.RoundScore(categoryTotalMarks, sysConfig.RoundingStrategy, sysConfig.RoundingDecimalPlaces), 0m, maxUnweighted)
                         : Math.Round(categoryTotalMarks, 2))
                     : categoryContribution);
 

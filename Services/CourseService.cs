@@ -832,6 +832,32 @@ public sealed class CourseService(
         return updated!.ToDto();
     }
 
+    public async Task<ErrorOr<CourseOfferingDto>> RemoveLecturerAsync(
+        Guid offeringId, Guid lecturerId, CancellationToken ct = default)
+    {
+        var row = await dbContext.CourseOfferingLecturers
+            .FirstOrDefaultAsync(l =>
+                l.CourseOfferingId == offeringId &&
+                l.LecturerId == lecturerId, ct);
+
+        if (row is null)
+            return Error.NotFound("CourseOfferingLecturer.NotFound",
+                "Lecturer assignment not found for this course offering.");
+
+        var roleLabel = row.Role == CourseLecturerRole.Main ? "Main lecturer" : "Co-lecturer";
+
+        dbContext.CourseOfferingLecturers.Remove(row);
+        await dbContext.SaveChangesAsync(ct);
+
+        await LogActionAsync("RemoveLecturer", "CourseOffering", offeringId.ToString(),
+            $"Removed {roleLabel} (LecturerId={lecturerId}) from offering", ct);
+
+        var updatedRow = await OfferingsWithNavigations()
+            .FirstOrDefaultAsync(co => co.Id == offeringId, ct);
+
+        return updatedRow!.ToDto();
+    }
+
     public async Task<ErrorOr<List<CourseOfferingDto>>> GetCourseOfferingsAsync(
         Guid? academicSessionId = null, CancellationToken ct = default)
     {
@@ -1480,6 +1506,12 @@ public sealed class CourseService(
         if (offering is null)
             return DomainErrors.Course.OfferingNotFound;
 
+        if (offering.AcademicSession != null && !offering.AcademicSession.IsActive && (offering.AcademicSession.IsAdmissionActive || offering.AcademicSession.IsAdmissionOpen))
+        {
+            return Error.Validation("Session.InAdmissionPhase",
+                $"Cannot register students into a course offering for session '{offering.AcademicSession.Name}', which is currently in admission phase and not activated for academic activities.");
+        }
+
         var studentIds = request.StudentIds.Distinct().ToList();
 
         // Query students
@@ -1613,8 +1645,10 @@ public sealed class CourseService(
 
         await dbContext.SaveChangesAsync(ct);
 
+        var registeredMatrics = string.Join(", ", results.Where(r => r.Status == "Registered").Select(r => r.StudentNumber));
+        var matricSummary = string.IsNullOrWhiteSpace(registeredMatrics) ? "none" : registeredMatrics;
         await LogActionAsync("BatchRegisterStudents", "CourseOffering", offering.Id.ToString(),
-            $"Batch registered {successfullyRegistered} student(s) to offering {offering.Course.Code} ({offering.Id}) by user {currentUserId}", ct);
+            $"Batch registered {successfullyRegistered} student(s) into {offering.Course.Code} - {offering.Course.Title} ({offering.AcademicSession?.Name}): [{matricSummary}]", ct);
 
         return new BatchRegistrationResultDto(
             offering.Id,
@@ -1682,6 +1716,45 @@ public sealed class CourseService(
             .Where(e => e.CourseOfferingId == offering.Id && studentIds.Contains(e.StudentId))
             .ToDictionaryAsync(e => e.StudentId, ct);
 
+        var unmappedStudentIds = studentIds.Where(id => !enrollments.ContainsKey(id)).ToList();
+        if (unmappedStudentIds.Count > 0)
+        {
+            var extraStudents = await dbContext.Students.AsNoTracking()
+                .Where(s => unmappedStudentIds.Contains(s.Id))
+                .ToListAsync(ct);
+            var emails = extraStudents.Select(s => s.OfficialEmail).Where(e => !string.IsNullOrEmpty(e)).Distinct().ToList();
+            if (emails.Count > 0)
+            {
+                var users = await dbContext.Users.AsNoTracking()
+                    .Where(u => u.Email != null && emails.Contains(u.Email))
+                    .Select(u => new { u.Email, u.Id })
+                    .ToListAsync(ct);
+                var usersByEmail = users
+                    .Where(u => !string.IsNullOrEmpty(u.Email))
+                    .ToDictionary(u => u.Email!, u => u.Id, StringComparer.OrdinalIgnoreCase);
+
+                var extraUserIds = extraStudents
+                    .Where(s => !string.IsNullOrEmpty(s.OfficialEmail) && usersByEmail.ContainsKey(s.OfficialEmail))
+                    .Select(s => usersByEmail[s.OfficialEmail])
+                    .ToList();
+
+                if (extraUserIds.Count > 0)
+                {
+                    var extraEnrollments = await dbContext.CourseEnrollments
+                        .Where(e => e.CourseOfferingId == offering.Id && extraUserIds.Contains(e.StudentId))
+                        .ToDictionaryAsync(e => e.StudentId, ct);
+
+                    foreach (var s in extraStudents)
+                    {
+                        if (!string.IsNullOrEmpty(s.OfficialEmail) && usersByEmail.TryGetValue(s.OfficialEmail, out var uId) && extraEnrollments.TryGetValue(uId, out var ce))
+                        {
+                            enrollments[s.Id] = ce;
+                        }
+                    }
+                }
+            }
+        }
+
         var results = new List<BatchUnregisterStudentResultDto>();
         int successfullyUnregistered = 0;
         int alreadyUnregistered = 0;
@@ -1737,8 +1810,10 @@ public sealed class CourseService(
 
         await dbContext.SaveChangesAsync(ct);
 
+        var droppedMatrics = string.Join(", ", results.Where(r => r.Status == "Dropped").Select(r => r.StudentNumber));
+        var matricSummary = string.IsNullOrWhiteSpace(droppedMatrics) ? "none" : droppedMatrics;
         await LogActionAsync("BatchUnregisterStudents", "CourseOffering", offering.Id.ToString(),
-            $"Batch dropped/unregistered {successfullyUnregistered} student(s) from offering {offering.Course.Code} ({offering.Id}) by user {currentUserId}", ct);
+            $"Batch dropped/unregistered {successfullyUnregistered} student(s) from {offering.Course.Code} - {offering.Course.Title} ({offering.AcademicSession?.Name}): [{matricSummary}]", ct);
 
         return new BatchUnregisterResultDto(
             offering.Id,

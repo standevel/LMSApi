@@ -117,6 +117,13 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
             throw new ArgumentException("Amount must be greater than zero.");
         }
 
+        var config = await GetConfigurationAsync(ct);
+        if (req.Amount > config.MaxSingleTopUpAmount)
+        {
+            throw new InvalidOperationException(
+                $"Requested top-up amount {req.Amount:N2} exceeds the maximum single top-up of {config.MaxSingleTopUpAmount:N2} NGN.");
+        }
+
         var account = await GetOrCreateAccountAsync(req.Username, ct);
         string gateway = (req.Gateway ?? "Paystack").Trim();
         string email = account.User?.Email ?? (account.Username.Contains('@') ? account.Username : "student@wigweuniversity.edu.ng");
@@ -395,5 +402,104 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
                 _logger.LogInformation("Hydrogen webhook asynchronously credited cafeteria wallet. Ref: {Ref}, Amount: {Amount}", reference, amountNaira);
             }
         }
+    }
+
+    public async Task<SystemCafeteriaConfiguration> GetConfigurationAsync(CancellationToken ct = default)
+    {
+        var config = await _db.SystemCafeteriaConfigurations.FirstOrDefaultAsync(ct);
+        return config ?? new SystemCafeteriaConfiguration();
+    }
+
+    public async Task EnsureAccountExistsAsync(string username, CancellationToken ct = default)
+    {
+        await GetOrCreateAccountAsync(username, ct);
+    }
+
+    public async Task<decimal> GetDailySpendAsync(string username, CancellationToken ct = default)
+    {
+        var today = DateTime.UtcNow.Date;
+        var cleanUsername = (username ?? string.Empty).Trim().ToLowerInvariant();
+
+        var spend = await _db.CafeteriaWalletTransactions
+            .Where(t => t.WalletAccount.Username.ToLower() == cleanUsername
+                        && t.TransactionType == "Debit"
+                        && t.Status == "Successful"
+                        && t.CreatedAt >= today)
+            .SumAsync(t => (decimal?)t.Amount, ct);
+
+        return spend ?? 0m;
+    }
+
+    public async Task<WalletDebitResult> TryDebitForMealAsync(string username, decimal amount, string description, CancellationToken ct = default)
+    {
+        if (amount <= 0)
+        {
+            return new WalletDebitResult(false, 0m, "Amount must be greater than zero.", false, false);
+        }
+
+        var account = await GetOrCreateAccountAsync(username, ct);
+        var config = await GetConfigurationAsync(ct);
+
+        if (config.DailySpendLimit > 0)
+        {
+            var todaysSpend = await GetDailySpendAsync(username, ct);
+            if (todaysSpend + amount > config.DailySpendLimit)
+            {
+                return new WalletDebitResult(
+                    Success: false,
+                    account.Balance,
+                    $"Daily spending limit of {config.DailySpendLimit:N2} NGN would be exceeded. Already spent today: {todaysSpend:N2}.",
+                    DailyLimitExceeded: true,
+                    InsufficientFunds: false);
+            }
+        }
+
+        if (account.Balance < amount)
+        {
+            return new WalletDebitResult(
+                Success: false,
+                account.Balance,
+                $"Insufficient wallet balance. Available: {account.Balance:N2}, required: {amount:N2}.",
+                DailyLimitExceeded: false,
+                InsufficientFunds: true);
+        }
+
+        account.Balance -= amount;
+        account.UpdatedAt = DateTime.UtcNow;
+
+        var tx = new CafeteriaWalletTransaction
+        {
+            WalletAccountId = account.Id,
+            Amount = amount,
+            TransactionType = "Debit",
+            Gateway = "CafeteriaWallet",
+            Reference = $"WAL-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}",
+            Status = "Successful",
+            Description = description ?? "Meal Purchase",
+            BalanceAfter = account.Balance,
+            CreatedAt = DateTime.UtcNow,
+            VerifiedAt = DateTime.UtcNow
+        };
+
+        _db.CafeteriaWalletTransactions.Add(tx);
+        await _db.SaveChangesAsync(ct);
+
+        return new WalletDebitResult(true, account.Balance, "Wallet debited successfully for meal.", false, false);
+    }
+
+    public async Task<PayWithWalletResponse> PayWithWalletAsync(PayWithWalletRequest req, CancellationToken ct = default)
+    {
+        if (req.Amount <= 0)
+        {
+            return new PayWithWalletResponse(false, "Amount must be greater than zero.", 0m);
+        }
+
+        var result = await TryDebitForMealAsync(req.Username, req.Amount, req.Description ?? "Meal Purchase", ct);
+        if (!result.Success)
+        {
+            return new PayWithWalletResponse(false, result.Message, result.NewBalance);
+        }
+
+        return new PayWithWalletResponse(true, "Wallet payment successful.", result.NewBalance);
     }
 }

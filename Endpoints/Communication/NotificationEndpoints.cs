@@ -11,7 +11,7 @@ public sealed class CreateNotificationEndpoint(INotificationService notification
     public override void Configure()
     {
         Post("notifications");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -28,7 +28,7 @@ public sealed class GetUserNotificationsEndpoint(INotificationService notificati
     public override void Configure()
     {
         Get("notifications");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -58,7 +58,7 @@ public sealed class GetNotificationByIdEndpoint(INotificationService notificatio
     public override void Configure()
     {
         Get("notifications/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -80,7 +80,7 @@ public sealed class MarkNotificationAsReadEndpoint(INotificationService notifica
     public override void Configure()
     {
         Put("notifications/{Id}/read");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -102,7 +102,7 @@ public sealed class DeleteNotificationEndpoint(INotificationService notification
     public override void Configure()
     {
         Delete("notifications/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -133,7 +133,7 @@ public sealed class SubscribePushEndpoint(IPushNotificationService pushNotificat
     public override void Configure()
     {
         Post("notifications/push/subscribe");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -159,7 +159,7 @@ public sealed class UnsubscribePushEndpoint(IPushNotificationService pushNotific
     public override void Configure()
     {
         Post("notifications/push/unsubscribe");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -185,7 +185,7 @@ public sealed class GetVapidPublicKeyEndpoint(IPushNotificationService pushNotif
     public override void Configure()
     {
         Get("notifications/push/public-key");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 

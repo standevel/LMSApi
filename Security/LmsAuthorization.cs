@@ -19,6 +19,7 @@ public static class LmsRoles
     public const string AcademicAdmin = "AcademicAdmin";
     public const string HostelWarden = "HostelWarden";
     public const string StudentWelfare = "StudentWelfare";
+    public const string CafeteriaOperator = "Cafeteria Operator";
 }
 
 public static class LmsPolicies
@@ -62,7 +63,7 @@ public static class LmsAuthorizationExtensions
 
             options.AddPolicy(
                 LmsPolicies.StaffOnly,
-                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.Lecturer, LmsRoles.Adviser, LmsRoles.Registrar, LmsRoles.AcademicAdmin, LmsRoles.HOD));
+                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.Lecturer, LmsRoles.Adviser, LmsRoles.Registrar, LmsRoles.AcademicAdmin, LmsRoles.HOD, LmsRoles.AdmissionOfficer));
 
             options.AddPolicy(
                 LmsPolicies.CourseManagement,
@@ -70,7 +71,7 @@ public static class LmsAuthorizationExtensions
 
             options.AddPolicy(
                 LmsPolicies.AcademicManagement,
-                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.AcademicAdmin, LmsRoles.HOD));
+                policy => policy.RequireRole(LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.ViceChancellor, LmsRoles.Dean, LmsRoles.AcademicAdmin, LmsRoles.HOD, LmsRoles.Registrar));
 
             options.AddPolicy(
                 LmsPolicies.AdmissionsManagement,

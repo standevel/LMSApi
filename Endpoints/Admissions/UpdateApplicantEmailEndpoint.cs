@@ -30,7 +30,7 @@ public sealed class UpdateApplicantEmailEndpoint(IAdmissionService admissionServ
     public override void Configure()
     {
         Patch("admissions/applications/{Id}/email");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Update Applicant Email")

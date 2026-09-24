@@ -45,6 +45,7 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<GradingScale> GradingScales => Set<GradingScale>();
     public DbSet<DirectEntryGradeConfiguration> DirectEntryGradeConfigurations => Set<DirectEntryGradeConfiguration>();
     public DbSet<CredentialEvaluation> CredentialEvaluations => Set<CredentialEvaluation>();
+    public DbSet<ProfileCompletionRequirement> ProfileCompletionRequirements => Set<ProfileCompletionRequirement>();
 
     // Fee Management
     public DbSet<FeeCategory> FeeCategories => Set<FeeCategory>();
@@ -57,9 +58,13 @@ public sealed class LmsDbContext(DbContextOptions<LmsDbContext> options) : DbCon
     public DbSet<Scholarship> Scholarships => Set<Scholarship>();
     public DbSet<StudentScholarship> StudentScholarships => Set<StudentScholarship>();
 
-    // Cafeteria Wallet
+    // Cafeteria Wallet & Vendor Operations
     public DbSet<CafeteriaWalletAccount> CafeteriaWalletAccounts => Set<CafeteriaWalletAccount>();
     public DbSet<CafeteriaWalletTransaction> CafeteriaWalletTransactions => Set<CafeteriaWalletTransaction>();
+    public DbSet<SystemCafeteriaConfiguration> SystemCafeteriaConfigurations => Set<SystemCafeteriaConfiguration>();
+    public DbSet<CafeteriaVendorOrder> CafeteriaVendorOrders => Set<CafeteriaVendorOrder>();
+    public DbSet<CafeteriaMenuItem> CafeteriaMenuItems => Set<CafeteriaMenuItem>();
+    public DbSet<CafeteriaMenuItemFavorite> CafeteriaMenuItemFavorites => Set<CafeteriaMenuItemFavorite>();
 
     // AI & Vector Search RAG
     public DbSet<LMS.Api.Data.Entities.AI.CourseDocumentChunk> CourseDocumentChunks => Set<LMS.Api.Data.Entities.AI.CourseDocumentChunk>();
@@ -531,7 +536,8 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.ToTable("AdmissionApplications");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.StudentEmail).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.JambRegNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.JambRegNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Gender).HasMaxLength(20);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(x => x.OfferExpiresAt);
             entity.Property(x => x.OfferAcceptedAt);
@@ -571,6 +577,39 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => new { x.JambRegNumber, x.AcademicSessionId });
             entity.HasIndex(x => new { x.Status, x.OfferAcceptedAt }); // For Registrar pending accounts query
             entity.HasIndex(x => x.EntraObjectId).HasFilter($"{SqlCol("EntraObjectId")} IS NOT NULL"); // For idempotency checks
+        });
+
+        modelBuilder.Entity<ProfileCompletionRequirement>(entity =>
+        {
+            entity.ToTable("ProfileCompletionRequirements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.RequiredFieldsJson).IsRequired();
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
+            entity.Property(x => x.IsBlocking).HasDefaultValue(true);
+
+            entity.HasOne(x => x.AcademicSession)
+                .WithMany()
+                .HasForeignKey(x => x.AcademicSessionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AcademicLevel)
+                .WithMany()
+                .HasForeignKey(x => x.AcademicLevelId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Faculty)
+                .WithMany()
+                .HasForeignKey(x => x.FacultyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.AcademicProgram)
+                .WithMany()
+                .HasForeignKey(x => x.AcademicProgramId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => new { x.AcademicSessionId, x.AcademicLevelId, x.AcademicProgramId, x.IsActive });
         });
         modelBuilder.Entity<SponsorOrganization>(entity =>
         {
@@ -2399,6 +2438,29 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.Reference).IsUnique();
             entity.HasIndex(x => x.WalletAccountId);
             entity.HasIndex(x => x.Status);
+        });
+
+        modelBuilder.Entity<CafeteriaMenuItem>(entity =>
+        {
+            entity.ToTable("CafeteriaMenuItems");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.VendorId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Price).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(x => x.FeedingTimeName).HasMaxLength(100);
+            entity.HasIndex(x => new { x.VendorId, x.IsAvailable });
+        });
+
+        modelBuilder.Entity<CafeteriaMenuItemFavorite>(entity =>
+        {
+            entity.ToTable("CafeteriaMenuItemFavorites");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Username, x.MenuItemId }).IsUnique();
+            entity.HasIndex(x => x.DeletedAt);
+            entity.HasOne(x => x.MenuItem)
+                .WithMany()
+                .HasForeignKey(x => x.MenuItemId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

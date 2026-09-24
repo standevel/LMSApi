@@ -12,4 +12,10 @@ public interface ICafeteriaWalletService
     Task<VerifyWalletTopUpResponse> DirectTopUpAsync(DirectWalletTopUpRequest req, CancellationToken ct = default);
     Task HandlePaystackWebhookAsync(string rawBody, string signature, CancellationToken ct = default);
     Task HandleHydrogenWebhookAsync(string rawBody, string signature, CancellationToken ct = default);
+
+    Task<SystemCafeteriaConfiguration> GetConfigurationAsync(CancellationToken ct = default);
+    Task<decimal> GetDailySpendAsync(string username, CancellationToken ct = default);
+    Task<WalletDebitResult> TryDebitForMealAsync(string username, decimal amount, string description, CancellationToken ct = default);
+    Task<PayWithWalletResponse> PayWithWalletAsync(PayWithWalletRequest req, CancellationToken ct = default);
+    Task EnsureAccountExistsAsync(string username, CancellationToken ct = default);
 }

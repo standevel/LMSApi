@@ -34,6 +34,7 @@ public sealed class AdmissionApplication
         set => _jambRegNumber = value?.ToUpperInvariant() ?? string.Empty;
     }
     public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
 
     // Applicant Type & International/Transfer Info
     public ApplicantType ApplicantType { get; set; } = ApplicantType.UTME;

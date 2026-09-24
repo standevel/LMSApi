@@ -69,8 +69,11 @@ public class RegistrationService : BaseService, IRegistrationService
 
             await _context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
+            var studentLabel = await GetStudentIdentifierAsync(studentId, ct);
+            var courseCode = offering.Course?.Code ?? "Course";
+            var sessionName = offering.AcademicSession?.Name ?? "Session";
             await LogActionAsync("RegisterStudent", "CourseEnrollment", enrollment.Id.ToString(),
-                $"Student {studentId} registered for offering {courseOfferingId}", ct);
+                $"Student {studentLabel} registered for {courseCode} ({offering.Semester} Semester, {sessionName})", ct);
             return MapRegistration(enrollment, offering, await GetCurriculumCreditsAsync(studentId, offering.CourseId, ct));
         });
     }
@@ -80,6 +83,8 @@ public class RegistrationService : BaseService, IRegistrationService
         var enrollment = await _context.CourseEnrollments
             .Include(x => x.CourseOffering)
                 .ThenInclude(o => o.AcademicSession)
+            .Include(x => x.CourseOffering)
+                .ThenInclude(o => o.Course)
             .FirstOrDefaultAsync(x => x.Id == enrollmentId && x.StudentId == studentId, ct);
         if (enrollment == null)
             return Error.NotFound("Enrollment.NotFound", "Enrollment record not found.");
@@ -112,8 +117,11 @@ public class RegistrationService : BaseService, IRegistrationService
         enrollment.DroppedAtUtc = DateTime.UtcNow;
         enrollment.UpdatedById = studentId;
         await _context.SaveChangesAsync(ct);
+        var studentLabel = await GetStudentIdentifierAsync(studentId, ct);
+        var courseCode = enrollment.CourseOffering?.Course?.Code ?? "Course";
+        var sessionName = session?.Name ?? "Session";
         await LogActionAsync("DropCourse", "CourseEnrollment", enrollment.Id.ToString(),
-            $"Student {studentId} dropped offering {enrollment.CourseOfferingId}", ct);
+            $"Student {studentLabel} dropped {courseCode} ({sessionName})", ct);
         return Result.Deleted;
     }
 
@@ -163,6 +171,15 @@ public class RegistrationService : BaseService, IRegistrationService
         if (newEnrollment != null)
         {
             return Error.Conflict("AlreadyEnrolled", "Student is already enrolled in the new course offering.");
+        }
+
+        if (newOffering != null)
+        {
+            var passedCourseIds = await GetPassedCourseIdsAsync(studentId, currentOffering.AcademicSessionId, ct);
+            if (passedCourseIds.Contains(newOffering.CourseId))
+            {
+                return Error.Conflict("Registration.AlreadyPassed", "You have already registered and passed this course in a previous session.");
+            }
         }
 
         // Check if there's already a pending swap request for this student and course combination
@@ -482,16 +499,8 @@ public class RegistrationService : BaseService, IRegistrationService
             ? levels.Where(x => x.Order < currentLevel.Order).Select(x => x.Id).ToList() 
             : new List<Guid>();
 
-        // Query published grades to identify passed courses
-        var allGradeRows = await _context.Grades.AsNoTracking()
-            .Where(g => g.StudentId == studentId &&
-                _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-            .Select(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId, g.MarksObtained, g.Assessment.MaxMarks })
-            .ToListAsync(ct);
-
-        var passedCourseIds = allGradeRows.GroupBy(x => new { x.CourseId, x.CourseOfferingId })
-            .Where(g => g.Sum(x => x.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= 40m)
-            .Select(g => g.Key.CourseId).ToHashSet();
+        // Query all passed courses from StudentCourseResults and published Grades
+        var passedCourseIds = await GetPassedCourseIdsAsync(studentId, session.Id, ct);
 
         // Load curriculum maps — resolved by admission session, then program active curriculum
         var resolvedCurriculumId = await ResolveCurriculumIdAsync(studentId, programmeEnrollment, ct);
@@ -561,9 +570,9 @@ public class RegistrationService : BaseService, IRegistrationService
                 offerings = curriculumFiltered;
         }
 
-        // Filter out lower-level offerings if the student has already passed them
+        // Filter out offerings if the student has already registered and passed them in previous sessions
         offerings = offerings
-            .Where(x => !x.Programs.Any(p => lowerLevelIds.Contains(p.LevelId)) || !passedCourseIds.Contains(x.CourseId))
+            .Where(x => !passedCourseIds.Contains(x.CourseId))
             .ToList();
 
         var offeringIds = offerings.Select(x => x.Id).ToList();
@@ -597,6 +606,7 @@ public class RegistrationService : BaseService, IRegistrationService
                 : await GetBlockersAsync(studentId, offering, ct, config);
 
             var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
+            var isCarryover = IsLowerLevelCourse(offering, lowerLevelIds, curriculumCourseLevels) && !passedCourseIds.Contains(offering.CourseId);
 
             optionDtos.Add(new RegistrationOfferingDto(
                 offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty, credits,
@@ -605,7 +615,7 @@ public class RegistrationService : BaseService, IRegistrationService
                 slots.Where(x => x.CourseOfferingId == offering.Id)
                     .Select(x => $"{x.DayOfWeek} {x.StartTime:HH\\:mm}–{x.EndTime:HH\\:mm}").ToList(),
                 isRegistered, blockers.Count == 0, blockers,
-                offering.Programs.Any(p => lowerLevelIds.Contains(p.LevelId)), false, offering.IsRegistrationClosed));
+                isCarryover, false, offering.IsRegistrationClosed));
         }
 
         // Resolve dynamic min expected credit units requirement
@@ -706,17 +716,9 @@ public class RegistrationService : BaseService, IRegistrationService
             x.CourseOfferingId == offering.Id && x.Status == "Registered", ct))
             blockers.Add(new("Registration.AlreadyRegistered", "You are already registered for this course."));
 
-        // Fetch grouped totals into memory first to avoid SQL divide-by-zero (SQL Server does not
-        // guarantee short-circuit evaluation of AND inside HAVING clauses).
-        var gradeGroupTotals = await _context.Grades.AsNoTracking()
-            .Where(g => g.StudentId == studentId && g.Assessment.CourseOffering.CourseId == offering.CourseId &&
-                _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-            .GroupBy(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId })
-            .Select(g => new { TotalMax = g.Sum(x => x.Assessment.MaxMarks), TotalObtained = g.Sum(x => x.MarksObtained) })
-            .ToListAsync(ct);
-        var courseAlreadyPassed = gradeGroupTotals.Any(g => g.TotalMax > 0 && g.TotalObtained / g.TotalMax * 100m >= 40m);
-        if (courseAlreadyPassed)
-            blockers.Add(new("Registration.AlreadyPassed", "You have already passed this course."));
+        var passedCourseIds = await GetPassedCourseIdsAsync(studentId, offering.AcademicSessionId, ct);
+        if (passedCourseIds.Contains(offering.CourseId))
+            blockers.Add(new("Registration.AlreadyPassed", "You have already registered and passed this course in a previous session."));
 
         // Resolve curriculum — by admission session, then program active curriculum
         var resolvedCurriculumId = programmeEnrollment != null ? await ResolveCurriculumIdAsync(studentId, programmeEnrollment, ct) : Guid.Empty;
@@ -783,18 +785,8 @@ public class RegistrationService : BaseService, IRegistrationService
 
             if (carryoverOfferings.Count > 0)
             {
-                var allGrades = await _context.Grades.AsNoTracking()
-                    .Where(g => g.StudentId == studentId &&
-                        _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-                    .Select(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId, g.MarksObtained, g.Assessment.MaxMarks })
-                    .ToListAsync(ct);
-
-                var passedIds = allGrades.GroupBy(x => new { x.CourseId, x.CourseOfferingId })
-                    .Where(g => g.Sum(x => x.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= 40m)
-                    .Select(g => g.Key.CourseId).ToHashSet();
-
                 var unpassedCarryovers = carryoverOfferings
-                    .Where(x => !passedIds.Contains(x.CourseId))
+                    .Where(x => !passedCourseIds.Contains(x.CourseId))
                     .ToList();
 
                 if (unpassedCarryovers.Count > 0)
@@ -838,15 +830,7 @@ public class RegistrationService : BaseService, IRegistrationService
                 x.CourseOfferingId == offering.Id && x.Status == "Approved", ct);
             if (!approvedOverride)
             {
-                var gradeRows = await _context.Grades.AsNoTracking()
-                    .Where(g => g.StudentId == studentId && prerequisiteIds.Contains(g.Assessment.CourseOffering.CourseId) &&
-                        _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-                    .Select(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId, g.MarksObtained, g.Assessment.MaxMarks })
-                    .ToListAsync(ct);
-                var passed = gradeRows.GroupBy(x => new { x.CourseId, x.CourseOfferingId })
-                    .Where(g => g.Sum(x => x.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= 40m)
-                    .Select(g => g.Key.CourseId).ToHashSet();
-                var missing = prerequisiteIds.Where(x => !passed.Contains(x)).ToList();
+                var missing = prerequisiteIds.Where(x => !passedCourseIds.Contains(x)).ToList();
                 if (missing.Count > 0)
                     blockers.Add(new("Registration.PrerequisitesNotMet", "One or more required prerequisite courses have not been passed."));
             }
@@ -865,6 +849,30 @@ public class RegistrationService : BaseService, IRegistrationService
     private static CourseRegistrationDto MapRegistration(CourseEnrollment enrollment, CourseOffering offering, int creditUnits) =>
         new(enrollment.Id, enrollment.StudentId, offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty,
             enrollment.RegisteredAtUtc, enrollment.DroppedAtUtc, enrollment.Status, creditUnits);
+
+    private async Task<string> GetStudentIdentifierAsync(Guid studentId, CancellationToken ct)
+    {
+        var student = await _context.Students.AsNoTracking()
+            .Where(s => s.Id == studentId)
+            .Select(s => new { s.StudentNumber, s.FirstName, s.LastName })
+            .FirstOrDefaultAsync(ct);
+        if (student != null)
+        {
+            var mat = !string.IsNullOrWhiteSpace(student.StudentNumber) ? student.StudentNumber : "NoMatric";
+            return $"{mat} ({student.FirstName} {student.LastName})".Trim();
+        }
+
+        var user = await _context.Users.AsNoTracking()
+            .Where(u => u.Id == studentId)
+            .Select(u => new { u.Username, u.DisplayName, u.Email })
+            .FirstOrDefaultAsync(ct);
+        if (user != null)
+        {
+            return user.Username ?? user.DisplayName ?? user.Email ?? studentId.ToString();
+        }
+
+        return studentId.ToString();
+    }
 
     private async Task<Guid> GetProgramIdFromOffering(Guid courseOfferingId, CancellationToken ct)
     {
@@ -1014,16 +1022,18 @@ public class RegistrationService : BaseService, IRegistrationService
 
         // Note: Students are permitted to select courses outside their strict curriculum mapping as electives/global courses
 
-        // Identify outstanding carryovers
-        var allGradeRows = await _context.Grades.AsNoTracking()
-            .Where(g => g.StudentId == studentId &&
-                _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-            .Select(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId, g.MarksObtained, g.Assessment.MaxMarks })
-            .ToListAsync(ct);
+        // Identify courses already registered and passed
+        var passedCourseIds = await GetPassedCourseIdsAsync(studentId, session.Id, ct);
 
-        var passedCourseIds = allGradeRows.GroupBy(x => new { x.CourseId, x.CourseOfferingId })
-            .Where(g => g.Sum(x => x.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= 40m)
-            .Select(g => g.Key.CourseId).ToHashSet();
+        // Validate that no requested course was already registered and passed in a previous session
+        foreach (var offering in requestedOfferings)
+        {
+            if (passedCourseIds.Contains(offering.CourseId))
+            {
+                return Error.Validation("Registration.AlreadyPassed",
+                    $"Cannot register for {offering.Course?.Code ?? "this course"}: You have already registered and passed this course in a previous session.");
+            }
+        }
 
         // Carryover offerings for the semesters present in the student's program levels below current
         var carryoverQuery = _context.CourseOfferings.AsNoTracking()
@@ -1138,17 +1148,7 @@ public class RegistrationService : BaseService, IRegistrationService
 
                 if (!approvedOverride)
                 {
-                    var gradeRows = await _context.Grades.AsNoTracking()
-                        .Where(g => g.StudentId == studentId && prerequisiteIds.Contains(g.Assessment.CourseOffering.CourseId) &&
-                            _context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents))
-                        .Select(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId, g.MarksObtained, g.Assessment.MaxMarks })
-                        .ToListAsync(ct);
-
-                    var passed = gradeRows.GroupBy(x => new { x.CourseId, x.CourseOfferingId })
-                        .Where(g => g.Sum(x => x.MaxMarks) > 0 && g.Sum(x => x.MarksObtained) / g.Sum(x => x.MaxMarks) * 100m >= 40m)
-                        .Select(g => g.Key.CourseId).ToHashSet();
-
-                    var missing = prerequisiteIds.Where(x => !passed.Contains(x)).ToList();
+                    var missing = prerequisiteIds.Where(x => !passedCourseIds.Contains(x)).ToList();
                     if (missing.Count > 0)
                     {
                         return Error.Validation("Registration.PrerequisitesNotMet", $"Prerequisites not met for {offering.Course?.Code ?? "this course"}.");
@@ -1209,8 +1209,9 @@ public class RegistrationService : BaseService, IRegistrationService
             await _context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
 
+            var studentLabel = await GetStudentIdentifierAsync(studentId, ct);
             await LogActionAsync("RegisterCoursesBulk", "CourseEnrollment", studentId.ToString(),
-                $"Student {studentId} submitted bulk registration for {courseOfferingIds.Count} courses.", ct);
+                $"Student {studentLabel} submitted bulk registration for {courseOfferingIds.Count} courses.", ct);
 
             return await GetRegistrationSummaryAsync(studentId, null, null, ct);
         });
@@ -1385,5 +1386,520 @@ public class RegistrationService : BaseService, IRegistrationService
         return await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.IsActive, ct)
             ?? await _context.AcademicSessions.AsNoTracking().FirstOrDefaultAsync(x => x.Name == "2025/2026", ct)
             ?? await _context.AcademicSessions.AsNoTracking().OrderByDescending(x => x.StartDate).FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Gets the IDs of all courses the student has registered and passed.
+    /// Combines official published StudentCourseResults and published Grades.
+    /// </summary>
+    private async Task<HashSet<Guid>> GetPassedCourseIdsAsync(Guid studentId, Guid? currentSessionId = null, CancellationToken ct = default)
+    {
+        var passedSet = new HashSet<Guid>();
+
+        // 1. From StudentCourseResults
+        var resultsQuery = _context.StudentCourseResults.AsNoTracking()
+            .Where(r => r.StudentId == studentId &&
+                       (r.TotalScore >= 40m || (r.GradePoints >= 1.0m && r.LetterGrade != "F" && r.LetterGrade != "")) &&
+                       (r.IsPublished || (currentSessionId.HasValue && r.AcademicSessionId != currentSessionId.Value) ||
+                        _context.GradePublications.Any(p => p.CourseOfferingId == r.CourseOfferingId && p.IsVisibleToStudents)));
+
+        var passedFromResults = await resultsQuery
+            .Select(r => r.CourseOffering.CourseId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        foreach (var id in passedFromResults)
+        {
+            passedSet.Add(id);
+        }
+
+        // 2. From Grades
+        var gradesQuery = _context.Grades.AsNoTracking()
+            .Where(g => g.StudentId == studentId &&
+                       (_context.GradePublications.Any(p => p.CourseOfferingId == g.Assessment.CourseOfferingId && p.IsVisibleToStudents) ||
+                        (currentSessionId.HasValue && g.Assessment.CourseOffering.AcademicSessionId != currentSessionId.Value)));
+
+        var gradeRows = await gradesQuery
+            .GroupBy(g => new { g.Assessment.CourseOffering.CourseId, g.Assessment.CourseOfferingId })
+            .Select(g => new {
+                g.Key.CourseId,
+                TotalMax = g.Sum(x => x.Assessment.MaxMarks),
+                TotalObtained = g.Sum(x => x.MarksObtained)
+            })
+            .ToListAsync(ct);
+
+        foreach (var g in gradeRows.Where(x => x.TotalMax > 0 && x.TotalObtained / x.TotalMax * 100m >= 40m))
+        {
+            passedSet.Add(g.CourseId);
+        }
+
+        return passedSet;
+    }
+
+    /// <summary>
+    /// Checks if a course or course offering is at a lower level than the student's current level.
+    /// </summary>
+    private static bool IsLowerLevelCourse(
+        CourseOffering offering,
+        IReadOnlyCollection<Guid> lowerLevelIds,
+        IReadOnlyDictionary<Guid, Guid> curriculumCourseLevels)
+    {
+        if (lowerLevelIds == null || lowerLevelIds.Count == 0)
+            return false;
+
+        if (offering.Programs.Any(p => lowerLevelIds.Contains(p.LevelId)))
+            return true;
+
+        if (offering.Course?.LevelId.HasValue == true && lowerLevelIds.Contains(offering.Course.LevelId.Value))
+            return true;
+
+        if (curriculumCourseLevels.TryGetValue(offering.CourseId, out var curLevelId) && lowerLevelIds.Contains(curLevelId))
+            return true;
+
+        return false;
+    }
+
+    public async Task<ErrorOr<RegistrationCleanupResultDto>> CleanupInvalidRegistrationsAsync(Guid? academicSessionId = null, CancellationToken ct = default)
+    {
+        var session = academicSessionId.HasValue
+            ? await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Id == academicSessionId.Value, ct)
+            : await GetActiveAcademicSessionAsync(ct);
+
+        if (session == null)
+            return Error.NotFound("AcademicSession.NotFound", "No academic session found for cleanup.");
+
+        // 1. Fetch active course enrollments in the target session
+        var activeEnrollments = await _context.CourseEnrollments
+            .Where(e => e.Status == "Registered" && e.CourseOffering.AcademicSessionId == session.Id)
+            .Include(e => e.CourseOffering).ThenInclude(co => co.Course)
+            .Include(e => e.CourseOffering).ThenInclude(co => co.Programs)
+            .ToListAsync(ct);
+
+        if (activeEnrollments.Count == 0)
+            return new RegistrationCleanupResultDto(0, new List<CleanedUpRegistrationDto>());
+
+        var studentIds = activeEnrollments.Select(e => e.StudentId).Distinct().ToList();
+
+        // 2. Fetch passed courses from previous sessions for all these students
+        // From StudentCourseResults
+        var passedResults = await _context.StudentCourseResults.AsNoTracking()
+            .Where(r => studentIds.Contains(r.StudentId) &&
+                        r.AcademicSessionId != session.Id &&
+                        (r.TotalScore >= 40m || (r.GradePoints >= 1.0m && r.LetterGrade != "F" && r.LetterGrade != "")))
+            .Select(r => new { r.StudentId, CourseId = r.CourseOffering.CourseId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        // From Grades
+        var passedGrades = await _context.Grades.AsNoTracking()
+            .Where(g => studentIds.Contains(g.StudentId) &&
+                        g.Assessment.CourseOffering.AcademicSessionId != session.Id)
+            .GroupBy(g => new { g.StudentId, g.Assessment.CourseOffering.CourseId })
+            .Select(g => new {
+                g.Key.StudentId,
+                g.Key.CourseId,
+                TotalMax = g.Sum(x => x.Assessment.MaxMarks),
+                TotalObtained = g.Sum(x => x.MarksObtained)
+            })
+            .Where(g => g.TotalMax > 0 && g.TotalObtained / g.TotalMax * 100m >= 40m)
+            .Select(g => new { g.StudentId, g.CourseId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var passedCourseSet = new HashSet<(Guid StudentId, Guid CourseId)>();
+        foreach (var r in passedResults)
+            passedCourseSet.Add((r.StudentId, r.CourseId));
+        foreach (var g in passedGrades)
+            passedCourseSet.Add((g.StudentId, g.CourseId));
+
+        var cleanedList = new List<CleanedUpRegistrationDto>();
+        var now = DateTime.UtcNow;
+
+        foreach (var enrollment in activeEnrollments)
+        {
+            var courseId = enrollment.CourseOffering.CourseId;
+            if (passedCourseSet.Contains((enrollment.StudentId, courseId)))
+            {
+                enrollment.Status = "Dropped";
+                enrollment.DroppedAtUtc = now;
+
+                cleanedList.Add(new CleanedUpRegistrationDto(
+                    enrollment.Id,
+                    enrollment.StudentId,
+                    enrollment.CourseOffering?.Course?.Code ?? "Unknown",
+                    enrollment.CourseOffering?.Course?.Title ?? "Unknown",
+                    session.Name,
+                    now));
+
+                await LogActionAsync("CleanupInvalidRegistration", "CourseEnrollment", enrollment.Id.ToString(),
+                    $"Automatically dropped registration for student {enrollment.StudentId} in course {enrollment.CourseOffering?.Course?.Code} because it was already registered and passed in a previous session.", ct);
+            }
+        }
+
+        if (cleanedList.Count > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return new RegistrationCleanupResultDto(cleanedList.Count, cleanedList);
+    }
+
+    public async Task<ErrorOr<RegistrationCleanupScanResultDto>> ScanInvalidRegistrationsAsync(RegistrationCleanupScanRequest request, CancellationToken ct = default)
+    {
+        var session = request.AcademicSessionId.HasValue
+            ? await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Id == request.AcademicSessionId.Value, ct)
+            : await GetActiveAcademicSessionAsync(ct);
+
+        if (session == null)
+            return Error.NotFound("AcademicSession.NotFound", "No academic session found for registration cleanup.");
+
+        var query = _context.CourseEnrollments.AsNoTracking()
+            .Where(e => e.Status == "Registered" && e.CourseOffering.AcademicSessionId == session.Id);
+
+        var activeEnrollments = await query
+            .Include(e => e.CourseOffering).ThenInclude(co => co.Course)
+            .Include(e => e.CourseOffering).ThenInclude(co => co.Programs).ThenInclude(cop => cop.Level)
+            .Include(e => e.Student)
+            .ToListAsync(ct);
+
+        if (activeEnrollments.Count == 0)
+        {
+            return new RegistrationCleanupScanResultDto(
+                session.Id, session.Name, 0, 0, 0, 0, 0, new List<InvalidRegistrationItemDto>());
+        }
+
+        var studentUserIds = activeEnrollments.Select(e => e.StudentId).Distinct().ToList();
+
+        var students = await _context.Students.AsNoTracking()
+            .Include(s => s.AcademicProgram)
+            .Include(s => s.Level)
+            .Where(s => studentUserIds.Contains(s.Id))
+            .ToDictionaryAsync(s => s.Id, ct);
+
+        var unmappedUserIds = studentUserIds.Where(id => !students.ContainsKey(id)).ToList();
+        if (unmappedUserIds.Count > 0)
+        {
+            var users = await _context.Users.AsNoTracking().Where(u => unmappedUserIds.Contains(u.Id)).ToListAsync(ct);
+            var emails = users.Select(u => u.Email).Where(e => !string.IsNullOrEmpty(e)).Distinct().ToList();
+            if (emails.Count > 0)
+            {
+                var matchedStudents = await _context.Students.AsNoTracking()
+                    .Include(s => s.AcademicProgram)
+                    .Include(s => s.Level)
+                    .Where(s => emails.Contains(s.OfficialEmail) || emails.Contains(s.PersonalEmail))
+                    .ToListAsync(ct);
+
+                foreach (var u in users)
+                {
+                    var s = matchedStudents.FirstOrDefault(x =>
+                        string.Equals(x.OfficialEmail, u.Email, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(x.PersonalEmail, u.Email, StringComparison.OrdinalIgnoreCase));
+                    if (s != null)
+                    {
+                        students[u.Id] = s;
+                    }
+                }
+            }
+        }
+
+        var sessionProgramEnrollments = await _context.Enrollments.AsNoTracking()
+            .Include(pe => pe.Program)
+            .Include(pe => pe.Level)
+            .Where(pe => pe.AcademicSessionId == session.Id && studentUserIds.Contains(pe.UserId))
+            .ToDictionaryAsync(pe => pe.UserId, ct);
+
+        var allProgramIds = students.Values
+            .Select(s => s.AcademicProgramId)
+            .Where(p => p.HasValue)
+            .Select(p => p!.Value)
+            .Union(sessionProgramEnrollments.Values.Select(pe => pe.ProgramId))
+            .Distinct().ToList();
+
+        var curriculumCourses = await _context.CurriculumCourses.AsNoTracking()
+            .Include(cc => cc.Curriculum)
+            .Include(cc => cc.Level)
+            .Where(cc => allProgramIds.Contains(cc.Curriculum.ProgramId))
+            .ToListAsync(ct);
+
+        var programCourseMap = new Dictionary<(Guid ProgramId, Guid CourseId), List<(int LevelOrder, string LevelName)>>();
+        foreach (var cc in curriculumCourses)
+        {
+            var key = (cc.Curriculum.ProgramId, cc.CourseId);
+            if (!programCourseMap.TryGetValue(key, out var list))
+            {
+                list = new List<(int, string)>();
+                programCourseMap[key] = list;
+            }
+            var order = cc.Level?.Order ?? 0;
+            if (order == 0 && cc.Level?.Name != null)
+            {
+                order = ParseLevelOrderFromName(cc.Level.Name);
+            }
+            list.Add((order, cc.Level?.Name ?? $"{order}00 Level"));
+        }
+
+        var passedCourseSet = new HashSet<(Guid StudentId, Guid CourseId)>();
+        if (request.CheckAlreadyPassed)
+        {
+            var passedResults = await _context.StudentCourseResults.AsNoTracking()
+                .Where(r => studentUserIds.Contains(r.StudentId) &&
+                            r.AcademicSessionId != session.Id &&
+                            (r.TotalScore >= 40m || (r.GradePoints >= 1.0m && r.LetterGrade != "F" && r.LetterGrade != "")))
+                .Select(r => new { r.StudentId, CourseId = r.CourseOffering.CourseId })
+                .Distinct()
+                .ToListAsync(ct);
+
+            var passedGrades = await _context.Grades.AsNoTracking()
+                .Where(g => studentUserIds.Contains(g.StudentId) &&
+                            g.Assessment.CourseOffering.AcademicSessionId != session.Id)
+                .GroupBy(g => new { g.StudentId, g.Assessment.CourseOffering.CourseId })
+                .Select(g => new {
+                    g.Key.StudentId,
+                    g.Key.CourseId,
+                    TotalMax = g.Sum(x => x.Assessment.MaxMarks),
+                    TotalObtained = g.Sum(x => x.MarksObtained)
+                })
+                .Where(g => g.TotalMax > 0 && g.TotalObtained / g.TotalMax * 100m >= 40m)
+                .Select(g => new { g.StudentId, g.CourseId })
+                .Distinct()
+                .ToListAsync(ct);
+
+            foreach (var r in passedResults) passedCourseSet.Add((r.StudentId, r.CourseId));
+            foreach (var g in passedGrades) passedCourseSet.Add((g.StudentId, g.CourseId));
+        }
+
+        var invalidList = new List<InvalidRegistrationItemDto>();
+        int programMismatchCount = 0;
+        int levelMismatchCount = 0;
+        int alreadyPassedCount = 0;
+
+        foreach (var enrollment in activeEnrollments)
+        {
+            students.TryGetValue(enrollment.StudentId, out var student);
+            sessionProgramEnrollments.TryGetValue(enrollment.StudentId, out var pe);
+
+            var programId = pe?.ProgramId ?? student?.AcademicProgramId;
+            var programName = pe?.Program?.Name ?? student?.AcademicProgram?.Name;
+            var levelId = pe?.LevelId ?? student?.LevelId;
+            var levelName = pe?.Level?.Name ?? student?.Level?.Name;
+            var studentLevelOrder = pe?.Level?.Order ?? student?.Level?.Order ?? ParseLevelOrderFromName(levelName);
+
+            if (request.ProgramId.HasValue && programId != request.ProgramId.Value)
+                continue;
+
+            if (request.LevelId.HasValue && levelId != request.LevelId.Value)
+                continue;
+
+            var course = enrollment.CourseOffering?.Course;
+            if (course == null) continue;
+
+            var courseId = course.Id;
+            var courseCode = course.Code ?? "Unknown";
+            var courseTitle = course.Title ?? "Unknown";
+
+            var issues = new List<string>();
+            bool isProgMismatch = false;
+            bool isLvlMismatch = false;
+            bool isPassMismatch = false;
+
+            // 1. Program check
+            if (request.CheckProgramMismatch && programId.HasValue)
+            {
+                bool inProgramCurriculum = programCourseMap.ContainsKey((programId.Value, courseId));
+                bool inOfferingPrograms = enrollment.CourseOffering.Programs.Any(p => p.ProgramId == programId.Value);
+                bool isDirectProgramCourse = course.ProgramId == programId.Value;
+
+                if (!inProgramCurriculum && !inOfferingPrograms && !isDirectProgramCourse)
+                {
+                    isProgMismatch = true;
+                    issues.Add($"Course {courseCode} is not in curriculum or assigned programs for {programName ?? "student program"}.");
+                }
+            }
+
+            // 2. Level check
+            int courseLevelOrder = 0;
+            string courseLevelName = "";
+
+            if (programId.HasValue && programCourseMap.TryGetValue((programId.Value, courseId), out var curLevels) && curLevels.Count > 0)
+            {
+                courseLevelOrder = curLevels[0].LevelOrder;
+                courseLevelName = curLevels[0].LevelName;
+            }
+
+            if (courseLevelOrder == 0 && programId.HasValue)
+            {
+                var cop = enrollment.CourseOffering.Programs.FirstOrDefault(p => p.ProgramId == programId.Value);
+                if (cop != null)
+                {
+                    courseLevelOrder = cop.Level?.Order ?? ParseLevelOrderFromName(cop.Level?.Name);
+                    courseLevelName = cop.Level?.Name ?? (courseLevelOrder > 0 ? $"{courseLevelOrder}00 Level" : "");
+                }
+            }
+
+            if (courseLevelOrder == 0)
+            {
+                courseLevelOrder = ParseLevelOrderFromCourseCode(courseCode);
+                courseLevelName = courseLevelOrder > 0 ? $"{courseLevelOrder}00 Level" : "";
+            }
+
+            if (request.CheckLevelMismatch && studentLevelOrder > 0 && courseLevelOrder > 0)
+            {
+                if (request.AllowPotentialCarryover)
+                {
+                    if (courseLevelOrder > studentLevelOrder)
+                    {
+                        isLvlMismatch = true;
+                        issues.Add($"Student is in {studentLevelOrder}00 Level but registered for higher {courseLevelOrder}00 Level course ({courseCode}). Future-level courses are not permitted.");
+                    }
+                }
+                else
+                {
+                    if (courseLevelOrder != studentLevelOrder)
+                    {
+                        isLvlMismatch = true;
+                        issues.Add($"Student is in {studentLevelOrder}00 Level but registered for {courseLevelOrder}00 Level course ({courseCode}). Carryovers are disallowed.");
+                    }
+                }
+            }
+
+            // 3. Already passed check
+            if (request.CheckAlreadyPassed && passedCourseSet.Contains((enrollment.StudentId, courseId)))
+            {
+                isPassMismatch = true;
+                issues.Add($"Student already completed and passed {courseCode} in a prior academic session.");
+            }
+
+            if (issues.Count > 0)
+            {
+                if (isProgMismatch) programMismatchCount++;
+                if (isLvlMismatch) levelMismatchCount++;
+                if (isPassMismatch) alreadyPassedCount++;
+
+                var studentName = student != null
+                    ? $"{student.FirstName} {student.LastName}".Trim()
+                    : (enrollment.Student?.DisplayName ?? enrollment.Student?.Email ?? "Unknown Student");
+                var matricNumber = student?.StudentNumber ?? "N/A";
+
+                invalidList.Add(new InvalidRegistrationItemDto(
+                    enrollment.Id,
+                    enrollment.StudentId,
+                    studentName,
+                    matricNumber,
+                    programId,
+                    programName,
+                    levelId,
+                    levelName,
+                    studentLevelOrder > 0 ? studentLevelOrder : null,
+                    enrollment.CourseOfferingId,
+                    courseId,
+                    courseCode,
+                    courseTitle,
+                    (int)enrollment.CourseOffering.Semester,
+                    string.IsNullOrEmpty(courseLevelName) ? (courseLevelOrder > 0 ? $"{courseLevelOrder}00 Level" : "Unknown") : courseLevelName,
+                    courseLevelOrder > 0 ? courseLevelOrder : null,
+                    issues,
+                    enrollment.RegisteredAtUtc));
+            }
+        }
+
+        return new RegistrationCleanupScanResultDto(
+            session.Id,
+            session.Name,
+            activeEnrollments.Count,
+            invalidList.Count,
+            programMismatchCount,
+            levelMismatchCount,
+            alreadyPassedCount,
+            invalidList);
+    }
+
+    public async Task<ErrorOr<RegistrationCleanupExecutionResultDto>> ExecuteCleanupAsync(
+        ExecuteRegistrationCleanupRequest request, Guid currentUserId, CancellationToken ct = default)
+    {
+        var scanReq = new RegistrationCleanupScanRequest(
+            request.AcademicSessionId,
+            request.ProgramId,
+            request.LevelId,
+            request.CheckProgramMismatch,
+            request.CheckLevelMismatch,
+            request.AllowPotentialCarryover,
+            request.CheckAlreadyPassed);
+
+        var scanResult = await ScanInvalidRegistrationsAsync(scanReq, ct);
+        if (scanResult.IsError)
+            return scanResult.Errors;
+
+        var toDrop = scanResult.Value.InvalidRegistrations;
+        if (request.SpecificEnrollmentIds != null && request.SpecificEnrollmentIds.Count > 0)
+        {
+            var allowedSet = request.SpecificEnrollmentIds.ToHashSet();
+            toDrop = toDrop.Where(x => allowedSet.Contains(x.EnrollmentId)).ToList();
+        }
+
+        if (toDrop.Count == 0)
+        {
+            return new RegistrationCleanupExecutionResultDto(
+                0, request.Reason ?? "No matching invalid registrations to clean up.", DateTime.UtcNow, new List<CleanedUpRegistrationDto>());
+        }
+
+        var enrollmentIds = toDrop.Select(x => x.EnrollmentId).ToList();
+        var enrollmentsToUpdate = await _context.CourseEnrollments
+            .Where(e => enrollmentIds.Contains(e.Id))
+            .ToListAsync(ct);
+
+        var now = DateTime.UtcNow;
+        var cleanedList = new List<CleanedUpRegistrationDto>();
+
+        foreach (var e in enrollmentsToUpdate)
+        {
+            var match = toDrop.FirstOrDefault(x => x.EnrollmentId == e.Id);
+            e.Status = "Dropped";
+            e.DroppedAtUtc = now;
+            e.UpdatedById = currentUserId;
+
+            var reasonSummary = match != null ? string.Join("; ", match.Issues) : (request.Reason ?? "Cleaned up invalid registration");
+
+            await LogActionAsync("CleanupInvalidRegistration", "CourseEnrollment", e.Id.ToString(),
+                $"Dropped invalid registration for student {e.StudentId} in course {match?.CourseCode}. Reasons: {reasonSummary}", ct);
+
+            cleanedList.Add(new CleanedUpRegistrationDto(
+                e.Id,
+                e.StudentId,
+                match?.CourseCode ?? "Unknown",
+                match?.CourseTitle ?? "Unknown",
+                scanResult.Value.AcademicSessionName,
+                now));
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        return new RegistrationCleanupExecutionResultDto(
+            cleanedList.Count,
+            request.Reason ?? "Batch registration cleanup completed successfully.",
+            now,
+            cleanedList);
+    }
+
+    private static int ParseLevelOrderFromName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return 0;
+        if (name.Contains("100") || name.Contains("Year 1", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (name.Contains("200") || name.Contains("Year 2", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (name.Contains("300") || name.Contains("Year 3", StringComparison.OrdinalIgnoreCase)) return 3;
+        if (name.Contains("400") || name.Contains("Year 4", StringComparison.OrdinalIgnoreCase)) return 4;
+        if (name.Contains("500") || name.Contains("Year 5", StringComparison.OrdinalIgnoreCase)) return 5;
+        if (name.Contains("600") || name.Contains("Year 6", StringComparison.OrdinalIgnoreCase)) return 6;
+        return 0;
+    }
+
+    private static int ParseLevelOrderFromCourseCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return 0;
+        var match = System.Text.RegularExpressions.Regex.Match(code, @"\b([1-6])\d{2}\b");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var digit))
+        {
+            return digit;
+        }
+        return 0;
     }
 }

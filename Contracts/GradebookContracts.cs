@@ -284,7 +284,8 @@ public record BulkPublishGradesRequest(
     Guid? DepartmentId,
     Guid? ProgramId,
     string? PublicationNotes,
-    bool ForcePublish = false);
+    bool ForcePublish = false,
+    List<Guid>? CourseOfferingIds = null);
 
 public record BulkPublishResultDto(
     int TotalProcessed,
@@ -305,7 +306,8 @@ public record BulkUnpublishGradesRequest(
     Guid? FacultyId,
     Guid? DepartmentId,
     Guid? ProgramId,
-    string? UnpublicationNotes);
+    string? UnpublicationNotes,
+    List<Guid>? CourseOfferingIds = null);
 
 public record BulkUnpublishResultDto(
     int TotalProcessed,
@@ -318,5 +320,54 @@ public record BulkUnpublishDetailDto(
     string CourseCode,
     string CourseTitle,
     bool Succeeded,
+    string Message);
+
+// ==================== AUDIT HISTORY & DISASTER RECOVERY ====================
+
+public record GradebookAuditHistoryDto(
+    Guid AuditLogId,
+    DateTime Timestamp,
+    string Action,
+    string? PerformedBy,
+    string? PerformedByEmail,
+    int StudentCount,
+    string Summary,
+    bool CanRestore);
+
+public record GradebookSnapshotStudentItemDto(
+    Guid StudentId,
+    string StudentName,
+    string MatricNumber,
+    string StudentEmail,
+    string EnrollmentStatus,
+    decimal Ca1Score,
+    decimal Ca2Score,
+    decimal Ca3Score,
+    decimal ExamScore,
+    decimal TotalScore,
+    string LetterGrade,
+    decimal? CurrentTotalScore,
+    string? CurrentLetterGrade,
+    bool HasChanged);
+
+public record GradebookSnapshotPreviewDto(
+    Guid AuditLogId,
+    DateTime Timestamp,
+    string? PerformedBy,
+    string? PerformedByEmail,
+    int TotalStudentsInSnapshot,
+    int MatchedActiveStudents,
+    int UnmatchedStudents,
+    List<GradebookSnapshotStudentItemDto> Students);
+
+public record RestoreGradesFromSnapshotRequest(
+    bool OnlyActiveRegisteredStudents = true,
+    bool AutoPublish = false,
+    string? Reason = null);
+
+public record RestoreGradesResultDto(
+    int TotalRestored,
+    int TotalSkipped,
+    bool IsPublished,
     string Message);
 

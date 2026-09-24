@@ -19,7 +19,7 @@ public sealed class UpdateApplicationStatusEndpoint(IAdmissionService admissionS
     public override void Configure()
     {
         Patch("admissions/status/{Id}");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Update Application Status") 

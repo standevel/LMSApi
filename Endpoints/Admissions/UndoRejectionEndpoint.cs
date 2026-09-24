@@ -11,7 +11,7 @@ public sealed class UndoRejectionEndpoint(IAdmissionService admissionService, IC
     public override void Configure()
     {
         Post("admissions/applications/{id}/undo-rejection");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Undo Rejection")

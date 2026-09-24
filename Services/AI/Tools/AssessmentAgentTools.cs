@@ -16,13 +16,28 @@ public class AssessmentAgentTools
     }
 
     [Description("Retrieves the active courses assigned to a lecturer with enrollment and session metrics.")]
-    public async Task<string> GetLecturerCoursesSummaryAsync(CancellationToken ct = default)
+    public async Task<string> GetLecturerCoursesSummaryAsync(Guid? lecturerId = null, CancellationToken ct = default)
     {
-        _logger.LogInformation("AssessmentAgentTools.GetLecturerCoursesSummaryAsync called");
+        _logger.LogInformation("AssessmentAgentTools.GetLecturerCoursesSummaryAsync called for lecturer {LecturerId}", lecturerId);
 
-        var courses = await _dbContext.Courses
-            .Take(10)
-            .ToListAsync(ct);
+        List<Data.Entities.Course> courses = new();
+
+        if (lecturerId.HasValue && lecturerId.Value != Guid.Empty)
+        {
+            courses = await _dbContext.CourseOfferingLecturers
+                .Where(col => col.LecturerId == lecturerId.Value && col.CourseOffering != null && col.CourseOffering.Course != null && col.CourseOffering.Course.IsActive)
+                .Select(col => col.CourseOffering.Course)
+                .Distinct()
+                .ToListAsync(ct);
+        }
+
+        if (courses.Count == 0)
+        {
+            courses = await _dbContext.Courses
+                .Where(c => c.IsActive && _dbContext.CourseOfferings.Any(co => co.CourseId == c.Id && co.AcademicSession.IsActive))
+                .Take(10)
+                .ToListAsync(ct);
+        }
 
         if (courses.Count == 0)
             return "No active course assignments found in the system catalog.";

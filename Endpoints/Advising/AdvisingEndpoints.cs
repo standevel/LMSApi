@@ -11,7 +11,7 @@ public sealed class GetEligibleAdvisersEndpoint(IAdviserService adviserService, 
     public override void Configure()
     {
         Get("advising/eligible-advisers");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 
@@ -24,7 +24,12 @@ public sealed class GetEligibleAdvisersEndpoint(IAdviserService adviserService, 
             return;
         }
 
-        await SendAsync(await adviserService.GetEligibleAdvisersAsync(actorId.Value, QueryParam<Guid>("departmentId"), QueryParam<Guid>("facultyId"), ct), ct);
+        var deptIdStr = Query<string>("departmentId");
+        var facIdStr = Query<string>("facultyId");
+        Guid? deptId = Guid.TryParse(deptIdStr, out var d) && d != Guid.Empty ? d : null;
+        Guid? facId = Guid.TryParse(facIdStr, out var f) && f != Guid.Empty ? f : null;
+
+        await SendAsync(await adviserService.GetEligibleAdvisersAsync(actorId.Value, deptId, facId, ct), ct);
     }
 }
 
@@ -34,7 +39,7 @@ public sealed class AssignAdviserEndpoint(IAdviserService adviserService, ICurre
     public override void Configure()
     {
         Post("advising/assignments");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 
@@ -57,7 +62,7 @@ public sealed class BulkAssignAdviserEndpoint(IAdviserService adviserService, IC
     public override void Configure()
     {
         Post("advising/assignments/bulk");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 
@@ -80,7 +85,7 @@ public sealed class AutoAssignAdvisersEndpoint(IAdviserService adviserService, I
     public override void Configure()
     {
         Post("advising/assignments/auto");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 
@@ -108,7 +113,7 @@ public sealed class EndAdviserAssignmentEndpoint(IAdviserService adviserService,
     public override void Configure()
     {
         Delete("advising/assignments/{Id}");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 
@@ -306,7 +311,7 @@ public sealed class UnlockRegistrationEndpoint(IAdviserService adviserService, I
     public override void Configure()
     {
         Post("advising/students/{StudentId}/registration/unlock");
-        Roles("SuperAdmin", "Admin", "HOD");
+        Roles("SuperAdmin", "Admin", "HOD", "Dean");
         Tags("Advising");
     }
 

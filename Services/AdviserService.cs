@@ -18,6 +18,35 @@ public sealed class AdviserService(
 
     public async Task<ErrorOr<List<AdviserUserDto>>> GetEligibleAdvisersAsync(Guid actorId, Guid? departmentId, Guid? facultyId, CancellationToken ct = default)
     {
+        if (departmentId == Guid.Empty) departmentId = null;
+        if (facultyId == Guid.Empty) facultyId = null;
+
+        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == actorId, ct);
+        if (actor is null)
+            return Error.Unauthorized("Advising.Unauthorized", "User not found.");
+
+        var isHod = await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct);
+        var isDean = await HasAnyRoleAsync(actorId, [LmsRoles.Dean], ct);
+        var isAdmin = await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin], ct);
+
+        if (!isAdmin)
+        {
+            if (isHod && !departmentId.HasValue)
+            {
+                departmentId = actor.DepartmentId ?? await db.Departments.AsNoTracking()
+                    .Where(d => d.HeadId == actorId)
+                    .Select(d => (Guid?)d.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+            if (isDean && !facultyId.HasValue && !departmentId.HasValue)
+            {
+                facultyId = actor.FacultyId ?? await db.Faculties.AsNoTracking()
+                    .Where(f => f.DeanId == actorId)
+                    .Select(f => (Guid?)f.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+        }
+
         if (!await CanManageScopeAsync(actorId, departmentId, facultyId, ct))
             return Error.Forbidden("Advising.Forbidden", "You do not have permission to manage adviser assignments for this scope.");
 
@@ -41,7 +70,8 @@ public sealed class AdviserService(
         }
         else if (facultyId.HasValue)
         {
-            query = query.Where(x => x.FacultyId == facultyId.Value);
+            query = query.Where(x => x.FacultyId == facultyId.Value ||
+                (x.Department != null && x.Department.FacultyId == facultyId.Value));
         }
 
         var users = await query
@@ -128,15 +158,44 @@ public sealed class AdviserService(
 
     public async Task<ErrorOr<AutoAssignAdvisersResultDto>> AutoAssignAdvisersAsync(Guid actorId, AutoAssignAdvisersRequest request, CancellationToken ct = default)
     {
-        if (!await CanManageScopeAsync(actorId, request.DepartmentId, request.FacultyId, ct))
+        var deptId = request.DepartmentId == Guid.Empty ? null : request.DepartmentId;
+        var facId = request.FacultyId == Guid.Empty ? null : request.FacultyId;
+
+        var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == actorId, ct);
+        if (actor is null)
+            return Error.Unauthorized("Advising.Unauthorized", "User not found.");
+
+        var isHod = await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct);
+        var isDean = await HasAnyRoleAsync(actorId, [LmsRoles.Dean], ct);
+        var isAdmin = await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin], ct);
+
+        if (!isAdmin)
+        {
+            if (isHod && !deptId.HasValue)
+            {
+                deptId = actor.DepartmentId ?? await db.Departments.AsNoTracking()
+                    .Where(d => d.HeadId == actorId)
+                    .Select(d => (Guid?)d.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+            if (isDean && !facId.HasValue && !deptId.HasValue)
+            {
+                facId = actor.FacultyId ?? await db.Faculties.AsNoTracking()
+                    .Where(f => f.DeanId == actorId)
+                    .Select(f => (Guid?)f.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+        }
+
+        if (!await CanManageScopeAsync(actorId, deptId, facId, ct))
             return Error.Forbidden("Advising.Forbidden", "You do not have permission to auto-assign advisers for this scope.");
 
         var students = await db.Students
             .Include(x => x.AcademicProgram).ThenInclude(x => x!.Department)
             .Where(x => x.Status == StudentStatus.Active &&
                         !db.CourseAdviserAssignments.Any(a => a.StudentId == x.Id && a.Status == Active))
-            .Where(x => !request.DepartmentId.HasValue || (x.AcademicProgram != null && x.AcademicProgram.DepartmentId == request.DepartmentId.Value))
-            .Where(x => !request.FacultyId.HasValue || x.FacultyId == request.FacultyId.Value || (x.AcademicProgram != null && x.AcademicProgram.Department.FacultyId == request.FacultyId.Value))
+            .Where(x => !deptId.HasValue || (x.AcademicProgram != null && x.AcademicProgram.DepartmentId == deptId.Value))
+            .Where(x => !facId.HasValue || x.FacultyId == facId.Value || (x.AcademicProgram != null && x.AcademicProgram.Department.FacultyId == facId.Value))
             .OrderBy(x => x.LastName)
             .ThenBy(x => x.FirstName)
             .ToListAsync(ct);
@@ -248,7 +307,21 @@ public sealed class AdviserService(
             .AsQueryable();
 
         if (!await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin], ct))
-            query = query.Where(x => x.AdviserId == actorId || (x.Student.AcademicProgram != null && x.Student.AcademicProgram.Department.HeadId == actorId));
+        {
+            var isDean = await HasAnyRoleAsync(actorId, [LmsRoles.Dean], ct);
+            var isHod = await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct);
+            var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == actorId, ct);
+
+            query = query.Where(x =>
+                x.AdviserId == actorId ||
+                (isHod && x.Student.AcademicProgram != null &&
+                    (x.Student.AcademicProgram.Department.HeadId == actorId ||
+                     (actor != null && actor.DepartmentId != null && x.Student.AcademicProgram.DepartmentId == actor.DepartmentId))) ||
+                (isDean &&
+                    ((x.Student.Faculty != null && (x.Student.Faculty.DeanId == actorId || (actor != null && actor.FacultyId != null && x.Student.FacultyId == actor.FacultyId))) ||
+                     (x.Student.AcademicProgram != null && x.Student.AcademicProgram.Department.Faculty != null &&
+                      (x.Student.AcademicProgram.Department.Faculty.DeanId == actorId || (actor != null && actor.FacultyId != null && x.Student.AcademicProgram.Department.FacultyId == actor.FacultyId))))));
+        }
 
         var assignments = await query.OrderBy(x => x.Student.LastName).ThenBy(x => x.Student.FirstName).ToListAsync(ct);
         return await MapStudentSummariesAsync(assignments, ct);
@@ -358,8 +431,8 @@ public sealed class AdviserService(
 
     public async Task<ErrorOr<Deleted>> UnlockRegistrationAsync(Guid actorId, Guid studentId, UnlockRegistrationVerificationRequest request, CancellationToken ct = default)
     {
-        if (!await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.HOD], ct))
-            return Error.Forbidden("Advising.Forbidden", "Only HoD, Admin, or SuperAdmin can unlock a verified registration.");
+        if (!await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin, LmsRoles.HOD, LmsRoles.Dean], ct))
+            return Error.Forbidden("Advising.Forbidden", "Only HoD, Dean, Admin, or SuperAdmin can unlock a verified registration.");
 
         var sessionId = await db.AcademicSessions.AsNoTracking().Where(x => x.IsActive).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
         if (!sessionId.HasValue)
@@ -424,33 +497,107 @@ public sealed class AdviserService(
     {
         if (await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin], ct))
             return true;
-        if (!await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct))
+
+        var isHod = await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct);
+        var isDean = await HasAnyRoleAsync(actorId, [LmsRoles.Dean], ct);
+        if (!isHod && !isDean)
             return false;
 
         var departmentId = student.AcademicProgram?.DepartmentId;
-        if (!departmentId.HasValue)
-            return false;
+        var facultyId = student.FacultyId ?? student.AcademicProgram?.Department?.FacultyId;
 
-        return await db.Departments.AsNoTracking().AnyAsync(x =>
-            x.Id == departmentId.Value &&
-            (x.HeadId == actorId || db.Users.Any(u => u.Id == actorId && u.DepartmentId == departmentId.Value)), ct);
+        if (isHod && departmentId.HasValue)
+        {
+            var isActorHod = await db.Departments.AsNoTracking().AnyAsync(x =>
+                x.Id == departmentId.Value &&
+                (x.HeadId == actorId || db.Users.Any(u => u.Id == actorId && u.DepartmentId == departmentId.Value)), ct);
+            if (isActorHod) return true;
+        }
+
+        if (isDean)
+        {
+            var isActorDean = await db.Faculties.AsNoTracking().AnyAsync(x =>
+                (x.DeanId == actorId || db.Users.Any(u => u.Id == actorId && u.FacultyId == x.Id)) &&
+                ((facultyId.HasValue && x.Id == facultyId.Value) ||
+                 (departmentId.HasValue && x.Departments.Any(d => d.Id == departmentId.Value))), ct);
+            if (isActorDean) return true;
+        }
+
+        return false;
     }
 
     private async Task<bool> CanManageScopeAsync(Guid actorId, Guid? departmentId, Guid? facultyId, CancellationToken ct)
     {
         if (await HasAnyRoleAsync(actorId, [LmsRoles.SuperAdmin, LmsRoles.Admin], ct))
             return true;
-        if (!await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct))
+
+        var isHod = await HasAnyRoleAsync(actorId, [LmsRoles.HOD], ct);
+        var isDean = await HasAnyRoleAsync(actorId, [LmsRoles.Dean], ct);
+        if (!isHod && !isDean)
             return false;
+
+        if (departmentId == Guid.Empty) departmentId = null;
+        if (facultyId == Guid.Empty) facultyId = null;
 
         var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == actorId, ct);
         if (actor is null)
             return false;
-        if (departmentId.HasValue)
-            return actor.DepartmentId == departmentId.Value || await db.Departments.AsNoTracking().AnyAsync(x => x.Id == departmentId.Value && x.HeadId == actorId, ct);
-        if (facultyId.HasValue)
-            return actor.FacultyId == facultyId.Value;
-        return true;
+
+        if (isDean)
+        {
+            var deanFacultyIds = await db.Faculties.AsNoTracking()
+                .Where(x => x.DeanId == actorId || (actor.FacultyId != null && x.Id == actor.FacultyId.Value))
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+
+            if (deanFacultyIds.Count == 0 && actor.FacultyId.HasValue)
+                deanFacultyIds.Add(actor.FacultyId.Value);
+
+            if (facultyId.HasValue && !deanFacultyIds.Contains(facultyId.Value))
+                return false;
+
+            if (departmentId.HasValue)
+            {
+                var deptFacultyId = await db.Departments.AsNoTracking()
+                    .Where(x => x.Id == departmentId.Value)
+                    .Select(x => (Guid?)x.FacultyId)
+                    .FirstOrDefaultAsync(ct);
+
+                if (!deptFacultyId.HasValue || !deanFacultyIds.Contains(deptFacultyId.Value))
+                    return false;
+            }
+
+            return true;
+        }
+
+        if (isHod)
+        {
+            var hodDeptIds = await db.Departments.AsNoTracking()
+                .Where(x => x.HeadId == actorId || (actor.DepartmentId != null && x.Id == actor.DepartmentId.Value))
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+
+            if (hodDeptIds.Count == 0 && actor.DepartmentId.HasValue)
+                hodDeptIds.Add(actor.DepartmentId.Value);
+
+            if (departmentId.HasValue && !hodDeptIds.Contains(departmentId.Value))
+                return false;
+
+            if (facultyId.HasValue)
+            {
+                var actorDeptFacultyId = await db.Departments.AsNoTracking()
+                    .Where(x => hodDeptIds.Contains(x.Id))
+                    .Select(x => (Guid?)x.FacultyId)
+                    .FirstOrDefaultAsync(ct);
+
+                if (actorDeptFacultyId.HasValue && actorDeptFacultyId.Value != facultyId.Value)
+                    return false;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     private async Task<bool> HasAnyRoleAsync(Guid userId, IReadOnlyCollection<string> roles, CancellationToken ct) =>

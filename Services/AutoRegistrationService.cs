@@ -60,6 +60,13 @@ public class AutoRegistrationService : BaseService, IAutoRegistrationService
             return detail;
         }
 
+        if (!session.IsActive && (session.IsAdmissionActive || session.IsAdmissionOpen))
+        {
+            detail.Status = "Skipped";
+            detail.Message = $"Academic session '{session.Name}' is currently in admission phase and not activated for academic activities.";
+            return detail;
+        }
+
         var enrollment = await ResolveProgrammeEnrollmentAsync(studentId, academicSessionId, ct);
         if (enrollment is null)
         {

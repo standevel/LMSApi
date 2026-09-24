@@ -46,16 +46,26 @@ public static class WebApplicationExtensions
         var storageBasePathConfig = app.Configuration["FileStorage:BasePath"];
         var resolvedPath = FileStoragePathHelper.ResolveBasePath(storageBasePathConfig);
 
-        if (!Directory.Exists(resolvedPath))
+        try
         {
-            Directory.CreateDirectory(resolvedPath);
+            if (!Directory.Exists(resolvedPath))
+            {
+                Directory.CreateDirectory(resolvedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not automatically create storage directory at {Path}. Verify IIS write permissions.", resolvedPath);
         }
 
-        app.UseStaticFiles(new StaticFileOptions
+        if (Directory.Exists(resolvedPath))
         {
-            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(resolvedPath),
-            RequestPath = "/uploads"
-        });
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(resolvedPath),
+                RequestPath = "/uploads"
+            });
+        }
 
         app.UseExceptionHandler(exceptionHandlerApp =>
         {

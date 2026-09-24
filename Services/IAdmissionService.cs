@@ -94,6 +94,7 @@ public interface IAdmissionService
 
     // Applicant Profile Management
     Task<AdmissionApplication> UpdateApplicantEmailAsync(Guid applicationId, string newEmail, Guid? updatedBy = null, CancellationToken ct = default);
+    Task<AdmissionApplication> ChangeApplicationProgramAsync(Guid applicationId, Guid targetProgramId, string? reason = null, bool regenerateAndSendOffer = false, Guid? updatedBy = null, CancellationToken ct = default);
 }
 
 public record VisaValidationResult(

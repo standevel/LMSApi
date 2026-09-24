@@ -13,6 +13,7 @@ public sealed class ListAcademicSessionsEndpoint(IAcademicSessionService session
     public override void Configure()
     {
         Get("admin/sessions");
+        AllowAnonymous();
         Group<AdminGroup>();
         Tags("Administration");
         Summary(s =>

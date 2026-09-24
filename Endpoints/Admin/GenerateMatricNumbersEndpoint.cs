@@ -192,7 +192,7 @@ public sealed class GenerateMatricNumbersEndpoint(LmsDbContext dbContext, ILogge
                 .Replace("{YYYY}", year4)
                 .Replace("{YY}", year2)
                 .Replace("{PROGRAM}", programCode.ToUpperInvariant())
-                .Replace("{SEQ}", nextSeq.ToString("D4"));
+                .Replace("{SEQ}", nextSeq.ToString("D3"));
 
             previewList.Add(new ProposedMatricAssignmentDto(
                 student.Id,

@@ -21,6 +21,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Preserve clean web.config (avoids SDK rewriting processPath to .exe while keeping arguments)
+cp web.config publish/iis-output/web.config
+
 echo "[3/4] Verifying publish output..."
 if [ ! -f "publish/iis-output/LMS.Api.dll" ]; then
     echo "ERROR: LMS.Api.dll not found in publish output"

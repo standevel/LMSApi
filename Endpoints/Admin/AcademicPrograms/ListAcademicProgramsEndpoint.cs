@@ -14,7 +14,11 @@ public sealed class ListAcademicProgramsEndpoint(IAcademicProgramService program
     {
         Get("admin/programs");
         Group<AdminGroup>();
-        Policies(LmsPolicies.AcademicManagement);
+        Policies(PermissionPolicy.BuildAny(
+            LmsPermissions.CoursesManage,
+            LmsPermissions.AdmissionsManage,
+            LmsPermissions.RecordsManage,
+            LmsPermissions.EnrollmentsManage));
         Summary(s =>
         {
             s.Summary = "List academic programs";

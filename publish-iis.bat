@@ -20,6 +20,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM Preserve clean web.config (avoids SDK rewriting processPath to .exe while keeping arguments)
+copy /y web.config publish\iis-output\web.config > nul
+
 echo [3/4] Verifying publish output...
 if not exist publish\iis-output\LMS.Api.dll (
     echo ERROR: LMS.Api.dll not found in publish output

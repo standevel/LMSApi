@@ -67,4 +67,9 @@ public interface IGradebookService
 
      // Result Upload Reporting & Aggregates
      Task<ErrorOr<ResultUploadAggregatesResponse>> GetResultUploadAggregatesAsync(ResultUploadAggregatesRequest request, Guid currentUserId, CancellationToken ct = default);
+
+     // Audit History & Disaster Recovery Restore
+     Task<ErrorOr<List<GradebookAuditHistoryDto>>> GetAuditHistoryAsync(Guid courseOfferingId, CancellationToken ct = default);
+     Task<ErrorOr<GradebookSnapshotPreviewDto>> PreviewSnapshotAsync(Guid courseOfferingId, Guid auditLogId, CancellationToken ct = default);
+     Task<ErrorOr<RestoreGradesResultDto>> RestoreGradesFromSnapshotAsync(Guid courseOfferingId, Guid auditLogId, RestoreGradesFromSnapshotRequest request, Guid userId, CancellationToken ct = default);
  }

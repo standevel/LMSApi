@@ -29,7 +29,13 @@ public sealed class AcademicProgramService(
     private async Task<bool> IsUserAdminAsync(Guid userId, CancellationToken ct)
     {
         var roles = await userRoleRepository.GetRoleNamesAsync(userId, ct);
-        return roles.Contains(LmsRoles.SuperAdmin) || roles.Contains(LmsRoles.Admin) || roles.Contains(LmsRoles.AcademicAdmin) || roles.Contains(LmsRoles.ViceChancellor);
+        return roles.Any(r =>
+            string.Equals(r, LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.Admin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.AcademicAdmin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.ViceChancellor, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.Registrar, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.AdmissionOfficer, StringComparison.OrdinalIgnoreCase));
     }
 
     private async Task<bool> IsUserDeanAsync(Guid userId, CancellationToken ct)

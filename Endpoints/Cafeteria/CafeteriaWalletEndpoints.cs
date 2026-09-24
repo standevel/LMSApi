@@ -4,8 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using FastEndpoints;
 using LMS.Api.Contracts;
+using LMS.Api.Data;
+using LMS.Api.Data.Entities;
 using LMS.Api.Services;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace LMS.Api.Endpoints.Cafeteria;
 
@@ -37,7 +40,7 @@ public sealed class GetCafeteriaWalletBalanceEndpoint(ICafeteriaWalletService wa
 
 // ─── Initialize Top-Up ──────────────────────────────────────────────────────
 
-public sealed class InitializeWalletTopUpEndpoint(ICafeteriaWalletService walletService)
+public sealed class InitializeWalletTopUpEndpoint(ICafeteriaWalletService walletService, LmsDbContext dbContext)
     : ApiEndpoint<InitializeWalletTopUpRequest, InitializeWalletTopUpResponse>
 {
     public override void Configure()
@@ -50,21 +53,108 @@ public sealed class InitializeWalletTopUpEndpoint(ICafeteriaWalletService wallet
     {
         try
         {
+            // Authorization is derived solely from authenticated role claims; never from the client-supplied PayerRole.
             var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin") || User.IsInRole("Finance");
-            var currentUsername = User.Identity?.Name ?? User.FindFirst("name")?.Value;
+            var isParent = User.IsInRole("Parent");
+            var isStudent = !(isStaff || isParent);
 
-            var username = (!string.IsNullOrWhiteSpace(req.Username) && isStaff)
-                ? req.Username
-                : (!string.IsNullOrWhiteSpace(currentUsername) ? currentUsername : (req.Username ?? "student"));
+            var currentUsername = User.Identity?.Name
+                ?? User.FindFirst("name")?.Value
+                ?? User.FindFirst("preferred_username")?.Value;
+
+            var config = await dbContext.SystemCafeteriaConfigurations.FirstOrDefaultAsync(ct)
+                ?? new SystemCafeteriaConfiguration();
+
+            // Enforce kill switches + master flag for all self-service (non-staff) paths.
+            if (!isStaff)
+            {
+                if (!config.EnableSelfServiceTopUp)
+                {
+                    await SendFailureAsync(403, "Online cafeteria wallet top-up is currently disabled by university administration.", "TOPUP_DISABLED", "Online cafeteria wallet top-up is disabled.", ct);
+                    return;
+                }
+
+                if (isParent && !config.AllowParentTopUp)
+                {
+                    await SendFailureAsync(403, "Parent wallet top-up is currently disabled by university administration.", "PARENT_TOPUP_DISABLED", "Parent wallet top-up is disabled.", ct);
+                    return;
+                }
+
+                if (isStudent && !config.AllowStudentSelfTopUp)
+                {
+                    await SendFailureAsync(403, "Student self-service wallet top-up is currently disabled by university administration.", "STUDENT_TOPUP_DISABLED", "Student wallet top-up is disabled.", ct);
+                    return;
+                }
+            }
+
+            string username;
+            if (isStaff)
+            {
+                // Staff may credit any account; username resolved from explicit target when provided.
+                username = !string.IsNullOrWhiteSpace(req.TargetUsername) ? req.TargetUsername : req.Username;
+            }
+            else if (isParent)
+            {
+                // Parents may only top up their own verified child accounts.
+                var target = (!string.IsNullOrWhiteSpace(req.TargetUsername) ? req.TargetUsername : req.Username) ?? string.Empty;
+                var cleanTarget = target.Trim().ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(cleanTarget))
+                {
+                    await SendFailureAsync(400, "A target username (your child) is required for parent top-up.", "TARGET_REQUIRED", "Provide the target username for your child.", ct);
+                    return;
+                }
+
+                var authorized = await IsParentOfAsync(currentUsername, cleanTarget, dbContext, ct);
+                if (!authorized)
+                {
+                    await SendFailureAsync(403, "You may only top up wallets for your own linked children.", "NOT_YOUR_CHILD", "Parent-child relationship not verified.", ct);
+                    return;
+                }
+                username = cleanTarget;
+            }
+            else
+            {
+                // Students may only top up their own account; ignore any client-supplied target.
+                username = currentUsername ?? req.Username ?? "student";
+            }
+
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                await SendFailureAsync(401, "Unable to resolve an authenticated username.", "UNAUTHENTICATED", "An authenticated username is required.", ct);
+                return;
+            }
 
             var updatedReq = req with { Username = username };
+            // The wallet service enforces MaxSingleTopUpAmount server-side.
             var response = await walletService.InitializeTopUpAsync(updatedReq, ct);
             await SendSuccessAsync(response, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await SendFailureAsync(403, ex.Message, "LIMIT_EXCEEDED", ex.Message, ct);
         }
         catch (Exception ex)
         {
             await SendFailureAsync(400, ex.Message, "INITIATION_FAILED", ex.Message, ct);
         }
+    }
+
+    private static async Task<bool> IsParentOfAsync(string? parentUsername, string childUsername, LmsDbContext dbContext, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(parentUsername)) return false;
+        var cleanParent = parentUsername.Trim().ToLowerInvariant();
+
+        var userId = await dbContext.Users
+            .Where(u => (u.Email != null && u.Email.ToLower() == cleanParent) || (u.Username != null && u.Username.ToLower() == cleanParent))
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (userId == Guid.Empty) return false;
+
+        return await dbContext.ParentStudentLinks
+            .Where(l => l.ParentGuardian != null && l.ParentGuardian.UserId == userId)
+            .SelectMany(l => dbContext.Students.Where(s => s.Id == l.StudentId))
+            .AnyAsync(s => s.OfficialEmail.ToLower() == childUsername || (s.StudentNumber != null && s.StudentNumber.ToLower() == childUsername), ct);
     }
 }
 
@@ -138,6 +228,39 @@ public sealed class DirectWalletTopUpEndpoint(ICafeteriaWalletService walletServ
     }
 }
 
+// ─── Pay With Wallet (meal purchase) ─────────────────────────────────────────
+
+public sealed class PayWithWalletEndpoint(ICafeteriaWalletService walletService)
+    : ApiEndpoint<PayWithWalletRequest, PayWithWalletResponse>
+{
+    public override void Configure()
+    {
+        Post("cafeteria/Wallet/PayWithWallet", "cafeteria/wallet/pay");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(PayWithWalletRequest req, CancellationToken ct)
+    {
+        var currentUsername = User.Identity?.Name
+            ?? User.FindFirst("name")?.Value
+            ?? User.FindFirst("preferred_username")?.Value;
+
+        var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin") || User.IsInRole("Finance");
+        var username = isStaff
+            ? (!string.IsNullOrWhiteSpace(req.Username) ? req.Username : (currentUsername ?? "student"))
+            : (currentUsername ?? req.Username ?? "student");
+
+        var response = await walletService.PayWithWalletAsync(req with { Username = username }, ct);
+        if (!response.Status)
+        {
+            await SendFailureAsync(402, response.Message, "PAYMENT_FAILED", response.Message, ct);
+            return;
+        }
+
+        await SendSuccessAsync(response, ct);
+    }
+}
+
 // ─── Webhooks ───────────────────────────────────────────────────────────────
 
 public sealed class PaystackCafeteriaWebhookEndpoint(ICafeteriaWalletService walletService)
@@ -203,5 +326,79 @@ public sealed class HydrogenCafeteriaWebhookEndpoint(ICafeteriaWalletService wal
         {
             await Send.OkAsync(ct);
         }
+    }
+}
+
+// ─── System Cafeteria Configuration ─────────────────────────────────────────
+
+public sealed class GetSystemCafeteriaConfigurationEndpoint(LmsDbContext dbContext)
+    : ApiEndpointWithoutRequest<SystemCafeteriaConfigurationDto>
+{
+    public override void Configure()
+    {
+        Get("cafeteria/Config", "cafeteria/configuration");
+        AllowAnonymous();
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var config = await dbContext.SystemCafeteriaConfigurations.FirstOrDefaultAsync(ct);
+        if (config == null)
+        {
+            config = new SystemCafeteriaConfiguration();
+            dbContext.SystemCafeteriaConfigurations.Add(config);
+            await dbContext.SaveChangesAsync(ct);
+        }
+
+        await SendSuccessAsync(new SystemCafeteriaConfigurationDto(
+            config.Id,
+            config.EnableSelfServiceTopUp,
+            config.AllowStudentSelfTopUp,
+            config.AllowParentTopUp,
+            config.MaxSingleTopUpAmount,
+            config.DailySpendLimit,
+            config.UpdatedAt
+        ), ct);
+    }
+}
+
+public sealed class UpdateSystemCafeteriaConfigurationEndpoint(LmsDbContext dbContext)
+    : ApiEndpoint<UpdateSystemCafeteriaConfigurationRequest, SystemCafeteriaConfigurationDto>
+{
+    public override void Configure()
+    {
+        Post("cafeteria/Config");
+        Roles("SuperAdmin", "Admin", "Finance");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(UpdateSystemCafeteriaConfigurationRequest req, CancellationToken ct)
+    {
+        var config = await dbContext.SystemCafeteriaConfigurations.FirstOrDefaultAsync(ct);
+        if (config == null)
+        {
+            config = new SystemCafeteriaConfiguration();
+            dbContext.SystemCafeteriaConfigurations.Add(config);
+        }
+
+        config.EnableSelfServiceTopUp = req.EnableSelfServiceTopUp;
+        config.AllowStudentSelfTopUp  = req.AllowStudentSelfTopUp;
+        config.AllowParentTopUp       = req.AllowParentTopUp;
+        config.MaxSingleTopUpAmount   = req.MaxSingleTopUpAmount;
+        config.DailySpendLimit        = req.DailySpendLimit;
+        config.UpdatedAt              = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(ct);
+
+        await SendSuccessAsync(new SystemCafeteriaConfigurationDto(
+            config.Id,
+            config.EnableSelfServiceTopUp,
+            config.AllowStudentSelfTopUp,
+            config.AllowParentTopUp,
+            config.MaxSingleTopUpAmount,
+            config.DailySpendLimit,
+            config.UpdatedAt
+        ), ct);
     }
 }

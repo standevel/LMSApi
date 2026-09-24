@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using LMS.Api.Contracts;
 using LMS.Api.Data;
@@ -271,6 +272,124 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         {
             await ApplyJambScholarshipsAsync(student.Id, admissionSessionId);
         }
+    }
+
+    public async Task<bool> IsFeedingFullyCoveredAsync(Guid studentId, CancellationToken ct = default)
+    {
+        var student = await db.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (student is null) return false;
+
+        return await db.StudentScholarships
+            .AsNoTracking()
+            .Where(ss => ss.StudentId == studentId && ss.SessionId == student.AcademicSessionId)
+            .AnyAsync(
+                ss => ss.Scholarship.IsActive
+                   && ss.Scholarship.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Feeding)
+                   && ss.Scholarship.PercentageCovered >= 100, ct);
+    }
+
+    public async Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(string username, CancellationToken ct = default)
+    {
+        var clean = (username ?? string.Empty).Trim().ToLowerInvariant();
+
+        var studentId = await db.Students
+            .AsNoTracking()
+            .Where(s => s.OfficialEmail.ToLower() == clean || (s.StudentNumber != null && s.StudentNumber.ToLower() == clean))
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (!studentId.HasValue)
+        {
+            var user = await db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => (u.Email != null && u.Email.ToLower() == clean) || (u.Username != null && u.Username.ToLower() == clean), ct);
+            if (user is not null)
+            {
+                studentId = await db.Students
+                    .AsNoTracking()
+                    .Where(s => s.OfficialEmail.ToLower() == user.Email!.ToLower() || s.EntraObjectId == user.EntraObjectId)
+                    .Select(s => (Guid?)s.Id)
+                    .FirstOrDefaultAsync(ct);
+            }
+        }
+
+        if (!studentId.HasValue)
+        {
+            return new StudentFeedingEntitlementDto(false, 0m, false, new Dictionary<string, bool>());
+        }
+
+        return await GetFeedingEntitlementAsync(studentId.Value, ct);
+    }
+
+    public async Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(Guid studentId, CancellationToken ct = default)
+    {
+        var student = await db.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (student is null)
+        {
+            return new StudentFeedingEntitlementDto(false, 0m, false, new Dictionary<string, bool>());
+        }
+
+        var scholarships = await (from ss in db.StudentScholarships
+                                  join s in db.Scholarships on ss.ScholarshipId equals s.Id
+                                  where ss.StudentId == studentId
+                                        && ss.SessionId == student.AcademicSessionId
+                                        && s.IsActive
+                                        && s.CoverageFlags.HasFlag(ScholarshipCoverageFlags.Feeding)
+                                  select s).ToListAsync(ct);
+
+        var maxCoverage = scholarships.Count == 0 ? 0m : scholarships.Max(s => s.PercentageCovered);
+        var hasActive = scholarships.Count > 0;
+        var fullyCovered = maxCoverage >= 100;
+
+        var dailyClaimed = await BuildDailyMealWindowsClaimedAsync(studentId, ct);
+
+        return new StudentFeedingEntitlementDto(hasActive, maxCoverage, fullyCovered, dailyClaimed);
+    }
+
+    private async Task<Dictionary<string, bool>> BuildDailyMealWindowsClaimedAsync(Guid studentId, CancellationToken ct)
+    {
+        var windows = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Breakfast"] = false,
+            ["Lunch"] = false,
+            ["Dinner"] = false
+        };
+
+        var today = DateTime.UtcNow.Date;
+
+        var claimedToday = await db.Set<CafeteriaVendorOrder>()
+            .Where(o => o.StudentUsername == studentId.ToString() || o.MatricNo == studentId.ToString())
+            .Where(o => o.Status == CafeteriaOrderStatus.Claimed && o.ClaimedAt >= today)
+            .ToListAsync(ct);
+
+        if (!claimedToday.Any()) return windows;
+
+        foreach (var order in claimedToday)
+        {
+            var window = ResolveMealWindow(order);
+            if (!string.IsNullOrEmpty(window) && windows.ContainsKey(window))
+            {
+                windows[window] = true;
+            }
+        }
+
+        return windows;
+    }
+
+    private static string? ResolveMealWindow(CafeteriaVendorOrder order)
+    {
+        if (string.IsNullOrWhiteSpace(order.MenuItemName)) return null;
+
+        var name = order.MenuItemName.ToLowerInvariant();
+        if (name.Contains("breakfast")) return "Breakfast";
+        if (name.Contains("lunch")) return "Lunch";
+        if (name.Contains("dinner") || name.Contains("supper")) return "Dinner";
+        return null;
     }
 
     private static ScholarshipDto MapToDto(Scholarship s) => new(

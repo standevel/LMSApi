@@ -65,7 +65,15 @@ public sealed partial class AuditRequestLoggingMiddleware(RequestDelegate next)
         }
 
         var path = request.Path.ToString();
-        return !path.StartsWith("/uploads", StringComparison.OrdinalIgnoreCase);
+        if (path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/health", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/uploads", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static async Task WriteAuditLogAsync(HttpContext context, Exception? exception)

@@ -20,4 +20,7 @@ public interface IRegistrationService
     Task<ErrorOr<Deleted>> ProcessSwapRequestAsync(Guid requestId, bool approved, string? adminNotes, CancellationToken ct = default);
     Task<ErrorOr<List<RegistrationOfferingDto>>> GetGlobalCourseOfferingsAsync(Guid studentId, string? search = null, CancellationToken ct = default);
     Task<ErrorOr<List<CourseRegistrationDto>>> GetRegistrationHistoryAsync(Guid studentId, Guid? academicSessionId = null, CancellationToken ct = default);
+    Task<ErrorOr<RegistrationCleanupResultDto>> CleanupInvalidRegistrationsAsync(Guid? academicSessionId = null, CancellationToken ct = default);
+    Task<ErrorOr<RegistrationCleanupScanResultDto>> ScanInvalidRegistrationsAsync(RegistrationCleanupScanRequest request, CancellationToken ct = default);
+    Task<ErrorOr<RegistrationCleanupExecutionResultDto>> ExecuteCleanupAsync(ExecuteRegistrationCleanupRequest request, Guid currentUserId, CancellationToken ct = default);
 }

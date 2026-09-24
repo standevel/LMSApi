@@ -18,10 +18,17 @@ public class FileStorageService : IFileStorageService
         _storageBasePath = FileStoragePathHelper.ResolveBasePath(configuration["FileStorage:BasePath"]);
         _logger = logger;
         
-        // Ensure base directory exists
-        if (!Directory.Exists(_storageBasePath))
+        try
         {
-            Directory.CreateDirectory(_storageBasePath);
+            // Ensure base directory exists
+            if (!Directory.Exists(_storageBasePath))
+            {
+                Directory.CreateDirectory(_storageBasePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not automatically create storage directory at {Path}. Verify IIS write permissions.", _storageBasePath);
         }
     }
 

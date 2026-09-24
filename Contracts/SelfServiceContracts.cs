@@ -260,3 +260,15 @@ public record SpecializationOptionDto(
     string? Description,
     int? SpecializationStartYear);
 
+public record CleanedUpRegistrationDto(
+    Guid EnrollmentId,
+    Guid StudentId,
+    string CourseCode,
+    string CourseTitle,
+    string AcademicSessionName,
+    DateTime DroppedAtUtc);
+
+public record RegistrationCleanupResultDto(
+    int TotalCleanedUp,
+    IReadOnlyList<CleanedUpRegistrationDto> CleanedRegistrations);
+

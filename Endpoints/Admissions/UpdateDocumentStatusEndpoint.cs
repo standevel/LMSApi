@@ -1,6 +1,7 @@
 using FastEndpoints;
 using LMS.Api.Contracts;
 using LMS.Api.Services;
+using LMS.Api.Security;
 using LMS.Api.Data.Entities;
 using System;
 using System.Threading;
@@ -14,7 +15,7 @@ public sealed class UpdateDocumentStatusEndpoint(IDocumentService documentServic
     public override void Configure()
     {
         Patch("admissions/documents/{Id}/status");
-        Policies(LMS.Api.Security.LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Update Document Status") 

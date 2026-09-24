@@ -23,7 +23,7 @@ public sealed class SendApplicationReminderEndpoint(IAdmissionService admissionS
     public override void Configure()
     {
         Post("admissions/applications/{Id}/reminder");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Send Application Reminder")

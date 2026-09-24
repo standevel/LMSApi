@@ -19,7 +19,7 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
     public override void Configure()
     {
         Get("admissions/applications");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Get Applications")
@@ -31,9 +31,13 @@ public sealed class GetApplicationsEndpoint(IAdmissionService admissionService)
     public override async Task HandleAsync(GetApplicationsRequest req, CancellationToken ct)
     {
         AdmissionStatus? status = null;
-        if (!string.IsNullOrEmpty(req.Status) && Enum.TryParse<AdmissionStatus>(req.Status, true, out var s))
+        if (!string.IsNullOrEmpty(req.Status))
         {
-            status = s;
+            var cleanStatus = req.Status.Replace("_", "").Replace("-", "");
+            if (Enum.TryParse<AdmissionStatus>(cleanStatus, true, out var s))
+            {
+                status = s;
+            }
         }
 
         var apps = await admissionService.GetApplicationsAsync(status, req.SessionId);

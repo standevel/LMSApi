@@ -11,7 +11,7 @@ public sealed class ResendOfferLetterEndpoint(IAdmissionService admissionService
     public override void Configure()
     {
         Post("admissions/applications/{id}/resend-offer");
-        Policies(LmsPolicies.AdmissionsManagement);
+        Policies(PermissionPolicy.Build(LmsPermissions.AdmissionsManage));
         Tags("Admissions");
         Description(d => d
             .WithName("Resend Offer Letter")

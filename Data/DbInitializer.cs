@@ -63,8 +63,9 @@ await SeedCountriesAsync(ct);
             LmsRoles.Parent,
             LmsRoles.AdmissionOfficer,
             LmsRoles.AcademicAdmin,
-            LmsRoles.HostelWarden,
-            LmsRoles.StudentWelfare
+             LmsRoles.HostelWarden,
+            LmsRoles.StudentWelfare,
+            LmsRoles.CafeteriaOperator
         };
 
         var existing = await dbContext.Roles.Select(x => x.Name).ToListAsync(ct);
@@ -120,7 +121,8 @@ await SeedCountriesAsync(ct);
             [LmsRoles.AdmissionOfficer] = [LmsPermissions.AdmissionsManage, LmsPermissions.RecordsManage, LmsPermissions.EnrollmentsManage, LmsPermissions.UsersManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
             [LmsRoles.AcademicAdmin] = [LmsPermissions.CoursesManage, LmsPermissions.TimetableManage, LmsPermissions.EnrollmentsManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView, LmsPermissions.ResultsPublish],
             [LmsRoles.HostelWarden] = [LmsPermissions.HostelsManage, LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
-            [LmsRoles.StudentWelfare] = [LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView]
+            [LmsRoles.StudentWelfare] = [LmsPermissions.HostelsView, LmsPermissions.HostelsExeatManage, LmsPermissions.RecordsManage, LmsPermissions.ReportsView, LmsPermissions.ProfileView],
+            [LmsRoles.CafeteriaOperator] = [LmsPermissions.ProfileView, LmsPermissions.ReportsView]
         };
 
         var existingPairs = await dbContext.RolePermissions

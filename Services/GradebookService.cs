@@ -223,6 +223,7 @@ public sealed class GradebookService : IGradebookService
         int order = 0;
         foreach (var item in request.Categories)
         {
+            var maxMarks = item.MaxMarks > 0m ? item.MaxMarks : (item.Weight > 0m ? item.Weight : 100m);
             var matching = existingCategories.Where(c => c.CategoryType == item.CategoryType || c.CategoryName.Equals(item.CategoryName, StringComparison.OrdinalIgnoreCase)).ToList();
             if (matching.Any())
             {
@@ -230,10 +231,17 @@ public sealed class GradebookService : IGradebookService
                 existing.CategoryType = item.CategoryType;
                 existing.CategoryName = item.CategoryName;
                 existing.Weight = item.Weight;
-                existing.MaxMarks = item.MaxMarks;
+                existing.MaxMarks = maxMarks;
                 existing.IsExamCategory = item.IsExamCategory || item.CategoryType == AssessmentCategoryType.Exam;
                 existing.DisplayOrder = item.DisplayOrder > 0 ? item.DisplayOrder : order++;
                 updatedCategories.Add(existing);
+
+                // If this category has a single default assessment, sync its MaxMarks to match the category's MaxMarks
+                var matchingAssessments = existingAssessments.Where(a => a.AssessmentCategoryId == existing.Id).ToList();
+                if (matchingAssessments.Count == 1 && (matchingAssessments[0].Title.EndsWith("Assessment") || matchingAssessments[0].MaxMarks <= 10m))
+                {
+                    matchingAssessments[0].MaxMarks = maxMarks;
+                }
 
                 // Reassign assessments, quizzes, and assignments on any duplicate matching categories to primary and delete duplicate
                 for (int i = 1; i < matching.Count; i++)
@@ -269,7 +277,7 @@ public sealed class GradebookService : IGradebookService
                     CategoryType = item.CategoryType,
                     CategoryName = item.CategoryName,
                     Weight = item.Weight,
-                    MaxMarks = item.MaxMarks,
+                    MaxMarks = maxMarks,
                     IsExamCategory = item.IsExamCategory || item.CategoryType == AssessmentCategoryType.Exam,
                     DisplayOrder = item.DisplayOrder > 0 ? item.DisplayOrder : order++
                 };
@@ -489,6 +497,11 @@ public sealed class GradebookService : IGradebookService
             DueDate = request.DueDate
         };
 
+        if (request.MaxMarks > 0m && category.MaxMarks < request.MaxMarks)
+        {
+            category.MaxMarks = request.MaxMarks;
+        }
+
         _dbContext.Assessments.Add(assessment);
         await _dbContext.SaveChangesAsync(ct);
 
@@ -520,7 +533,14 @@ public sealed class GradebookService : IGradebookService
         if (request.Description != null)
             assessment.Description = request.Description;
         if (request.MaxMarks.HasValue)
+        {
             assessment.MaxMarks = request.MaxMarks.Value;
+            var cat = await _dbContext.AssessmentCategories.FindAsync(assessment.AssessmentCategoryId);
+            if (cat != null && cat.MaxMarks < request.MaxMarks.Value)
+            {
+                cat.MaxMarks = request.MaxMarks.Value;
+            }
+        }
         if (request.AssessmentDate.HasValue)
             assessment.AssessmentDate = request.AssessmentDate;
         if (request.DueDate.HasValue)
@@ -2727,11 +2747,35 @@ public sealed class GradebookService : IGradebookService
             .ToListAsync(ct);
 
         var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
-        var hasPublishPermission = isAdmin || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
+        var isDean = userRoles.Any(r => r == "Dean");
+        var hasPublishPermission = isAdmin || isDean || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
 
         if (!hasPublishPermission)
         {
             return Error.Forbidden("Results.PublishNotAllowed", "You do not have permission to publish course results. Please contact an administrator.");
+        }
+
+        if (isDean && !isAdmin)
+        {
+            var offeringFaculty = await _dbContext.CourseOfferings
+                .Where(co => co.Id == courseOfferingId)
+                .Select(co => (Guid?)co.Course.Program.Department.FacultyId)
+                .FirstOrDefaultAsync(ct);
+
+            var isDeanOfCollege = offeringFaculty.HasValue && await _dbContext.Faculties
+                .AnyAsync(f => f.Id == offeringFaculty.Value && f.DeanId == userId, ct);
+
+            if (!isDeanOfCollege)
+            {
+                var isDeanOfAnyLinkedCollege = await _dbContext.CourseOfferingPrograms
+                    .Where(cop => cop.CourseOfferingId == courseOfferingId)
+                    .AnyAsync(cop => cop.Program.Department.Faculty.DeanId == userId, ct);
+
+                if (!isDeanOfAnyLinkedCollege)
+                {
+                    return Error.Forbidden("Access.Denied", "You are only permitted to publish courses within your assigned college.");
+                }
+            }
         }
 
         var approvalWorkflowCompleted = false;
@@ -2743,14 +2787,14 @@ public sealed class GradebookService : IGradebookService
         var requiredLevels = new[] { ApprovalLevel.Department, ApprovalLevel.College, ApprovalLevel.Senate };
         var approvedLevels = approvals.Where(x => x.Status == ApprovalStatus.Approved).Select(x => x.Level).ToHashSet();
 
-        if (!isAdmin && requiredLevels.Any(l => !approvedLevels.Contains(l)))
+        if (!isAdmin && !isDean && requiredLevels.Any(l => !approvedLevels.Contains(l)))
         {
-            return Error.Forbidden("Approval.Incomplete", "Only Administrators can auto-approve and publish results directly. Non-admin users require all approval levels (Department, College, and Senate) to be approved first.");
+            return Error.Forbidden("Approval.Incomplete", "Only Administrators and Deans can auto-approve and publish results directly. Non-admin users require all approval levels (Department, College, and Senate) to be approved first.");
         }
 
-        if (isAdmin)
+        if (isAdmin || isDean)
         {
-            // Auto-approve missing or pending levels for Admin
+            // Auto-approve missing or pending levels for Admin or Dean
             foreach (var level in requiredLevels)
             {
                 var app = approvals.FirstOrDefault(x => x.Level == level);
@@ -2765,7 +2809,7 @@ public sealed class GradebookService : IGradebookService
                         ApprovalOrder = level == ApprovalLevel.Department ? 1 : (level == ApprovalLevel.College ? 2 : 3),
                         ApprovedById = userId,
                         ApprovedAt = DateTime.UtcNow,
-                        Comments = "Auto-approved by Administrator"
+                        Comments = isDean ? "Approved by College Dean" : "Auto-approved by Administrator"
                     };
                     _dbContext.GradeApprovals.Add(app);
                 }
@@ -2774,7 +2818,7 @@ public sealed class GradebookService : IGradebookService
                     app.Status = ApprovalStatus.Approved;
                     app.ApprovedById = userId;
                     app.ApprovedAt = DateTime.UtcNow;
-                    app.Comments = request.PublicationNotes ?? "Auto-approved by Administrator";
+                    app.Comments = request.PublicationNotes ?? (isDean ? "Approved by College Dean" : "Auto-approved by Administrator");
                 }
             }
             approvalWorkflowCompleted = true;
@@ -2979,10 +3023,30 @@ public sealed class GradebookService : IGradebookService
              .ToListAsync(ct);
 
          var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
+         var isDean = userRoles.Any(r => r == "Dean");
 
-         if (!isAdmin && request.ForcePublish)
+         if (!isAdmin && !isDean && request.ForcePublish)
          {
-             return Error.Forbidden("Access.Denied", "Only Administrators are authorized to auto-approve or force-publish results.");
+             return Error.Forbidden("Access.Denied", "Only Administrators and Deans are authorized to auto-approve or force-publish results.");
+         }
+
+         var deanFacultyIds = new List<Guid>();
+         if (isDean && !isAdmin)
+         {
+             deanFacultyIds = await _dbContext.Faculties
+                 .Where(f => f.DeanId == userId)
+                 .Select(f => f.Id)
+                 .ToListAsync(ct);
+
+             if (deanFacultyIds.Count == 0)
+             {
+                 return Error.Forbidden("Access.Denied", "You are not designated as Dean of any college.");
+             }
+
+             if (request.FacultyId.HasValue && !deanFacultyIds.Contains(request.FacultyId.Value))
+             {
+                 return Error.Forbidden("Access.Denied", "You can only publish courses within your assigned college.");
+             }
          }
 
          var query = _dbContext.CourseOfferings
@@ -3004,7 +3068,13 @@ public sealed class GradebookService : IGradebookService
              query = query.Where(co => co.Semester == (LMS.Api.Data.Enums.Semester)request.Semester.Value);
          }
 
-         if (request.FacultyId.HasValue)
+         if (isDean && !isAdmin)
+         {
+             query = query.Where(co =>
+                 (co.Course.Program != null && co.Course.Program.Department != null && deanFacultyIds.Contains(co.Course.Program.Department.FacultyId)) ||
+                 co.Programs.Any(cop => cop.Program != null && cop.Program.Department != null && deanFacultyIds.Contains(cop.Program.Department.FacultyId)));
+         }
+         else if (request.FacultyId.HasValue)
          {
              query = query.Where(co =>
                  co.Course.Program.Department.FacultyId == request.FacultyId.Value ||
@@ -3025,6 +3095,11 @@ public sealed class GradebookService : IGradebookService
                  co.Programs.Any(cop => cop.ProgramId == request.ProgramId.Value));
          }
 
+         if (request.CourseOfferingIds != null && request.CourseOfferingIds.Count > 0)
+         {
+             query = query.Where(co => request.CourseOfferingIds.Contains(co.Id));
+         }
+
          var offerings = await query.ToListAsync(ct);
 
          var details = new List<BulkPublishDetailDto>();
@@ -3043,7 +3118,7 @@ public sealed class GradebookService : IGradebookService
                  var requiredLevels = new[] { ApprovalLevel.Department, ApprovalLevel.College, ApprovalLevel.Senate };
                  var approvedLevels = approvals.Where(x => x.Status == ApprovalStatus.Approved).Select(x => x.Level).ToHashSet();
 
-                 if (isAdmin && (request.ForcePublish || requiredLevels.Any(l => !approvedLevels.Contains(l))))
+                 if ((isAdmin || isDean) && (request.ForcePublish || requiredLevels.Any(l => !approvedLevels.Contains(l))))
                  {
                      foreach (var level in requiredLevels)
                      {
@@ -3059,7 +3134,7 @@ public sealed class GradebookService : IGradebookService
                                  ApprovalOrder = level == ApprovalLevel.Department ? 1 : (level == ApprovalLevel.College ? 2 : 3),
                                  ApprovedById = userId,
                                  ApprovedAt = DateTime.UtcNow,
-                                 Comments = "Auto-approved by Administrator"
+                                 Comments = isDean ? "Approved by College Dean" : "Auto-approved by Administrator"
                              };
                              _dbContext.GradeApprovals.Add(app);
                          }
@@ -3068,12 +3143,12 @@ public sealed class GradebookService : IGradebookService
                              app.Status = ApprovalStatus.Approved;
                              app.ApprovedById = userId;
                              app.ApprovedAt = DateTime.UtcNow;
-                             app.Comments = request.PublicationNotes ?? "Auto-approved by Administrator";
+                             app.Comments = request.PublicationNotes ?? (isDean ? "Approved by College Dean" : "Auto-approved by Administrator");
                          }
                      }
                      approvalWorkflowCompleted = true;
                  }
-                 else if (!isAdmin && requiredLevels.Any(l => !approvedLevels.Contains(l)))
+                 else if (!isAdmin && !isDean && requiredLevels.Any(l => !approvedLevels.Contains(l)))
                  {
                      details.Add(new BulkPublishDetailDto(
                          offering.Id,
@@ -3202,11 +3277,31 @@ public sealed class GradebookService : IGradebookService
              .ToListAsync(ct);
 
          var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
-         var hasPublishPermission = isAdmin || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
+         var isDean = userRoles.Any(r => r == "Dean");
+         var hasPublishPermission = isAdmin || isDean || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
 
          if (!hasPublishPermission)
          {
              return Error.Forbidden("Results.UnpublishNotAllowed", "You do not have permission to unpublish course results. Please contact an administrator.");
+         }
+
+         var deanFacultyIds = new List<Guid>();
+         if (isDean && !isAdmin)
+         {
+             deanFacultyIds = await _dbContext.Faculties
+                 .Where(f => f.DeanId == userId)
+                 .Select(f => f.Id)
+                 .ToListAsync(ct);
+
+             if (deanFacultyIds.Count == 0)
+             {
+                 return Error.Forbidden("Access.Denied", "You are not designated as Dean of any college.");
+             }
+
+             if (request.FacultyId.HasValue && !deanFacultyIds.Contains(request.FacultyId.Value))
+             {
+                 return Error.Forbidden("Access.Denied", "You can only unpublish courses within your assigned college.");
+             }
          }
 
          var query = _dbContext.CourseOfferings
@@ -3228,7 +3323,13 @@ public sealed class GradebookService : IGradebookService
              query = query.Where(co => co.Semester == (LMS.Api.Data.Enums.Semester)request.Semester.Value);
          }
 
-         if (request.FacultyId.HasValue)
+         if (isDean && !isAdmin)
+         {
+             query = query.Where(co =>
+                 (co.Course.Program != null && co.Course.Program.Department != null && deanFacultyIds.Contains(co.Course.Program.Department.FacultyId)) ||
+                 co.Programs.Any(cop => cop.Program != null && cop.Program.Department != null && deanFacultyIds.Contains(cop.Program.Department.FacultyId)));
+         }
+         else if (request.FacultyId.HasValue)
          {
              query = query.Where(co =>
                  co.Course.Program.Department.FacultyId == request.FacultyId.Value ||
@@ -3247,6 +3348,11 @@ public sealed class GradebookService : IGradebookService
              query = query.Where(co =>
                  co.Course.ProgramId == request.ProgramId.Value ||
                  co.Programs.Any(cop => cop.ProgramId == request.ProgramId.Value));
+         }
+
+         if (request.CourseOfferingIds != null && request.CourseOfferingIds.Count > 0)
+         {
+             query = query.Where(co => request.CourseOfferingIds.Contains(co.Id));
          }
 
          var offerings = await query.ToListAsync(ct);
@@ -3841,6 +3947,12 @@ public sealed class GradebookService : IGradebookService
         if (academicSession == null)
             return Error.NotFound("Session.NotFound", "Academic session not found");
 
+        if ((academicSession.IsAdmissionActive || academicSession.IsAdmissionOpen) && !academicSession.IsActive)
+        {
+            return Error.Validation("Session.InAdmissionPhase",
+                $"Academic session '{academicSession.Name}' is currently in admission phase and not activated for academic activities. Grade migration is not permitted.");
+        }
+
         var upload = await _dbContext.ClassterResultUploads
             .FirstOrDefaultAsync(u => (uploadId != null && u.UploadId == uploadId) || (u.CourseId == courseId && u.AcademicSessionId == academicSessionId), ct);
 
@@ -4219,16 +4331,17 @@ public sealed class GradebookService : IGradebookService
             upload.CompletedAt = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(ct);
 
-            var auditMessage = $"Classter migration: {uploadedGrades} grades uploaded";
+            var auditMessage = $"Classter Grade Migration for {course.Code} ({academicSession.Name}): {uploadedGrades} grades uploaded";
             if (provisionedUsers > 0)
                 auditMessage += $", {provisionedUsers} users provisioned";
             if (provisionedEnrollments > 0)
-                auditMessage += $", {provisionedEnrollments} enrollments created";
+                auditMessage += $", {provisionedEnrollments} program enrollments created";
             if (provisionedCourseEnrollments > 0)
                 auditMessage += $", {provisionedCourseEnrollments} course enrollments created";
+            auditMessage += $" [File: {Path.GetFileName(excelFile.FileName)}]";
 
             await _auditService.LogAsync("MigrateClassterGrades", "Gradebook",
-                $"{courseId}_{academicSessionId}", auditMessage, ct);
+                $"{course.Code}:{academicSession.Name}", auditMessage, ct);
         }
         catch (Exception ex)
         {
@@ -4513,6 +4626,7 @@ public sealed class GradebookService : IGradebookService
             {
                 if (prog == "ARTS") prog = "ART";
                 if (prog == "MISS") prog = "MSS";
+                if (prog == "CSS") prog = "CSC";
                 return new ParsedMatricInfo(prog, year.Value, seq.Value);
             }
         }
@@ -4524,6 +4638,7 @@ public sealed class GradebookService : IGradebookService
             var prog = matchNoSlash1.Groups["prog"].Value;
             if (prog == "ARTS") prog = "ART";
             if (prog == "MISS") prog = "MSS";
+            if (prog == "CSS") prog = "CSC";
             var yVal = int.Parse(matchNoSlash1.Groups["year"].Value);
             var year = yVal < 100 ? 2000 + yVal : yVal;
             var seq = int.Parse(matchNoSlash1.Groups["seq"].Value);
@@ -4537,6 +4652,7 @@ public sealed class GradebookService : IGradebookService
             var prog = matchNoSlash2.Groups["prog"].Value;
             if (prog == "ARTS") prog = "ART";
             if (prog == "MISS") prog = "MSS";
+            if (prog == "CSS") prog = "CSC";
             var yVal = int.Parse(matchNoSlash2.Groups["year"].Value);
             var year = yVal < 100 ? 2000 + yVal : yVal;
             var seq = int.Parse(matchNoSlash2.Groups["seq"].Value);
@@ -4553,8 +4669,8 @@ public sealed class GradebookService : IGradebookService
         if (parsed.HasValue)
         {
             var p = parsed.Value;
-            // Canonical format: WU/{PROGRAM}/{YYYY}/{SEQ}
-            return $"WU/{p.Program}/{p.Year}/{p.Sequence:D4}";
+            // Canonical format: WU/{PROGRAM}/{YYYY}/{SEQ:D3}
+            return $"WU/{p.Program}/{p.Year}/{p.Sequence:D3}";
         }
         return input.Trim().ToUpperInvariant();
     }
@@ -5150,23 +5266,12 @@ public sealed class GradebookService : IGradebookService
                 _dbContext.AssessmentCategories.Add(category);
                 categories.Add(category);
             }
-            else
+            else if (existing.Weight == 0m && existing.MaxMarks == 0m)
             {
-                bool modified = false;
-                if (existing.Weight != weight)
-                {
-                    existing.Weight = weight;
-                    modified = true;
-                }
-                if (existing.MaxMarks != weight)
-                {
-                    existing.MaxMarks = weight;
-                    modified = true;
-                }
-                if (modified)
-                {
-                    _dbContext.AssessmentCategories.Update(existing);
-                }
+                // Only initialize if entirely unconfigured
+                existing.Weight = weight;
+                existing.MaxMarks = weight;
+                _dbContext.AssessmentCategories.Update(existing);
             }
         }
 
@@ -5193,15 +5298,15 @@ public sealed class GradebookService : IGradebookService
                     CourseOfferingId = courseOfferingId,
                     AssessmentCategoryId = category.Id,
                     Title = $"{category.CategoryName} Assessment",
-                    MaxMarks = category.MaxMarks
+                    MaxMarks = category.MaxMarks > 0m ? category.MaxMarks : (category.Weight > 0m ? category.Weight : 100m)
                 };
                 _dbContext.Assessments.Add(assessment);
                 assessments.Add(assessment);
                 assessmentsChanged = true;
             }
-            else if (existingAssessment.MaxMarks != category.MaxMarks)
+            else if (existingAssessment.MaxMarks <= 0m)
             {
-                existingAssessment.MaxMarks = category.MaxMarks;
+                existingAssessment.MaxMarks = category.MaxMarks > 0m ? category.MaxMarks : (category.Weight > 0m ? category.Weight : 100m);
                 _dbContext.Assessments.Update(existingAssessment);
                 assessmentsChanged = true;
             }
@@ -6004,4 +6109,404 @@ public sealed class GradebookService : IGradebookService
     }
 
     #endregion
+
+    #region Audit History & Disaster Recovery Restore
+
+    public async Task<ErrorOr<List<GradebookAuditHistoryDto>>> GetAuditHistoryAsync(
+        Guid courseOfferingId,
+        CancellationToken ct = default)
+    {
+        var offeringExists = await _dbContext.CourseOfferings
+            .AnyAsync(c => c.Id == courseOfferingId, ct);
+        if (!offeringExists)
+        {
+            return Error.NotFound("CourseOffering.NotFound", "Course offering not found");
+        }
+
+        var offeringIdStr = courseOfferingId.ToString();
+        var logs = await _dbContext.AuditLogs
+            .Include(a => a.User)
+            .Where(a => (a.Path != null && a.Path.Contains(offeringIdStr)) || (a.EntityId == offeringIdStr))
+            .OrderByDescending(a => a.Timestamp)
+            .Take(100)
+            .ToListAsync(ct);
+
+        var historyList = new List<GradebookAuditHistoryDto>();
+
+        foreach (var log in logs)
+        {
+            var path = log.Path ?? string.Empty;
+            var actionStr = log.Action ?? string.Empty;
+            var performerName = log.User?.DisplayName ?? log.User?.Email;
+
+            int studentCount = 0;
+            bool canRestore = false;
+            string displayAction = actionStr;
+            string summary = log.Changes ?? string.Empty;
+
+            if (path.Contains("/students/grades/bulk", StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(log.RequestBodyJson) && log.RequestBodyJson.Contains("\"grades\"", StringComparison.OrdinalIgnoreCase)))
+            {
+                displayAction = "Grade Submission (Bulk)";
+                if (!string.IsNullOrWhiteSpace(log.RequestBodyJson))
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(log.RequestBodyJson);
+                        if (doc.RootElement.TryGetProperty("grades", out var gradesArray) && gradesArray.ValueKind == JsonValueKind.Array)
+                        {
+                            studentCount = gradesArray.GetArrayLength();
+                            canRestore = studentCount > 0;
+                            summary = $"{studentCount} student grades submitted";
+                        }
+                    }
+                    catch
+                    {
+                        // JSON parsing fallback
+                    }
+                }
+            }
+            else if (path.Contains("/publish", StringComparison.OrdinalIgnoreCase) || actionStr.Contains("Publish", StringComparison.OrdinalIgnoreCase))
+            {
+                displayAction = "Grades Published";
+                summary = "Grades published and made visible to students";
+            }
+            else if (path.Contains("/unpublish", StringComparison.OrdinalIgnoreCase) || actionStr.Contains("Unpublish", StringComparison.OrdinalIgnoreCase))
+            {
+                displayAction = "Grades Unpublished";
+                summary = "Grades unpublished from student portal";
+            }
+            else if (path.Contains("/upload", StringComparison.OrdinalIgnoreCase) || actionStr.Contains("Upload", StringComparison.OrdinalIgnoreCase))
+            {
+                displayAction = "Excel Gradebook Upload";
+                summary = "Grades imported from Excel template";
+            }
+            else if (actionStr.Contains("Restore", StringComparison.OrdinalIgnoreCase))
+            {
+                displayAction = "Grades Restored";
+                summary = log.Changes ?? "Grades restored by Administrator";
+            }
+
+            historyList.Add(new GradebookAuditHistoryDto(
+                log.Id,
+                log.Timestamp,
+                displayAction,
+                performerName,
+                log.User?.Email,
+                studentCount,
+                summary,
+                canRestore
+            ));
+        }
+
+        return historyList;
+    }
+
+    public async Task<ErrorOr<GradebookSnapshotPreviewDto>> PreviewSnapshotAsync(
+        Guid courseOfferingId,
+        Guid auditLogId,
+        CancellationToken ct = default)
+    {
+        var log = await _dbContext.AuditLogs
+            .Include(a => a.User)
+            .FirstOrDefaultAsync(a => a.Id == auditLogId, ct);
+
+        if (log == null)
+        {
+            return Error.NotFound("AuditLog.NotFound", "Audit log snapshot not found");
+        }
+
+        if (string.IsNullOrWhiteSpace(log.RequestBodyJson))
+        {
+            return Error.Validation("AuditLog.NoPayload", "This audit log entry does not contain a recoverable request body.");
+        }
+
+        var parsedItems = new List<UpdateStudentGradeSummaryItem>();
+        try
+        {
+            using var doc = JsonDocument.Parse(log.RequestBodyJson);
+            if (!doc.RootElement.TryGetProperty("grades", out var gradesArray) || gradesArray.ValueKind != JsonValueKind.Array)
+            {
+                return Error.Validation("AuditLog.NoGradesArray", "No student grades found in this snapshot.");
+            }
+
+            foreach (var item in gradesArray.EnumerateArray())
+            {
+                if (item.TryGetProperty("studentId", out var sIdProp) && Guid.TryParse(sIdProp.GetString(), out var sId))
+                {
+                    decimal ca1 = item.TryGetProperty("ca1Score", out var c1) && c1.TryGetDecimal(out var c1Val) ? c1Val : 0;
+                    decimal ca2 = item.TryGetProperty("ca2Score", out var c2) && c2.TryGetDecimal(out var c2Val) ? c2Val : 0;
+                    decimal ca3 = item.TryGetProperty("ca3Score", out var c3) && c3.TryGetDecimal(out var c3Val) ? c3Val : 0;
+                    decimal exam = item.TryGetProperty("examScore", out var ex) && ex.TryGetDecimal(out var exVal) ? exVal : 0;
+                    parsedItems.Add(new UpdateStudentGradeSummaryItem(sId, ca1, ca2, ca3, exam));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Error.Failure("AuditLog.JsonError", $"Failed to parse snapshot payload: {ex.Message}");
+        }
+
+        if (!parsedItems.Any())
+        {
+            return Error.Validation("AuditLog.Empty", "Snapshot contains zero student grades.");
+        }
+
+        var snapshotStudentIds = parsedItems.Select(p => p.StudentId).Distinct().ToList();
+
+        // Fetch all enrollments for this offering (to check enrollment status)
+        var allEnrollments = await _dbContext.CourseEnrollments
+            .Include(e => e.Student)
+            .Where(e => e.CourseOfferingId == courseOfferingId)
+            .ToListAsync(ct);
+
+        // Fetch students for names & matric numbers
+        var studentProfiles = await _dbContext.Students
+            .AsNoTracking()
+            .Where(s => snapshotStudentIds.Contains(s.Id))
+            .ToListAsync(ct);
+
+        // Fetch current live summaries (which accurately resolves whether published or draft)
+        var currentSummariesResult = await GetStudentGradeSummariesAsync(courseOfferingId, ct);
+        var currentMap = currentSummariesResult.IsError
+            ? new Dictionary<Guid, StudentGradeSummaryDto>()
+            : currentSummariesResult.Value.ToDictionary(s => s.StudentId);
+
+        var studentItems = new List<GradebookSnapshotStudentItemDto>();
+        int matchedActive = 0;
+        int unmatched = 0;
+
+        foreach (var item in parsedItems)
+        {
+            var enrollment = allEnrollments.FirstOrDefault(e => e.StudentId == item.StudentId);
+            var studentUser = enrollment?.Student;
+            var profile = studentProfiles.FirstOrDefault(p => p.Id == item.StudentId);
+
+            var studentName = studentUser?.DisplayName ?? (profile != null ? $"{profile.FirstName} {profile.LastName}" : "Unknown Student");
+            var studentEmail = studentUser?.Email ?? profile?.OfficialEmail ?? string.Empty;
+            var matric = profile?.StudentNumber ?? studentUser?.Username ?? "N/A";
+            var enrollmentStatus = enrollment?.Status ?? "Not Enrolled";
+
+            if (enrollment != null && enrollment.Status == "Registered")
+            {
+                matchedActive++;
+            }
+            else
+            {
+                unmatched++;
+            }
+
+            var snapshotTotal = (item.Ca1Score ?? 0) + (item.Ca2Score ?? 0) + (item.Ca3Score ?? 0) + (item.ExamScore ?? 0);
+            var snapshotGrade = CalculateLetterGrade(snapshotTotal);
+
+            decimal? currentTotal = null;
+            string? currentGrade = null;
+            if (currentMap.TryGetValue(item.StudentId, out var cs))
+            {
+                currentTotal = cs.TotalScore;
+                currentGrade = cs.LetterGrade;
+                if (studentName == "Unknown Student" && !string.IsNullOrWhiteSpace(cs.StudentName))
+                {
+                    studentName = cs.StudentName;
+                }
+                if (matric == "N/A" && !string.IsNullOrWhiteSpace(cs.MatricNumber))
+                {
+                    matric = cs.MatricNumber;
+                }
+                if (string.IsNullOrWhiteSpace(studentEmail) && !string.IsNullOrWhiteSpace(cs.StudentEmail))
+                {
+                    studentEmail = cs.StudentEmail;
+                }
+            }
+
+            var hasChanged = !currentTotal.HasValue || currentTotal.Value != snapshotTotal || currentGrade != snapshotGrade;
+
+            studentItems.Add(new GradebookSnapshotStudentItemDto(
+                item.StudentId,
+                studentName,
+                matric,
+                studentEmail,
+                enrollmentStatus,
+                item.Ca1Score ?? 0,
+                item.Ca2Score ?? 0,
+                item.Ca3Score ?? 0,
+                item.ExamScore ?? 0,
+                snapshotTotal,
+                snapshotGrade,
+                currentTotal,
+                currentGrade,
+                hasChanged
+            ));
+        }
+
+        var performer = log.User?.DisplayName ?? log.User?.Email;
+
+        return new GradebookSnapshotPreviewDto(
+            log.Id,
+            log.Timestamp,
+            performer,
+            log.User?.Email,
+            parsedItems.Count,
+            matchedActive,
+            unmatched,
+            studentItems.OrderBy(s => s.MatricNumber).ThenBy(s => s.StudentName).ToList()
+        );
+    }
+
+    public async Task<ErrorOr<RestoreGradesResultDto>> RestoreGradesFromSnapshotAsync(
+        Guid courseOfferingId,
+        Guid auditLogId,
+        RestoreGradesFromSnapshotRequest request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        // 1. Permission check
+        var userRoles = await _dbContext.UserRoles
+            .Where(ur => ur.UserId == userId)
+            .Select(ur => ur.Role.Name)
+            .ToListAsync(ct);
+
+        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
+        var hasPermission = isAdmin || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
+
+        if (!hasPermission)
+        {
+            return Error.Forbidden("Access.Denied", "You do not have permission to restore historical grade snapshots. Administrator privileges required.");
+        }
+
+        // 2. Fetch the snapshot
+        var log = await _dbContext.AuditLogs
+            .FirstOrDefaultAsync(a => a.Id == auditLogId, ct);
+
+        if (log == null)
+        {
+            return Error.NotFound("AuditLog.NotFound", "Audit log snapshot not found");
+        }
+
+        if (string.IsNullOrWhiteSpace(log.RequestBodyJson))
+        {
+            return Error.Validation("AuditLog.NoPayload", "This audit log entry does not contain a recoverable request body.");
+        }
+
+        var parsedItems = new List<UpdateStudentGradeSummaryItem>();
+        try
+        {
+            using var doc = JsonDocument.Parse(log.RequestBodyJson);
+            if (!doc.RootElement.TryGetProperty("grades", out var gradesArray) || gradesArray.ValueKind != JsonValueKind.Array)
+            {
+                return Error.Validation("AuditLog.NoGradesArray", "No student grades found in this snapshot.");
+            }
+
+            foreach (var item in gradesArray.EnumerateArray())
+            {
+                if (item.TryGetProperty("studentId", out var sIdProp) && Guid.TryParse(sIdProp.GetString(), out var sId))
+                {
+                    decimal ca1 = item.TryGetProperty("ca1Score", out var c1) && c1.TryGetDecimal(out var c1Val) ? c1Val : 0;
+                    decimal ca2 = item.TryGetProperty("ca2Score", out var c2) && c2.TryGetDecimal(out var c2Val) ? c2Val : 0;
+                    decimal ca3 = item.TryGetProperty("ca3Score", out var c3) && c3.TryGetDecimal(out var c3Val) ? c3Val : 0;
+                    decimal exam = item.TryGetProperty("examScore", out var ex) && ex.TryGetDecimal(out var exVal) ? exVal : 0;
+                    parsedItems.Add(new UpdateStudentGradeSummaryItem(sId, ca1, ca2, ca3, exam));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            return Error.Failure("AuditLog.JsonError", $"Failed to parse snapshot payload: {ex.Message}");
+        }
+
+        if (!parsedItems.Any())
+        {
+            return Error.Validation("AuditLog.Empty", "Snapshot contains zero student grades.");
+        }
+
+        // 3. Filter items if only active registered students
+        List<UpdateStudentGradeSummaryItem> itemsToRestore;
+        int skippedCount = 0;
+
+        if (request.OnlyActiveRegisteredStudents)
+        {
+            var activeStudentIds = await _dbContext.CourseEnrollments
+                .Where(e => e.CourseOfferingId == courseOfferingId && e.Status == "Registered")
+                .Select(e => e.StudentId)
+                .ToListAsync(ct);
+
+            itemsToRestore = parsedItems.Where(i => activeStudentIds.Contains(i.StudentId)).ToList();
+            skippedCount = parsedItems.Count - itemsToRestore.Count;
+        }
+        else
+        {
+            itemsToRestore = parsedItems;
+        }
+
+        // 4. If published, temporarily unpublish to allow grade update
+        var publication = await _dbContext.GradePublications
+            .FirstOrDefaultAsync(x => x.CourseOfferingId == courseOfferingId, ct);
+        var wasPublished = publication != null && publication.IsVisibleToStudents;
+
+        if (wasPublished)
+        {
+            publication!.IsVisibleToStudents = false;
+            await _dbContext.SaveChangesAsync(ct);
+        }
+
+        // 5. Update grades via standard pipeline
+        var updateResult = await UpdateStudentGradeSummariesAsync(
+            courseOfferingId,
+            new UpdateStudentGradeSummaryRequest(itemsToRestore),
+            userId,
+            ct
+        );
+
+        if (updateResult.IsError)
+        {
+            // Restore previous publication status if failed
+            if (wasPublished && publication != null)
+            {
+                publication.IsVisibleToStudents = true;
+                await _dbContext.SaveChangesAsync(ct);
+            }
+            return updateResult.Errors;
+        }
+
+        // 6. Handle auto-publish
+        bool isNowPublished = false;
+        if (request.AutoPublish || wasPublished)
+        {
+            var publishReason = request.Reason ?? $"Restored from historical snapshot {auditLogId:N}";
+            var pubResult = await PublishGradesAsync(
+                courseOfferingId,
+                new PublishGradesRequest(publishReason),
+                userId,
+                ct
+            );
+
+            if (!pubResult.IsError)
+            {
+                isNowPublished = true;
+            }
+        }
+
+        // 7. Log action
+        await _auditService.LogAsync(
+            "Restore",
+            "Gradebook",
+            courseOfferingId.ToString(),
+            $"Restored {itemsToRestore.Count} student grades from snapshot {auditLogId}. Reason: {request.Reason ?? "Admin restore"}. AutoPublished: {isNowPublished}.",
+            ct
+        );
+
+        var msg = $"Successfully restored {itemsToRestore.Count} student grades from snapshot." +
+                  (skippedCount > 0 ? $" {skippedCount} inactive/dropped students were skipped." : "") +
+                  (isNowPublished ? " Grades have been published and are visible to students." : " Grades are saved as draft.");
+
+        return new RestoreGradesResultDto(
+            itemsToRestore.Count,
+            skippedCount,
+            isNowPublished,
+            msg
+        );
+    }
+
+    #endregion
 }
+

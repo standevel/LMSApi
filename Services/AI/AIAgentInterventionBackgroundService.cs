@@ -62,7 +62,7 @@ public class AIAgentInterventionBackgroundService : BackgroundService
             await _hubContext.Clients.Group($"Student_{bill.StudentId}").ReceiveAgentAlert(
                 alertType: "fee_clearance",
                 title: "💳 Financial Clearance Alert",
-                description: $"You have an outstanding fee balance of {bill.Balance:C}. Click to speak with your AI Bursar Assistant about payment clearance."
+                description: $"You have an outstanding fee balance of ₦{bill.Balance:N2}. Click to speak with your AI Bursar Assistant about payment clearance."
             );
         }
 

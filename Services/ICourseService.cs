@@ -37,6 +37,15 @@ public interface ICourseService
         Guid offeringId, Guid? lecturerId,
         List<Guid>? coLecturerIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Removes a single lecturer (Main or Co-lecturer) from a course offering.
+    /// Unlike AssignLecturerAsync (which replaces the whole set), this only
+    /// removes the specified lecturer, preserving the rest.
+    /// Returns 404 if the assignment does not exist.
+    /// </summary>
+    Task<ErrorOr<CourseOfferingDto>> RemoveLecturerAsync(
+        Guid offeringId, Guid lecturerId, CancellationToken ct = default);
+
     Task<ErrorOr<BulkAssignLecturersResult>> BulkAssignLecturersAsync(
         List<OfferingAssignment> assignments, CancellationToken ct = default);
 

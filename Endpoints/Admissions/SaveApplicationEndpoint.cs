@@ -61,6 +61,48 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             }
         }
 
+        Region? region = null;
+        if (!string.IsNullOrEmpty(req.Region) && Enum.TryParse<Region>(req.Region, out var parsedRegion))
+        {
+            region = parsedRegion;
+        }
+
+        VisaStatus? visaStatus = null;
+        if (!string.IsNullOrEmpty(req.VisaStatus) && Enum.TryParse<VisaStatus>(req.VisaStatus, out var parsedVisaStatus))
+        {
+            visaStatus = parsedVisaStatus;
+        }
+
+        VisaType? visaType = null;
+        if (!string.IsNullOrEmpty(req.VisaType) && Enum.TryParse<VisaType>(req.VisaType, out var parsedVisaType))
+        {
+            visaType = parsedVisaType;
+        }
+
+        ImmigrationStatus? immigrationStatus = null;
+        if (!string.IsNullOrEmpty(req.ImmigrationStatus) && Enum.TryParse<ImmigrationStatus>(req.ImmigrationStatus, out var parsedImmStatus))
+        {
+            immigrationStatus = parsedImmStatus;
+        }
+
+        ExchangeProgramType exchangeProgramType = ExchangeProgramType.None;
+        if (!string.IsNullOrEmpty(req.ExchangeProgramType) && Enum.TryParse<ExchangeProgramType>(req.ExchangeProgramType, out var parsedExchangeType))
+        {
+            exchangeProgramType = parsedExchangeType;
+        }
+
+        ExchangeStatus exchangeStatus = ExchangeStatus.Pending;
+        if (!string.IsNullOrEmpty(req.ExchangeStatus) && Enum.TryParse<ExchangeStatus>(req.ExchangeStatus, out var parsedExchangeStatus))
+        {
+            exchangeStatus = parsedExchangeStatus;
+        }
+
+        DirectEntryQualification directEntryQualification = DirectEntryQualification.None;
+        if (!string.IsNullOrEmpty(req.DirectEntryQualification) && Enum.TryParse<DirectEntryQualification>(req.DirectEntryQualification, out var parsedDeQual))
+        {
+            directEntryQualification = parsedDeQual;
+        }
+
         var app = new AdmissionApplication
         {
             Id = req.Id ?? Guid.NewGuid(),
@@ -69,13 +111,17 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             MiddleName = req.MiddleName,
             StudentEmail = req.StudentEmail,
             JambRegNumber = req.JambRegNumber,
-            AcademicSessionId = req.AcademicSessionId,
+            AcademicSessionId = req.AcademicSessionId ?? Guid.Empty,
             Persona = req.Persona,
             FacultyId = facultyId,
             AcademicProgramId = academicProgramId,
             ProgramReason = req.ProgramReason,
             QualificationsJson = req.QualificationsJson,
             Phone = req.Phone,
+            Gender = req.Gender,
+            EmergencyContactName = req.EmergencyContactName ?? string.Empty,
+            EmergencyContactPhone = req.EmergencyContactPhone ?? string.Empty,
+            EmergencyContactEmail = req.EmergencyContactEmail ?? string.Empty,
             EmergencyContactJson = req.EmergencyContactJson,
             SponsorshipJson = req.SponsorshipJson,
             Status = AdmissionStatus.Draft,
@@ -83,7 +129,6 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             // New fields
             ApplicantType = applicantType,
             DateOfBirth = req.DateOfBirth,
-            EmergencyContactEmail = req.EmergencyContactEmail ?? string.Empty,
             PreviousInstitutionName = req.PreviousInstitutionName,
             PreviousInstitutionCountry = req.PreviousInstitutionCountry,
             PreviousCGPA = req.PreviousCGPA,
@@ -92,7 +137,48 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
             Nationality = req.Nationality,
             PassportNumber = req.PassportNumber,
             EnglishProficiencyScore = req.EnglishProficiencyScore,
-            EnglishProficiencyType = englishProficiencyType
+            EnglishProficiencyType = englishProficiencyType,
+            // Phase 1: Country & Region
+            CountryOfOrigin = req.CountryOfOrigin,
+            CountryName = req.CountryName,
+            Region = region,
+            // Phase 1: Enhanced Visa & Immigration Fields
+            VisaStatus = visaStatus,
+            VisaType = visaType,
+            VisaExpiryDate = req.VisaExpiryDate,
+            ImmigrationStatus = immigrationStatus,
+            FinancialProofAmount = req.FinancialProofAmount,
+            FinancialProofCurrency = req.FinancialProofCurrency,
+            FinancialProofDocumentId = req.FinancialProofDocumentId,
+            // Phase 2: Direct Entry Fields
+            DirectEntryQualification = directEntryQualification,
+            DirectEntryGrade = req.DirectEntryGrade,
+            DirectEntryPoints = req.DirectEntryPoints,
+            DirectEntryInstitution = req.DirectEntryInstitution,
+            DirectEntryYear = req.DirectEntryYear,
+            DirectEntrySubject1 = req.DirectEntrySubject1,
+            DirectEntrySubject2 = req.DirectEntrySubject2,
+            DirectEntrySubject3 = req.DirectEntrySubject3,
+            // Phase 3: Transfer Student Fields
+            ConvertedCGPA = req.ConvertedCGPA,
+            CGPAScaleName = req.CGPAScaleName,
+            CGPAScaleMax = req.CGPAScaleMax,
+            CGPAScaleMin = req.CGPAScaleMin,
+            TransferableCredits = req.TransferableCredits,
+            TransferLevelSuggestion = req.TransferLevelSuggestion,
+            IntendedSemester = req.IntendedSemester,
+            // Phase 4: Exchange Program Fields
+            ExchangeProgramType = exchangeProgramType,
+            ExchangeStatus = exchangeStatus,
+            HomeInstitutionName = req.HomeInstitutionName,
+            HomeInstitutionCountry = req.HomeInstitutionCountry,
+            ExchangePartnerAgreementId = req.ExchangePartnerAgreementId,
+            ExchangeDurationMonths = req.ExchangeDurationMonths,
+            ExchangeStartDate = req.ExchangeStartDate,
+            ExchangeEndDate = req.ExchangeEndDate,
+            HomeInstitutionApprovalDocumentId = req.HomeInstitutionApprovalDocumentId,
+            DeansCertificateDocumentId = req.DeansCertificateDocumentId,
+            HomeInstitutionTranscriptDocumentId = req.HomeInstitutionTranscriptDocumentId
         };
 
         try
@@ -133,7 +219,7 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
                     d.Status.ToString(),
                     d.RejectionReason
                 )),
-                // Optional fields (nulls for now)
+                // Optional fields
                 null, // StudentUserId
                 null, // AcceptanceFeeRecordId
                 null, // AcceptanceFeeAmount
@@ -153,7 +239,50 @@ public sealed class SaveApplicationEndpoint(IAdmissionService admissionService)
                 saved.EnglishProficiencyScore,
                 saved.EnglishProficiencyType?.ToString(),
                 saved.DateOfBirth,
-                saved.EmergencyContactEmail
+                saved.EmergencyContactEmail,
+                saved.CountryOfOrigin,
+                saved.CountryName,
+                saved.Region?.ToString(),
+                saved.VisaStatus?.ToString(),
+                saved.VisaType?.ToString(),
+                saved.VisaExpiryDate,
+                saved.ImmigrationStatus?.ToString(),
+                saved.FinancialProofAmount,
+                saved.FinancialProofCurrency,
+                saved.FinancialProofDocumentId,
+                saved.ConvertedCGPA,
+                saved.CGPAScaleName,
+                saved.CGPAScaleMax,
+                saved.CGPAScaleMin,
+                saved.TransferableCredits,
+                saved.TransferLevelSuggestion,
+                saved.IntendedSemester,
+                saved.ExchangeProgramType.ToString(),
+                saved.ExchangeStatus.ToString(),
+                saved.HomeInstitutionName,
+                saved.HomeInstitutionCountry,
+                saved.ExchangePartnerAgreementId,
+                saved.ExchangeDurationMonths,
+                saved.ExchangeStartDate,
+                saved.ExchangeEndDate,
+                saved.HomeInstitutionStanding?.ToString(),
+                saved.HomeInstitutionVerified,
+                saved.HomeInstitutionVerifiedAt,
+                saved.HomeInstitutionVerifiedBy,
+                saved.DirectEntryQualification.ToString(),
+                saved.DirectEntryGrade,
+                saved.DirectEntryPoints,
+                saved.DirectEntryInstitution,
+                saved.DirectEntryYear,
+                saved.DirectEntrySubject1,
+                saved.DirectEntrySubject2,
+                saved.DirectEntrySubject3,
+                saved.HomeInstitutionApprovalDocumentId,
+                saved.DeansCertificateDocumentId,
+                saved.HomeInstitutionTranscriptDocumentId,
+                saved.Gender,
+                saved.EmergencyContactName,
+                saved.EmergencyContactPhone
             );
 
             await SendSuccessAsync(response, ct);

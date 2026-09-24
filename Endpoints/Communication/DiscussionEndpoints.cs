@@ -28,7 +28,7 @@ public sealed class GetDiscussionThreadsEndpoint(IDiscussionService discussionSe
     public override void Configure()
     {
         Get("discussions");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -50,7 +50,7 @@ public sealed class GetDiscussionThreadByIdEndpoint(IDiscussionService discussio
     public override void Configure()
     {
         Get("discussions/{Id}");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent");
+        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 

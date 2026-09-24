@@ -30,7 +30,12 @@ public sealed class AdmissionService(
     private readonly ICourseEquivalencyService _courseEquivalencyService = courseEquivalencyService;
     public async Task<AdmissionApplication?> VerifyIdentityAsync(string email, string jambRegNumber)
     {
-        if (string.IsNullOrWhiteSpace(email) && string.IsNullOrWhiteSpace(jambRegNumber))
+        var hasEmail = !string.IsNullOrWhiteSpace(email);
+        var cleanEmail = email?.Trim() ?? string.Empty;
+        var hasJamb = !string.IsNullOrWhiteSpace(jambRegNumber);
+        var upperJamb = jambRegNumber?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        if (!hasEmail && !hasJamb)
         {
             return null;
         }
@@ -38,14 +43,23 @@ public sealed class AdmissionService(
         try
         {
             // Check for existing applications in the latest session or any session
-             return await dbContext.AdmissionApplications
-                 .Include(a => a.AcademicSession)
-                 .Include(a => a.Faculty)
-                 .Include(a => a.AcademicProgram)
-                 .Include(a => a.Documents)
-                     .ThenInclude(d => d.DocumentType)
-                 .OrderByDescending(a => a.CreatedAt)
-                 .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber.ToUpperInvariant());
+            var query = dbContext.AdmissionApplications
+                .Include(a => a.AcademicSession)
+                .Include(a => a.Faculty)
+                .Include(a => a.AcademicProgram)
+                .Include(a => a.Documents)
+                    .ThenInclude(d => d.DocumentType)
+                .OrderByDescending(a => a.CreatedAt);
+
+            if (hasEmail && hasJamb)
+            {
+                return await query.FirstOrDefaultAsync(a => a.StudentEmail == cleanEmail || a.JambRegNumber == upperJamb);
+            }
+            if (hasEmail)
+            {
+                return await query.FirstOrDefaultAsync(a => a.StudentEmail == cleanEmail);
+            }
+            return await query.FirstOrDefaultAsync(a => a.JambRegNumber == upperJamb);
         }
         catch (Exception ex)
         {
@@ -55,10 +69,23 @@ public sealed class AdmissionService(
             
             try
             {
-                 var app = await dbContext.AdmissionApplications
-                     .Include(a => a.AcademicSession)
-                     .OrderByDescending(a => a.CreatedAt)
-                     .FirstOrDefaultAsync(a => a.StudentEmail == email || a.JambRegNumber == jambRegNumber.ToUpperInvariant());
+                var query = dbContext.AdmissionApplications
+                    .Include(a => a.AcademicSession)
+                    .OrderByDescending(a => a.CreatedAt);
+
+                AdmissionApplication? app = null;
+                if (hasEmail && hasJamb)
+                {
+                    app = await query.FirstOrDefaultAsync(a => a.StudentEmail == cleanEmail || a.JambRegNumber == upperJamb);
+                }
+                else if (hasEmail)
+                {
+                    app = await query.FirstOrDefaultAsync(a => a.StudentEmail == cleanEmail);
+                }
+                else
+                {
+                    app = await query.FirstOrDefaultAsync(a => a.JambRegNumber == upperJamb);
+                }
                 
                 if (app != null)
                 {
@@ -111,6 +138,24 @@ public sealed class AdmissionService(
             .Include(a => a.Documents)
                 .ThenInclude(d => d.DocumentType)
             .FirstOrDefaultAsync(a => a.Id == application.Id);
+
+        if (application.AcademicSessionId == Guid.Empty)
+        {
+            if (existing != null && existing.AcademicSessionId != Guid.Empty)
+            {
+                application.AcademicSessionId = existing.AcademicSessionId;
+            }
+            else
+            {
+                var activeSession = await dbContext.AcademicSessions
+                    .FirstOrDefaultAsync(s => s.IsAdmissionActive || s.IsActive)
+                    ?? await dbContext.AcademicSessions.OrderByDescending(s => s.StartDate).FirstOrDefaultAsync();
+                if (activeSession != null)
+                {
+                    application.AcademicSessionId = activeSession.Id;
+                }
+            }
+        }
 
         if (existing == null)
         {
@@ -195,6 +240,18 @@ public sealed class AdmissionService(
         if (string.IsNullOrEmpty(app.EmergencyContactEmail))
             throw new InvalidOperationException("Emergency contact email is required.");
 
+        if (app.AcademicSessionId == Guid.Empty)
+        {
+            var activeSession = await dbContext.AcademicSessions
+                .FirstOrDefaultAsync(s => s.IsAdmissionActive || s.IsActive)
+                ?? await dbContext.AcademicSessions.OrderByDescending(s => s.StartDate).FirstOrDefaultAsync();
+            if (activeSession != null)
+            {
+                app.AcademicSessionId = activeSession.Id;
+                app.AcademicSession = activeSession;
+            }
+        }
+
         if (string.IsNullOrEmpty(app.ApplicationNumber))
         {
             var yearValue = app.AcademicSession?.StartDate.Year ?? DateTime.UtcNow.Year;
@@ -245,11 +302,11 @@ public sealed class AdmissionService(
                     break;
 
                 case ApplicantType.DirectEntry:
-                    isRequired = (doc.IsCompulsory && !doc.InternationalOnly && !doc.TransferOnly && !doc.ExchangeOnly) || doc.DirectEntryOnly;
+                    isRequired = ((doc.IsCompulsory && !doc.InternationalOnly && !doc.TransferOnly && !doc.ExchangeOnly && doc.Code != "JAMB_RESULT") || doc.DirectEntryOnly);
                     break;
 
                 case ApplicantType.Transfer:
-                    isRequired = (doc.IsCompulsory && !doc.InternationalOnly && !doc.DirectEntryOnly) || doc.TransferOnly || doc.ExchangeOnly;
+                    isRequired = ((doc.IsCompulsory && !doc.InternationalOnly && !doc.DirectEntryOnly && !doc.ExchangeOnly && doc.Code != "JAMB_RESULT") || doc.TransferOnly);
                     break;
 
                 case ApplicantType.International:
@@ -618,7 +675,7 @@ public sealed class AdmissionService(
             .AsQueryable();
 
         if (status.HasValue) query = query.Where(a => a.Status == status.Value);
-        if (sessionId.HasValue) query = query.Where(a => a.AcademicSessionId == sessionId.Value);
+        if (sessionId.HasValue) query = query.Where(a => a.AcademicSessionId == sessionId.Value || a.AcademicSessionId == Guid.Empty);
 
         return await query
             .Include(a => a.Documents)
@@ -891,6 +948,118 @@ public sealed class AdmissionService(
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("[UPDATE-APPLICANT-EMAIL] Application {Id} ({AppNo}) email updated from {OldEmail} to {NewEmail} by User {UserId}",
             app.Id, app.ApplicationNumber, oldEmail, normalizedEmail, updatedBy);
+
+        return app;
+    }
+
+    public async Task<AdmissionApplication> ChangeApplicationProgramAsync(
+        Guid applicationId,
+        Guid targetProgramId,
+        string? reason = null,
+        bool regenerateAndSendOffer = false,
+        Guid? updatedBy = null,
+        CancellationToken ct = default)
+    {
+        var app = await dbContext.AdmissionApplications
+            .Include(a => a.AcademicSession)
+            .Include(a => a.Faculty)
+            .Include(a => a.AcademicProgram)
+            .Include(a => a.StartingLevel)
+            .Include(a => a.Documents).ThenInclude(d => d.DocumentType)
+            .FirstOrDefaultAsync(a => a.Id == applicationId, ct);
+
+        if (app == null)
+            throw new KeyNotFoundException("Application not found.");
+
+        var targetProgram = await dbContext.Programs
+            .Include(p => p.Department).ThenInclude(d => d.Faculty)
+            .FirstOrDefaultAsync(p => p.Id == targetProgramId, ct);
+
+        if (targetProgram == null)
+            throw new KeyNotFoundException("Target academic program not found.");
+
+        if (!targetProgram.IsActive)
+            throw new InvalidOperationException($"Target program '{targetProgram.Name}' is currently not active.");
+
+        var oldProgramName = app.AcademicProgram?.Name ?? "Unassigned";
+        var newProgramName = targetProgram.Name;
+        var oldProgramId = app.AcademicProgramId;
+
+        if (oldProgramId == targetProgramId)
+        {
+            return app;
+        }
+
+        app.AcademicProgramId = targetProgram.Id;
+        app.AcademicProgram = targetProgram;
+        var newFacultyId = targetProgram.Department?.FacultyId ?? app.FacultyId;
+        app.FacultyId = newFacultyId;
+        app.Faculty = targetProgram.Department?.Faculty ?? app.Faculty;
+        app.UpdatedAt = DateTime.UtcNow;
+
+        // Synchronize linked Student record if already created
+        var student = await dbContext.Students
+            .FirstOrDefaultAsync(s => s.AdmissionApplicationId == app.Id || (app.StudentId.HasValue && s.Id == app.StudentId.Value), ct);
+        if (student != null)
+        {
+            student.AcademicProgramId = targetProgram.Id;
+            student.FacultyId = newFacultyId;
+            student.UpdatedAt = DateTime.UtcNow;
+        }
+
+        // Audit Log
+        var cleanReason = string.IsNullOrWhiteSpace(reason) ? "Not specified" : reason.Trim();
+        dbContext.AuditLogs.Add(new AuditLog
+        {
+            Action = "Change Application Program",
+            EntityName = nameof(AdmissionApplication),
+            EntityId = app.Id.ToString(),
+            Changes = $"Application program changed from '{oldProgramName}' to '{newProgramName}'. Status: {app.Status}. Reason: {cleanReason}",
+            UserId = updatedBy,
+            Timestamp = DateTime.UtcNow
+        });
+
+        // Offer letter regeneration & email if application has already been admitted or offer accepted
+        if ((app.Status == AdmissionStatus.Admitted || app.Status == AdmissionStatus.OfferAccepted) && regenerateAndSendOffer)
+        {
+            var templateType = targetProgram.Type switch
+            {
+                LMS.Api.Data.Enums.ProgramType.Postgraduate => "Postgraduate",
+                _ => "Undergraduate"
+            };
+
+            try
+            {
+                var pdf = await pdfService.GenerateOfferLetterAsync(app, templateType);
+                var memoPdf = await pdfService.GenerateAdvancePaymentMemoAsync();
+                var fullName = string.Join(" ", new[] { app.FirstName, app.MiddleName, app.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+                await emailService.SendAdmissionOfferEmailAsync(
+                    toEmail: app.StudentEmail,
+                    studentName: fullName,
+                    programName: newProgramName,
+                    pdfAttachment: pdf,
+                    fileName: "Admission_Letter.pdf",
+                    secondAttachment: memoPdf,
+                    secondFileName: "Advance_Payment_Memo.pdf"
+                );
+
+                logger.LogInformation("[CHANGE-PROGRAM-OFFER] Sent updated offer letter to {Email} for application {ApplicationId} ({NewProgram})",
+                    app.StudentEmail, app.Id, newProgramName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[CHANGE-PROGRAM-OFFER-ERROR] Failed to send updated offer letter to {Email} for application {ApplicationId}",
+                    app.StudentEmail, app.Id);
+            }
+
+            // Refresh offer expiry for 14 days
+            app.OfferExpiresAt = DateTime.UtcNow.AddDays(14);
+        }
+
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("[CHANGE-APPLICATION-PROGRAM] Application {Id} ({AppNo}) program changed from '{OldProgram}' to '{NewProgram}' by User {UserId}",
+            app.Id, app.ApplicationNumber, oldProgramName, newProgramName, updatedBy);
 
         return app;
     }
@@ -1427,12 +1596,14 @@ public sealed class AdmissionService(
                 MiddleName = app.MiddleName,
                 PersonalEmail = app.StudentEmail,
                 Phone = app.Phone,
+                Gender = app.Gender,
                 EmergencyContactName = app.EmergencyContactName,
                 EmergencyContactPhone = app.EmergencyContactPhone,
                 EmergencyContactEmail = app.EmergencyContactEmail,
                 AcademicSessionId = app.AcademicSessionId,
                 FacultyId = app.FacultyId,
                 AcademicProgramId = app.AcademicProgramId,
+                LevelId = app.StartingLevelId,
                 StudentNumber = null, // Matric number assigned by Registrar later
                 Status = StudentStatus.Active,
                 EnrollmentDate = DateTime.UtcNow,
@@ -2205,28 +2376,58 @@ public sealed class AdmissionService(
 
     /// <summary>
     /// Parses the EmergencyContactJson field and populates the individual contact fields.
+    /// Also ensures fields set directly on application sync back to JSON if JSON is empty.
     /// </summary>
     private void ParseEmergencyContactJson(AdmissionApplication application)
     {
-        if (string.IsNullOrWhiteSpace(application.EmergencyContactJson))
-            return;
-
-        try
+        if (!string.IsNullOrWhiteSpace(application.EmergencyContactJson))
         {
-            var emergency = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(application.EmergencyContactJson);
-            if (emergency != null)
+            try
             {
-                if (emergency.TryGetValue("name", out var name) && !string.IsNullOrWhiteSpace(name))
-                    application.EmergencyContactName = name;
-                if (emergency.TryGetValue("phone", out var phone) && !string.IsNullOrWhiteSpace(phone))
-                    application.EmergencyContactPhone = phone;
-                if (emergency.TryGetValue("email", out var email) && !string.IsNullOrWhiteSpace(email))
-                    application.EmergencyContactEmail = email;
+                using var doc = System.Text.Json.JsonDocument.Parse(application.EmergencyContactJson);
+                var root = doc.RootElement;
+                if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    if (root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var name = nameProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                            application.EmergencyContactName = name;
+                    }
+                    if (root.TryGetProperty("phone", out var phoneProp) && phoneProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var phone = phoneProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(phone))
+                            application.EmergencyContactPhone = phone;
+                    }
+                    if (root.TryGetProperty("email", out var emailProp) && emailProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        var email = emailProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(email))
+                            application.EmergencyContactEmail = email;
+                    }
+                }
+            }
+            catch
+            {
+                // If parsing fails, preserve existing fields
             }
         }
-        catch
+
+        // If JSON was empty or missing, but individual fields are set, keep EmergencyContactJson populated
+        if (string.IsNullOrWhiteSpace(application.EmergencyContactJson) || application.EmergencyContactJson == "{}")
         {
-            // If parsing fails, leave the fields as-is
+            if (!string.IsNullOrWhiteSpace(application.EmergencyContactName) ||
+                !string.IsNullOrWhiteSpace(application.EmergencyContactPhone) ||
+                !string.IsNullOrWhiteSpace(application.EmergencyContactEmail))
+            {
+                application.EmergencyContactJson = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    name = application.EmergencyContactName ?? string.Empty,
+                    phone = application.EmergencyContactPhone ?? string.Empty,
+                    email = application.EmergencyContactEmail ?? string.Empty
+                });
+            }
         }
     }
 

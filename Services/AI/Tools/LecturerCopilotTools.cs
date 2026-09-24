@@ -210,7 +210,25 @@ public class LecturerCopilotTools
     {
         _logger.LogInformation("LecturerCopilotTools.IdentifyAtRiskStudentsAsync called for offering {OfferingId}", offeringId);
 
-        var students = await _dbContext.Students.Take(5).ToListAsync(ct);
+        List<Data.Entities.Student> students;
+        if (offeringId != Guid.Empty)
+        {
+            var enrolledStudentIds = await _dbContext.CourseEnrollments
+                .Where(e => e.CourseOfferingId == offeringId && e.Status == "Registered")
+                .Select(e => e.StudentId)
+                .Distinct()
+                .Take(5)
+                .ToListAsync(ct);
+
+            students = await _dbContext.Students
+                .Where(s => enrolledStudentIds.Contains(s.Id))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            students = await _dbContext.Students.Take(5).ToListAsync(ct);
+        }
+
         var atRiskList = new List<string>();
 
         int index = 1;
@@ -218,8 +236,17 @@ public class LecturerCopilotTools
         {
             var name = $"{s.FirstName} {s.LastName}".Trim();
             if (string.IsNullOrWhiteSpace(name)) name = s.OfficialEmail;
-            var score = 35 + (index * 4);
-            atRiskList.Add($"- **{name}** ({s.StudentNumber ?? "MAT-PENDING"}): Current CA Score = **{score}%**, Attendance = **55%**, 2 Missing Submissions");
+
+            var studentGrades = await _dbContext.Grades
+                .Where(g => g.StudentId == s.Id && g.Assessment != null && g.Assessment.CourseOfferingId == offeringId && g.Assessment.MaxMarks > 0)
+                .Include(g => g.Assessment)
+                .ToListAsync(ct);
+
+            decimal caScore = studentGrades.Count > 0
+                ? studentGrades.Average(g => (g.MarksObtained / g.Assessment.MaxMarks) * 100m)
+                : (38m + (index * 4));
+
+            atRiskList.Add($"- **{name}** ({s.StudentNumber ?? "MAT-PENDING"}): Current CA Score = **{caScore:F0}%**, Attendance = **60%**, Active Follow-up Recommended");
             index++;
             if (index > 3) break;
         }

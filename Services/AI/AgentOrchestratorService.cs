@@ -81,32 +81,60 @@ public class AgentOrchestratorService : IAgentOrchestratorService
         {
             Guid parsedStudentId = Guid.Empty;
             Guid parsedLecturerId = Guid.Empty;
+            bool isStaffOrAdmin = false;
 
             // 1. Resolve authenticated HttpContext user context
             var authUserId = await _currentUserContext.GetUserIdAsync(ct);
+            var entraOid = _currentUserContext.GetEntraObjectId();
+
             if (authUserId.HasValue && authUserId.Value != Guid.Empty)
             {
                 parsedLecturerId = authUserId.Value;
 
-                var studentFromAuth = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == authUserId.Value || s.EntraObjectId == authUserId.Value.ToString(), ct);
+                var authUser = await _dbContext.Users
+                    .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                    .FirstOrDefaultAsync(u => u.Id == authUserId.Value, ct);
+
+                if (authUser != null)
+                {
+                    var roleNames = authUser.UserRoles
+                        .Select(ur => ur.Role?.Name)
+                        .Where(n => !string.IsNullOrEmpty(n))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    isStaffOrAdmin = roleNames.Contains("Admin") ||
+                                     roleNames.Contains("SuperAdmin") ||
+                                     roleNames.Contains("Lecturer") ||
+                                     roleNames.Contains("AcademicAdvisor") ||
+                                     roleNames.Contains("Registrar") ||
+                                     roleNames.Contains("HOD") ||
+                                     roleNames.Contains("Dean");
+                }
+
+                // Match student record belonging to this authenticated user
+                var studentFromAuth = await _dbContext.Students.FirstOrDefaultAsync(s =>
+                    s.Id == authUserId.Value ||
+                    (!string.IsNullOrEmpty(entraOid) && s.EntraObjectId == entraOid) ||
+                    (authUser != null && !string.IsNullOrEmpty(authUser.Email) && (s.OfficialEmail == authUser.Email || s.PersonalEmail == authUser.Email)),
+                    ct);
+
                 if (studentFromAuth != null)
                 {
                     parsedStudentId = studentFromAuth.Id;
                 }
             }
 
-            // 2. Try input student ID from payload
-            if (!string.IsNullOrWhiteSpace(request.StudentId) && Guid.TryParse(request.StudentId, out var inputGuid))
+            // 2. Try input student ID from payload (only permitted for staff/admin or if studentId not yet resolved)
+            if (!string.IsNullOrWhiteSpace(request.StudentId) && Guid.TryParse(request.StudentId, out var inputGuid) && inputGuid != Guid.Empty)
             {
-                parsedLecturerId = inputGuid;
-
-                if (parsedStudentId == Guid.Empty)
+                if (isStaffOrAdmin || parsedStudentId == Guid.Empty)
                 {
                     var matchedStudent = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == inputGuid, ct);
                     if (matchedStudent == null)
                     {
                         var appUser = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == inputGuid, ct);
-                        if (appUser != null)
+                        if (appUser != null && !string.IsNullOrEmpty(appUser.Email))
                         {
                             matchedStudent = await _dbContext.Students.FirstOrDefaultAsync(s => s.OfficialEmail == appUser.Email || s.PersonalEmail == appUser.Email, ct);
                         }
@@ -118,56 +146,67 @@ public class AgentOrchestratorService : IAgentOrchestratorService
                 }
             }
 
-            // 3. Fall back to active student with course enrollments
-            if (parsedStudentId == Guid.Empty)
-            {
-                var studentWithGrades = await _dbContext.Students
-                    .FirstOrDefaultAsync(s => _dbContext.CourseEnrollments.Any(e => e.StudentId == s.Id), ct);
-                parsedStudentId = studentWithGrades?.Id ?? (await _dbContext.Students.Select(s => s.Id).FirstOrDefaultAsync(ct));
-            }
-
             string p = (request.Prompt ?? string.Empty).ToLowerInvariant();
 
-        // 🧠 Smart Intent Auto-Routing Across All University Domains
-        if (p.Contains("hostel") || p.Contains("room") || p.Contains("accommodation") || p.Contains("housing"))
-        {
-            return await HandleHostelIntentAsync(parsedStudentId, response, ct);
-        }
+            // 2b. Check if prompt specifies a student by matric number (e.g. "WU/CSC/2024/066")
+            var matricMatch = System.Text.RegularExpressions.Regex.Match(p, @"\b(wu/[a-z0-9/_-]+)\b");
+            if (matricMatch.Success)
+            {
+                var targetMatric = matricMatch.Value.ToUpperInvariant();
+                var studentByMatric = await _dbContext.Students.FirstOrDefaultAsync(s => s.StudentNumber == targetMatric, ct);
+                if (studentByMatric != null)
+                {
+                    parsedStudentId = studentByMatric.Id;
+                }
+            }
 
-        if (p.Contains("timetable") || p.Contains("schedule") || p.Contains("lecture") || p.Contains("today class") || p.Contains("when is my class"))
-        {
-            return await HandleTimetableIntentAsync(parsedStudentId, response, ct);
-        }
+            // 🧠 Smart Intent Auto-Routing Across All University Domains
+            // Do NOT hijack queries when caller explicitly chose AdminAssistant or InstructorTA
+            bool isExplicitSpecializedPersona = request.Persona == AgentPersona.AdminAssistant || request.Persona == AgentPersona.InstructorTA;
 
-        if (p.Contains("attendance") || p.Contains("absent") || p.Contains("exam eligibility") || p.Contains("debarment"))
-        {
-            return await HandleAttendanceIntentAsync(parsedStudentId, response, ct);
-        }
+            if (!isExplicitSpecializedPersona)
+            {
+                if (p.Contains("hostel") || (p.Contains("room") && (p.Contains("hostel") || p.Contains("bed") || p.Contains("allocated") || p.Contains("hall"))) || p.Contains("accommodation") || p.Contains("housing"))
+                {
+                    return await HandleHostelIntentAsync(parsedStudentId, response, ct);
+                }
 
-        if (p.Contains("scholarship") || p.Contains("grant") || p.Contains("discount") || p.Contains("financial aid"))
-        {
-            return await HandleScholarshipIntentAsync(parsedStudentId, response, ct);
-        }
+                if (p.Contains("timetable") || p.Contains("today class") || p.Contains("when is my class") || (p.Contains("schedule") && p.Contains("lecture")))
+                {
+                    return await HandleTimetableIntentAsync(parsedStudentId, response, ct);
+                }
 
-        if ((p.Contains("gpa") || p.Contains("check my gpa") || p.Contains("transcript") || p.Contains("grade")) && request.Persona != AgentPersona.InstructorTA)
-        {
-            response.Persona = AgentPersona.Advisor;
-            return await HandleAdvisorPersonaAsync(request, parsedStudentId, response);
-        }
+                if (p.Contains("attendance") || p.Contains("absent") || p.Contains("exam eligibility") || p.Contains("debarment"))
+                {
+                    return await HandleAttendanceIntentAsync(parsedStudentId, response, ct);
+                }
 
-        if (p.Contains("fee") || p.Contains("bill") || p.Contains("balance") || p.Contains("cleared for exam"))
-        {
-            response.Persona = AgentPersona.Bursar;
-            return await HandleBursarPersonaAsync(request, parsedStudentId, response);
-        }
+                if (p.Contains("scholarship") || p.Contains("grant") || (p.Contains("financial aid") && !p.Contains("admission")))
+                {
+                    return await HandleScholarshipIntentAsync(parsedStudentId, response, ct);
+                }
 
-        if (p.Contains("admission") || p.Contains("applicant") || p.Contains("application") ||
-            p.Contains("admitted") || p.Contains("jamb") || p.Contains("pending review") ||
-            p.Contains("offer letter") || p.Contains("waitlist"))
-        {
-            response.Persona = AgentPersona.Admission;
-            return await HandleAdmissionPersonaAsync(request, response, ct);
-        }
+                // If asking about admissions requirements/grades on application pages, do NOT hijack into Advisor GPA check!
+                bool isAdmissionQuery = p.Contains("admission") || p.Contains("apply") || p.Contains("applicant") || p.Contains("requirement") || p.Contains("jamb");
+
+                if (!isAdmissionQuery && (p.Contains("gpa") || p.Contains("check my gpa") || p.Contains("transcript") || (p.Contains("grade") && !p.Contains("gradebook") && !p.Contains("curve"))))
+                {
+                    response.Persona = AgentPersona.Advisor;
+                    return await HandleAdvisorPersonaAsync(request, parsedStudentId, response);
+                }
+
+                if (!isAdmissionQuery && (p.Contains("fee") || p.Contains("tuition") || p.Contains("balance") || p.Contains("cleared for exam")))
+                {
+                    response.Persona = AgentPersona.Bursar;
+                    return await HandleBursarPersonaAsync(request, parsedStudentId, response);
+                }
+
+                if (isAdmissionQuery || p.Contains("offer letter") || p.Contains("waitlist"))
+                {
+                    response.Persona = AgentPersona.Admission;
+                    return await HandleAdmissionPersonaAsync(request, response, ct);
+                }
+            }
 
         // Default Persona Routing
         switch (request.Persona)
@@ -731,6 +770,12 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleHostelIntentAsync(Guid studentId, AgentChatResponse response, CancellationToken ct)
     {
+        if (studentId == Guid.Empty)
+        {
+            response.ResponseText = "🏨 **Campus Housing & Hostel Companion**\n\nPlease ensure you are logged in with an active student account to view your hostel room allocation.";
+            return response;
+        }
+
         response.ToolsExecuted.Add("CampusLifeTools.GetStudentHostelRoomAllocationAsync");
         string allocationInfo = await _campusLifeTools.GetStudentHostelRoomAllocationAsync(studentId, ct);
 
@@ -756,6 +801,12 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleTimetableIntentAsync(Guid studentId, AgentChatResponse response, CancellationToken ct)
     {
+        if (studentId == Guid.Empty)
+        {
+            response.ResponseText = "📅 **Academic Timetable & Schedule Assistant**\n\nPlease ensure you are logged in with an active student account to view your daily lecture schedule.";
+            return response;
+        }
+
         response.ToolsExecuted.Add("CampusLifeTools.GetLecturesAndTimetableTodayAsync");
         string scheduleInfo = await _campusLifeTools.GetLecturesAndTimetableTodayAsync(studentId, ct);
 
@@ -779,6 +830,12 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleAttendanceIntentAsync(Guid studentId, AgentChatResponse response, CancellationToken ct)
     {
+        if (studentId == Guid.Empty)
+        {
+            response.ResponseText = "📊 **Attendance & Exam Eligibility Co-Pilot**\n\nPlease ensure you are logged in with an active student account to check your course attendance and exam clearance.";
+            return response;
+        }
+
         response.ToolsExecuted.Add("CampusLifeTools.CheckStudentAttendanceEligibilityAsync");
         string attendanceInfo = await _campusLifeTools.CheckStudentAttendanceEligibilityAsync(studentId, ct);
 
@@ -802,6 +859,12 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleScholarshipIntentAsync(Guid studentId, AgentChatResponse response, CancellationToken ct)
     {
+        if (studentId == Guid.Empty)
+        {
+            response.ResponseText = "🏆 **Scholarships & Financial Aid Companion**\n\nPlease ensure you are logged in with an active student account to view your scholarship grant records.";
+            return response;
+        }
+
         response.ToolsExecuted.Add("ScholarshipService.GetStudentScholarshipsAsync");
         
         var activeSession = await _dbContext.AcademicSessions
@@ -838,6 +901,18 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleAdvisorPersonaAsync(AgentChatRequest request, Guid studentId, AgentChatResponse response)
     {
+        if (studentId == Guid.Empty)
+        {
+            var authUserId = await _currentUserContext.GetUserIdAsync();
+            var appUser = authUserId.HasValue ? await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == authUserId.Value) : null;
+
+            response.ResponseText = appUser != null
+                ? $"🎓 **Academic Advisor Assistant**\n\nYou are currently signed in as **{appUser.DisplayName ?? appUser.Email}** (Faculty/Staff Account). To audit a specific student's GPA, please include the student's Matric Number in your prompt (e.g., *\"Check GPA for WU/CSC/2024/066\"*)."
+                : "🎓 **Academic Advisor Assistant**\n\nNo student record is associated with your current session. Please log in with a student account to view your academic transcript and live GPA audit.";
+
+            return response;
+        }
+
         response.ToolsExecuted.Add("AdvisorAgentTools.GetStudentGpaSummaryAsync");
         
         string gpaSummary = await _advisorTools.GetStudentGpaSummaryAsync(studentId);
@@ -847,13 +922,22 @@ Welcome! We are excited to support your application journey. Here is how to comp
         string actualStanding = "Good Standing";
         string studentName = "Student";
 
+        var studentEntity = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == studentId);
+        if (studentEntity != null)
+        {
+            studentName = $"{studentEntity.FirstName} {studentEntity.LastName}".Trim();
+        }
+
         var gpaCalc = await _gpaService.GetStudentGpaAsync(studentId);
         if (!gpaCalc.IsError)
         {
             actualGpa = (double)gpaCalc.Value.CumulativeGpa;
             actualUnits = gpaCalc.Value.TotalCreditsEarned;
             actualStanding = gpaCalc.Value.StandingType;
-            studentName = gpaCalc.Value.StudentName;
+            if (!string.IsNullOrWhiteSpace(gpaCalc.Value.StudentName))
+            {
+                studentName = gpaCalc.Value.StudentName;
+            }
         }
         else
         {
@@ -869,15 +953,9 @@ Welcome! We are excited to support your application journey. Here is how to comp
                 actualUnits = studentGrades.Count * 3;
                 actualStanding = actualGpa >= 4.5 ? "FirstClass" : "SecondClassUpper";
             }
-
-            var studentEntity = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == studentId);
-            if (studentEntity != null)
-            {
-                studentName = $"{studentEntity.FirstName} {studentEntity.LastName}";
-            }
         }
 
-        response.ResponseText = $"🎓 **Academic Advisor Assistant**\n\n{gpaSummary}\n\nI have fetched your live academic database records and generated an actual GPA performance card below:";
+        response.ResponseText = $"🎓 **Academic Advisor Assistant**\n\n{gpaSummary}\n\nI have fetched the academic database records and generated an actual GPA performance card below:";
         response.Card = new GenerativeCardDto
         {
             CardType = "gpa_projection",
@@ -901,8 +979,24 @@ Welcome! We are excited to support your application journey. Here is how to comp
 
     private async Task<AgentChatResponse> HandleBursarPersonaAsync(AgentChatRequest request, Guid studentId, AgentChatResponse response)
     {
+        if (studentId == Guid.Empty)
+        {
+            response.ResponseText = "💳 **Bursar & Financial Assistant**\n\nPlease ensure you are logged in with an active student account to view your tuition bill, payment history, and financial clearance status.";
+            return response;
+        }
+
         response.ToolsExecuted.Add("FeeAgentTools.GetPaymentHistorySummaryAsync");
         string feeStatus = await _feeTools.GetPaymentHistorySummaryAsync(studentId);
+
+        var activeSession = await _dbContext.AcademicSessions.Where(s => s.IsActive).FirstOrDefaultAsync();
+        var feeRecord = activeSession != null 
+            ? await _dbContext.StudentFeeRecords.FirstOrDefaultAsync(f => f.StudentId == studentId && f.SessionId == activeSession.Id)
+            : await _dbContext.StudentFeeRecords.Where(f => f.StudentId == studentId).OrderByDescending(f => f.GeneratedAt).FirstOrDefaultAsync();
+
+        decimal totalBill = feeRecord?.TotalAmount ?? 0m;
+        decimal amountPaid = feeRecord?.AmountPaid ?? 0m;
+        decimal balanceDue = feeRecord?.Balance ?? 0m;
+        bool cleared = feeRecord != null && feeRecord.Status == Data.Enums.FeeRecordStatus.Paid;
 
         response.ResponseText = $"💳 **Bursar & Financial Assistant**\n\n{feeStatus}\n\nI have created a financial clearance summary card for you below:";
         response.Card = new GenerativeCardDto
@@ -912,10 +1006,10 @@ Welcome! We are excited to support your application journey. Here is how to comp
             Subtitle = "Current Session Financial Clearance",
             Data = new Dictionary<string, object>
             {
-                { "totalBill", 450000.00 },
-                { "amountPaid", 450000.00 },
-                { "balanceDue", 0.00 },
-                { "clearedForExams", true }
+                { "totalBill", (double)totalBill },
+                { "amountPaid", (double)amountPaid },
+                { "balanceDue", (double)balanceDue },
+                { "clearedForExams", cleared }
             },
             Actions = new List<CardActionDto>
             {
@@ -959,7 +1053,7 @@ Welcome! We are excited to support your application journey. Here is how to comp
         if (p.Contains("course") || p.Contains("teaching") || p.Contains("classes") || p.Contains("my assigned"))
         {
             response.ToolsExecuted.Add("AssessmentAgentTools.GetLecturerCoursesSummaryAsync");
-            string coursesSummary = await _assessmentTools.GetLecturerCoursesSummaryAsync(ct);
+            string coursesSummary = await _assessmentTools.GetLecturerCoursesSummaryAsync(lecturerId, ct);
 
             var courses = await GetAssignedCoursesForLecturerAsync();
             var coursesList = new List<Dictionary<string, object>>();
@@ -1236,14 +1330,36 @@ Welcome! We are excited to support your application journey. Here is how to comp
         }
 
         // 4b. Draft Intervention Emails
-        if (p.Contains("email") || p.Contains("message") || p.Contains("draft") || p.Contains("send"))
+        if (p.Contains("email") || (p.Contains("draft") && (p.Contains("intervention") || p.Contains("student") || p.Contains("check-in"))))
         {
             response.ToolsExecuted.Add("LecturerCopilotTools.DraftStudentInterventionEmail");
             
-            string studentName = "Selected Student";
-            if (p.Contains("charles")) studentName = "Charles Chikere";
-            else if (p.Contains("chukwu") || p.Contains("rex") || p.Contains("nze")) studentName = "Chukwuebuka Rex Nze";
-            else if (p.Contains("walter")) studentName = "Walter Amafaye";
+            string studentName = "Student";
+            if (!string.IsNullOrWhiteSpace(request.StudentId) && Guid.TryParse(request.StudentId, out var reqSid) && reqSid != Guid.Empty)
+            {
+                var targetSt = await _dbContext.Students.FirstOrDefaultAsync(s => s.Id == reqSid, ct);
+                if (targetSt != null)
+                {
+                    studentName = $"{targetSt.FirstName} {targetSt.LastName}".Trim();
+                }
+            }
+            else
+            {
+                // Try searching for any student whose first or last name is explicitly mentioned in the prompt
+                var words = p.Split(new[] { ' ', ',', ':', ';', '?' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => w.Length > 2 && !new[] { "draft", "email", "send", "student", "for", "the", "and", "check", "with", "about", "intervention" }.Contains(w))
+                    .ToList();
+
+                foreach (var w in words)
+                {
+                    var found = await _dbContext.Students.FirstOrDefaultAsync(s => s.FirstName.ToLower() == w || s.LastName.ToLower() == w, ct);
+                    if (found != null)
+                    {
+                        studentName = $"{found.FirstName} {found.LastName}".Trim();
+                        break;
+                    }
+                }
+            }
 
             var courses = await GetAssignedCoursesForLecturerAsync();
             var matchingCourse = courses.FirstOrDefault(c => (!string.IsNullOrWhiteSpace(c.Code) && p.Contains(c.Code.ToLowerInvariant())) || (!string.IsNullOrWhiteSpace(c.Title) && p.Contains(c.Title.ToLowerInvariant())));

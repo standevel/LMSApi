@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using LMS.Api.Data.Entities;
 
@@ -57,3 +58,9 @@ public record AssignScholarshipRequest(
     [Required] Guid StudentId,
     [Required] Guid ScholarshipId,
     [Required] Guid SessionId);
+
+public sealed record StudentFeedingEntitlementDto(
+    bool HasActiveScholarship,
+    decimal CoveragePercent,
+    bool IsFeedingFullyCovered,
+    Dictionary<string, bool>? DailyMealWindowsClaimed = null);

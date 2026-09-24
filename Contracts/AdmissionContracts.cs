@@ -99,7 +99,11 @@ public sealed record AdmissionApplicationResponse(
     // --- Phase 4: Document IDs ---
     Guid? HomeInstitutionApprovalDocumentId = null,
     Guid? DeansCertificateDocumentId = null,
-    Guid? HomeInstitutionTranscriptDocumentId = null
+    Guid? HomeInstitutionTranscriptDocumentId = null,
+    // --- Additional Profile / Contact / Gender Fields ---
+    string? Gender = null,
+    string? EmergencyContactName = null,
+    string? EmergencyContactPhone = null
 );
 
 
@@ -126,13 +130,16 @@ public sealed class SaveApplicationRequest
     public string? MiddleName { get; set; }
     public string StudentEmail { get; set; } = string.Empty;
     public string JambRegNumber { get; set; } = string.Empty;
-    public Guid AcademicSessionId { get; set; }
+    public Guid? AcademicSessionId { get; set; }
     public string Persona { get; set; } = string.Empty;
     public string? FacultyId { get; set; }
     public string? AcademicProgramId { get; set; }
     public string ProgramReason { get; set; } = string.Empty;
     public string QualificationsJson { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
+    public string? Gender { get; set; }
+    public string? EmergencyContactName { get; set; }
+    public string? EmergencyContactPhone { get; set; }
     public string EmergencyContactJson { get; set; } = string.Empty;
     public string SponsorshipJson { get; set; } = string.Empty;
     public IEnumerable<Guid>? DocumentIds { get; set; }
@@ -228,6 +235,7 @@ public sealed record AdmissionOfferDecisionRequest(bool AcceptOffer);
 public sealed record InitiateOfferPaymentRequest(string Gateway, string CallbackUrl);
 public sealed record AutoAdmitRequest(Guid SessionId, bool IsDryRun);
 public sealed record UpdateProgramCriteriaRequest(int MinJambScore, int MaxAdmissions, string RequiredJambSubjectsJson, string RequiredOLevelSubjectsJson);
+public sealed record ChangeApplicationProgramRequest(Guid Id, Guid TargetProgramId, string? Reason = null, bool RegenerateAndSendOffer = false);
 
 public sealed record LetterTemplateResponse(
     Guid Id,

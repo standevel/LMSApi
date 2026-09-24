@@ -42,6 +42,10 @@ public class AdvisorAgentTools
         {
             studentId = student.Id;
         }
+        else if (studentId == Guid.Empty)
+        {
+            return "No student record found. Please specify a valid student matric number or ensure you are logged in with an active student account.";
+        }
 
         var gpaResult = await _gpaService.GetStudentGpaAsync(studentId);
         decimal cumulativeGpa = 0;
