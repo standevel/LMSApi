@@ -615,9 +615,9 @@ public class DynamicReportService : IDynamicReportService
             rows.Add(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["result.totalScore"] = r.TotalScore,
-                ["result.gradeLetter"] = !string.IsNullOrWhiteSpace(r.LetterGrade) ? r.LetterGrade : "F",
-                ["result.gradePoint"] = r.GradePoints,
-                ["result.isPassed"] = r.TotalScore >= 40m ? "Passed" : "Failed",
+                ["result.gradeLetter"] = !string.IsNullOrWhiteSpace(r.LetterGrade) ? r.LetterGrade : (r.IsPublished ? "AR" : "IP"),
+                ["result.gradePoint"] = (r.LetterGrade == "IP" || r.LetterGrade == "AR") ? null : (object)r.GradePoints,
+                ["result.isPassed"] = (r.LetterGrade == "IP" || r.LetterGrade == "AR") ? "In Progress" : (r.TotalScore >= 40m ? "Passed" : "Failed"),
                 ["result.publishedStatus"] = r.IsPublished ? "Senate Published" : "Dean Approved",
 
                 ["student.matricNumber"] = s?.Username ?? string.Empty,

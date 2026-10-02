@@ -10,6 +10,16 @@ public sealed class PermissionService(LmsDbContext dbContext) : IPermissionServi
     {
         var now = DateTime.UtcNow;
 
+        var isUserAdminOrSuperAdmin = await dbContext.UserRoles.AsNoTracking()
+            .Include(ur => ur.Role)
+            .AnyAsync(ur => ur.UserId == userId && 
+                (ur.Role.Name == LmsRoles.SuperAdmin || ur.Role.Name == LmsRoles.Admin), ct);
+
+        if (isUserAdminOrSuperAdmin)
+        {
+            return LmsPermissions.All.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
         var rolePermissionCodes = await
             (from userRole in dbContext.UserRoles.AsNoTracking()
              join rolePermission in dbContext.RolePermissions.AsNoTracking()

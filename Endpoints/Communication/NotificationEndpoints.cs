@@ -133,7 +133,6 @@ public sealed class SubscribePushEndpoint(IPushNotificationService pushNotificat
     public override void Configure()
     {
         Post("notifications/push/subscribe");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -159,7 +158,6 @@ public sealed class UnsubscribePushEndpoint(IPushNotificationService pushNotific
     public override void Configure()
     {
         Post("notifications/push/unsubscribe");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -185,7 +183,6 @@ public sealed class GetVapidPublicKeyEndpoint(IPushNotificationService pushNotif
     public override void Configure()
     {
         Get("notifications/push/public-key");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 

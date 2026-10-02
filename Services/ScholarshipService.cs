@@ -346,12 +346,181 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         var hasActive = scholarships.Count > 0;
         var fullyCovered = maxCoverage >= 100;
 
-        var dailyClaimed = await BuildDailyMealWindowsClaimedAsync(studentId, ct);
+        var dailyClaimed = await BuildDailyMealWindowsClaimedAsync(student, ct);
 
-        return new StudentFeedingEntitlementDto(hasActive, maxCoverage, fullyCovered, dailyClaimed);
+        // Determine current session & available rollover windows
+        var watZone = GetWatTimeZone();
+        var watNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, watZone);
+        var (currentSession, availableWindows, rolloverSummary) = CalculateAvailableWindows(dailyClaimed, watNow.TimeOfDay);
+
+        return new StudentFeedingEntitlementDto(
+            hasActive,
+            maxCoverage,
+            fullyCovered,
+            dailyClaimed,
+            availableWindows,
+            currentSession,
+            rolloverSummary
+        );
     }
 
-    private async Task<Dictionary<string, bool>> BuildDailyMealWindowsClaimedAsync(Guid studentId, CancellationToken ct)
+    public async Task<ScholarshipMealClaimResult> EvaluateScholarshipMealClaimAsync(
+        Guid studentId,
+        int feedingTimeId,
+        string? menuItemName,
+        CancellationToken ct = default)
+    {
+        var student = await db.Students
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (student is null)
+        {
+            return new ScholarshipMealClaimResult(false, "Student record not found.", "Unknown", false, new(), new(), "Closed");
+        }
+
+        var isCovered = await IsFeedingFullyCoveredAsync(studentId, ct);
+        if (!isCovered)
+        {
+            return new ScholarshipMealClaimResult(
+                false,
+                "Student does not have full scholarship feeding coverage. Meals may be purchased directly with wallet balance.",
+                "General",
+                false,
+                new(),
+                new(),
+                "General");
+        }
+
+        var dailyClaimed = await BuildDailyMealWindowsClaimedAsync(student, ct);
+
+        var watZone = GetWatTimeZone();
+        var watNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, watZone);
+        var timeOfDay = watNow.TimeOfDay;
+
+        var (currentSession, availableWindows, rolloverSummary) = CalculateAvailableWindows(dailyClaimed, timeOfDay);
+        var targetMealWindow = ResolveMealWindowFromInput(feedingTimeId, menuItemName);
+
+        bool breakfastClaimed = dailyClaimed.GetValueOrDefault("Breakfast", false);
+        bool lunchClaimed = dailyClaimed.GetValueOrDefault("Lunch", false);
+        bool dinnerClaimed = dailyClaimed.GetValueOrDefault("Dinner", false);
+
+        bool canClaim = false;
+        bool isRolledOver = false;
+        string reason = string.Empty;
+
+        if (currentSession == "Closed")
+        {
+            canClaim = false;
+            reason = "Campus cafeteria dining service opens at 07:00 WAT.";
+        }
+        else if (targetMealWindow == "Breakfast")
+        {
+            if (breakfastClaimed)
+            {
+                canClaim = false;
+                reason = "Your scholarship breakfast entitlement was already claimed today. Additional dishes can be purchased with your wallet.";
+            }
+            else if (currentSession == "Breakfast")
+            {
+                canClaim = true;
+                reason = "Breakfast window is active (07:00 - 10:00 WAT).";
+            }
+            else if (currentSession == "Lunch")
+            {
+                canClaim = true;
+                isRolledOver = true;
+                reason = "Breakfast was skipped earlier today and rolled over into Lunch service! You can claim both Breakfast and Lunch.";
+            }
+            else if (currentSession == "Dinner")
+            {
+                canClaim = true;
+                isRolledOver = true;
+                reason = "Breakfast was skipped earlier today and rolled over into Dinner service! You can claim Breakfast, Lunch, and Dinner together.";
+            }
+        }
+        else if (targetMealWindow == "Lunch")
+        {
+            if (lunchClaimed)
+            {
+                canClaim = false;
+                reason = "Your scholarship lunch entitlement was already claimed today. Additional dishes can be purchased with your wallet.";
+            }
+            else if (currentSession == "Breakfast")
+            {
+                canClaim = false;
+                reason = "Lunch cannot be claimed during Breakfast time. Lunch service begins at 12:00 WAT.";
+            }
+            else if (currentSession == "Lunch")
+            {
+                canClaim = true;
+                reason = "Lunch window is active (12:00 - 15:30 WAT).";
+            }
+            else if (currentSession == "Dinner")
+            {
+                canClaim = true;
+                isRolledOver = true;
+                reason = "Lunch was skipped earlier today and rolled over into Dinner service! You can claim Lunch and Dinner together.";
+            }
+        }
+        else if (targetMealWindow == "Dinner")
+        {
+            if (dinnerClaimed)
+            {
+                canClaim = false;
+                reason = "Your scholarship dinner entitlement was already claimed today. Additional dishes can be purchased with your wallet.";
+            }
+            else if (currentSession == "Dinner")
+            {
+                canClaim = true;
+                reason = "Dinner window is active (18:00 - 21:00 WAT).";
+            }
+            else
+            {
+                canClaim = false;
+                reason = $"Dinner cannot be claimed during {currentSession} service. Dinner service begins at 18:00 WAT.";
+            }
+        }
+        else
+        {
+            // All-day dishes or snacks: allowed if any daily slot remains
+            if (!breakfastClaimed)
+            {
+                canClaim = true;
+                targetMealWindow = "Breakfast";
+                reason = "Applied to available Breakfast slot.";
+            }
+            else if (!lunchClaimed && (currentSession == "Lunch" || currentSession == "Dinner"))
+            {
+                canClaim = true;
+                targetMealWindow = "Lunch";
+                reason = "Applied to available Lunch slot.";
+            }
+            else if (!dinnerClaimed && currentSession == "Dinner")
+            {
+                canClaim = true;
+                targetMealWindow = "Dinner";
+                reason = "Applied to available Dinner slot.";
+            }
+            else
+            {
+                canClaim = false;
+                reason = "No eligible scholarship meal slots remain for this dining session.";
+            }
+        }
+
+        return new ScholarshipMealClaimResult(
+            canClaim,
+            reason,
+            targetMealWindow,
+            isRolledOver,
+            dailyClaimed,
+            availableWindows,
+            currentSession
+        );
+    }
+
+    private async Task<Dictionary<string, bool>> BuildDailyMealWindowsClaimedAsync(Student student, CancellationToken ct)
     {
         var windows = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase)
         {
@@ -360,11 +529,23 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
             ["Dinner"] = false
         };
 
-        var today = DateTime.UtcNow.Date;
+        var watZone = GetWatTimeZone();
+        var watNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, watZone);
+        var startOfDayUtc = TimeZoneInfo.ConvertTimeToUtc(watNow.Date, watZone);
 
-        var claimedToday = await db.Set<CafeteriaVendorOrder>()
-            .Where(o => o.StudentUsername == studentId.ToString() || o.MatricNo == studentId.ToString())
-            .Where(o => o.Status == CafeteriaOrderStatus.Claimed && o.ClaimedAt >= today)
+        var cleanEmail = student.OfficialEmail.Trim().ToLowerInvariant();
+        var cleanMatric = (student.StudentNumber ?? string.Empty).Trim().ToLowerInvariant();
+        var sidStr = student.Id.ToString().ToLowerInvariant();
+
+        // Non-cancelled orders placed today under scholarship coverage
+        var claimedToday = await db.CafeteriaVendorOrders
+            .AsNoTracking()
+            .Where(o => o.CreatedAt >= startOfDayUtc
+                     && o.Status != CafeteriaOrderStatus.Cancelled
+                     && o.IsScholarshipCovered
+                     && (o.StudentUsername.ToLower() == cleanEmail
+                         || (o.MatricNo != null && o.MatricNo.ToLower() == cleanMatric)
+                         || o.StudentUsername.ToLower() == sidStr))
             .ToListAsync(ct);
 
         if (!claimedToday.Any()) return windows;
@@ -381,15 +562,123 @@ public sealed class ScholarshipService(LmsDbContext db) : IScholarshipService
         return windows;
     }
 
-    private static string? ResolveMealWindow(CafeteriaVendorOrder order)
+    private static (string CurrentSession, List<string> AvailableWindows, string RolloverSummary) CalculateAvailableWindows(
+        Dictionary<string, bool> dailyClaimed,
+        TimeSpan timeOfDay)
     {
-        if (string.IsNullOrWhiteSpace(order.MenuItemName)) return null;
+        string currentSession;
+        if (timeOfDay >= new TimeSpan(7, 0, 0) && timeOfDay < new TimeSpan(12, 0, 0))
+        {
+            currentSession = "Breakfast";
+        }
+        else if (timeOfDay >= new TimeSpan(12, 0, 0) && timeOfDay < new TimeSpan(18, 0, 0))
+        {
+            currentSession = "Lunch";
+        }
+        else if (timeOfDay >= new TimeSpan(18, 0, 0) && timeOfDay <= new TimeSpan(23, 59, 59))
+        {
+            currentSession = "Dinner";
+        }
+        else
+        {
+            currentSession = "Closed";
+        }
+
+        bool breakfastClaimed = dailyClaimed.GetValueOrDefault("Breakfast", false);
+        bool lunchClaimed = dailyClaimed.GetValueOrDefault("Lunch", false);
+        bool dinnerClaimed = dailyClaimed.GetValueOrDefault("Dinner", false);
+
+        var available = new List<string>();
+        string summary;
+
+        switch (currentSession)
+        {
+            case "Breakfast":
+                if (!breakfastClaimed) available.Add("Breakfast");
+                summary = !breakfastClaimed
+                    ? "Breakfast session active (07:00 - 10:00 WAT). Claim your morning meal."
+                    : "Breakfast claimed. Lunch service begins at 12:00 WAT.";
+                break;
+
+            case "Lunch":
+                if (!lunchClaimed) available.Add("Lunch");
+                if (!breakfastClaimed) available.Add("Breakfast"); // Skipped breakfast rolled over!
+
+                if (!breakfastClaimed && !lunchClaimed)
+                    summary = "Lunch session active. Because you skipped breakfast, rollover is active: claim Breakfast + Lunch together!";
+                else if (!lunchClaimed)
+                    summary = "Lunch session active (12:00 - 15:30 WAT). Claim your afternoon meal.";
+                else
+                    summary = "Lunch claimed. Dinner service begins at 18:00 WAT.";
+                break;
+
+            case "Dinner":
+                if (!dinnerClaimed) available.Add("Dinner");
+                if (!lunchClaimed) available.Add("Lunch"); // Skipped lunch rolled over!
+                if (!breakfastClaimed) available.Add("Breakfast"); // Skipped breakfast rolled over!
+
+                if (!breakfastClaimed && !lunchClaimed && !dinnerClaimed)
+                    summary = "Dinner session active. Full rollover active: you skipped breakfast and lunch, so you can order Breakfast, Lunch, and Dinner all at once!";
+                else if (!lunchClaimed && !dinnerClaimed)
+                    summary = "Dinner session active. Lunch rollover active: you can order Lunch + Dinner together!";
+                else if (!breakfastClaimed && !dinnerClaimed)
+                    summary = "Dinner session active. Breakfast rollover active: you can order Breakfast + Dinner together!";
+                else if (!dinnerClaimed)
+                    summary = "Dinner session active (18:00 - 21:00 WAT). Claim your evening meal.";
+                else
+                    summary = "All scholarship meal windows (Breakfast, Lunch, Dinner) have been claimed for today.";
+                break;
+
+            default:
+                summary = "Cafeteria is currently closed. Service re-opens at 07:00 WAT.";
+                break;
+        }
+
+        return (currentSession, available, summary);
+    }
+
+    private static string ResolveMealWindow(CafeteriaVendorOrder order)
+    {
+        if (!string.IsNullOrWhiteSpace(order.MealSession))
+            return order.MealSession;
+
+        if (string.IsNullOrWhiteSpace(order.MenuItemName))
+            return "Lunch";
 
         var name = order.MenuItemName.ToLowerInvariant();
-        if (name.Contains("breakfast")) return "Breakfast";
-        if (name.Contains("lunch")) return "Lunch";
-        if (name.Contains("dinner") || name.Contains("supper")) return "Dinner";
-        return null;
+        if (name.Contains("breakfast") || name.Contains("egg") || name.Contains("toast") || name.Contains("pancake") || name.Contains("tea") || name.Contains("coffee"))
+            return "Breakfast";
+        if (name.Contains("dinner") || name.Contains("supper"))
+            return "Dinner";
+
+        return "Lunch";
+    }
+
+    private static string ResolveMealWindowFromInput(int feedingTimeId, string? menuItemName)
+    {
+        if (feedingTimeId == 1) return "Breakfast";
+        if (feedingTimeId == 2) return "Lunch";
+        if (feedingTimeId == 3) return "Dinner";
+
+        if (!string.IsNullOrWhiteSpace(menuItemName))
+        {
+            var name = menuItemName.ToLowerInvariant();
+            if (name.Contains("breakfast")) return "Breakfast";
+            if (name.Contains("lunch")) return "Lunch";
+            if (name.Contains("dinner") || name.Contains("supper")) return "Dinner";
+        }
+
+        return "Lunch";
+    }
+
+    private static TimeZoneInfo GetWatTimeZone()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("W. Central Africa Standard Time"); }
+        catch
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById("Africa/Lagos"); }
+            catch { return TimeZoneInfo.CreateCustomTimeZone("WAT", TimeSpan.FromHours(1), "WAT", "WAT"); }
+        }
     }
 
     private static ScholarshipDto MapToDto(Scholarship s) => new(

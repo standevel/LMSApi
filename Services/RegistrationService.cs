@@ -70,11 +70,19 @@ public class RegistrationService : BaseService, IRegistrationService
             await _context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
             var studentLabel = await GetStudentIdentifierAsync(studentId, ct);
-            var courseCode = offering.Course?.Code ?? "Course";
-            var sessionName = offering.AcademicSession?.Name ?? "Session";
-            await LogActionAsync("RegisterStudent", "CourseEnrollment", enrollment.Id.ToString(),
-                $"Student {studentLabel} registered for {courseCode} ({offering.Semester} Semester, {sessionName})", ct);
-            return MapRegistration(enrollment, offering, await GetCurriculumCreditsAsync(studentId, offering.CourseId, ct));
+            var offeringCourse = offering.Course ?? await _context.Courses.AsNoTracking().FirstOrDefaultAsync(c => c.Id == offering.CourseId, ct);
+            var ccSem = await _context.CurriculumCourses.AsNoTracking()
+                .Where(cc => cc.CourseId == offering.CourseId)
+                .Select(cc => (LMS.Api.Data.Enums.Semester?)cc.Semester)
+                .FirstOrDefaultAsync(ct);
+            var sem = ccSem.HasValue
+                ? (int)ccSem.Value
+                : (offeringCourse?.Semester.HasValue == true
+                    ? (int)offeringCourse.Semester.Value
+                    : (int)offering.Semester);
+            if (sem <= 0) sem = 1;
+
+            return MapRegistration(enrollment, offering, await GetCurriculumCreditsAsync(studentId, offering.CourseId, ct), sem);
         });
     }
 
@@ -391,11 +399,36 @@ public class RegistrationService : BaseService, IRegistrationService
             ? baseQuery.Where(x => x.CourseOffering.AcademicSessionId == academicSessionId.Value)
             : baseQuery;
 
-        return await filteredQuery
-            .Select(x => new CourseRegistrationDto(x.Id, x.StudentId, x.CourseOfferingId,
-                x.CourseOffering.Course.Code, x.CourseOffering.Course.Title, x.RegisteredAtUtc,
-                x.DroppedAtUtc, x.Status, x.CourseOffering.Course.CreditUnits, (int)x.CourseOffering.Semester))
-            .ToListAsync(ct);
+        var enrollments = await filteredQuery.ToListAsync(ct);
+
+        var courseIds = enrollments.Select(x => x.CourseOffering.CourseId).Distinct().ToList();
+        var curriculumSemesters = await _context.CurriculumCourses.AsNoTracking()
+            .Where(x => courseIds.Contains(x.CourseId))
+            .GroupBy(x => x.CourseId)
+            .Select(g => new { CourseId = g.Key, Semester = g.First().Semester })
+            .ToDictionaryAsync(x => x.CourseId, x => (int)x.Semester, ct);
+
+        return enrollments.Select(x =>
+        {
+            var sem = curriculumSemesters.TryGetValue(x.CourseOffering.CourseId, out var cSem)
+                ? cSem
+                : (x.CourseOffering.Course?.Semester.HasValue == true
+                    ? (int)x.CourseOffering.Course.Semester.Value
+                    : (int)x.CourseOffering.Semester);
+            if (sem <= 0) sem = 1;
+
+            return new CourseRegistrationDto(
+                x.Id,
+                x.StudentId,
+                x.CourseOfferingId,
+                x.CourseOffering.Course.Code,
+                x.CourseOffering.Course.Title,
+                x.RegisteredAtUtc,
+                x.DroppedAtUtc,
+                x.Status,
+                x.CourseOffering.Course.CreditUnits,
+                sem);
+        }).ToList();
     }
 
     public Task<ErrorOr<RegistrationSummaryDto>> GetRegistrationSummaryAsync(Guid studentId, Guid? academicSessionId, CancellationToken ct) =>
@@ -559,7 +592,7 @@ public class RegistrationService : BaseService, IRegistrationService
                 curriculumCreditMap.ContainsKey(x.CourseId) && 
                 curriculumCourseSemesters.TryGetValue(x.CourseId, out var sem) && 
                 (config.AllowMultiSemesterRegistration
-                    ? (semester.HasValue ? sem == semester.Value : sem == x.Semester)
+                    ? (semester.HasValue ? sem == semester.Value : true)
                     : sem == session.ActiveSemester) &&
                 curriculumCourseLevels.TryGetValue(x.CourseId, out var lvl) && 
                 (lvl == programmeEnrollment.LevelId || lowerLevelIds.Contains(lvl))
@@ -578,9 +611,42 @@ public class RegistrationService : BaseService, IRegistrationService
         var offeringIds = offerings.Select(x => x.Id).ToList();
         var slots = await _context.LectureTimetableSlots.AsNoTracking()
             .Where(x => offeringIds.Contains(x.CourseOfferingId)).OrderBy(x => x.DayOfWeek).ThenBy(x => x.StartTime).ToListAsync(ct);
-        var registrations = await _context.CourseEnrollments.AsNoTracking()
-            .Where(x => x.StudentId == studentId && offeringIds.Contains(x.CourseOfferingId) && x.Status == "Registered")
+
+        var registrationsQuery = _context.CourseEnrollments.AsNoTracking()
+            .Where(x => x.StudentId == studentId && x.CourseOffering.AcademicSessionId == session.Id && x.Status == "Registered");
+
+        var registrations = await registrationsQuery
             .Include(x => x.CourseOffering).ThenInclude(x => x.Course).ToListAsync(ct);
+
+        var allCourseIds = registrations.Select(x => x.CourseOffering.CourseId)
+            .Concat(offerings.Select(x => x.CourseId))
+            .Distinct().ToList();
+
+        var fallbackCurriculumSemesters = await _context.CurriculumCourses.AsNoTracking()
+            .Where(cc => allCourseIds.Contains(cc.CourseId))
+            .GroupBy(cc => cc.CourseId)
+            .Select(g => new { CourseId = g.Key, Semester = g.First().Semester })
+            .ToDictionaryAsync(g => g.CourseId, g => g.Semester, ct);
+
+        int ResolveCourseSemester(Guid courseId, Course? course, CourseOffering offering)
+        {
+            if (curriculumCourseSemesters.TryGetValue(courseId, out var s1))
+                return (int)s1;
+            if (fallbackCurriculumSemesters.TryGetValue(courseId, out var s2))
+                return (int)s2;
+            if (course?.Semester.HasValue == true)
+                return (int)course.Semester.Value;
+            if (offering.Semester > 0)
+                return (int)offering.Semester;
+            return 1;
+        }
+
+        if (semester.HasValue)
+        {
+            registrations = registrations.Where(x => 
+                ResolveCourseSemester(x.CourseOffering.CourseId, x.CourseOffering.Course, x.CourseOffering) == (int)semester.Value
+            ).ToList();
+        }
 
         var maxCreditsQuery = _context.LevelSemesterConfigs.AsNoTracking()
             .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive);
@@ -594,7 +660,8 @@ public class RegistrationService : BaseService, IRegistrationService
         var registeredDtos = registrations.Select(x => 
         {
             var credits = curriculumCreditMap.TryGetValue(x.CourseOffering.CourseId, out var cVal) ? cVal : (x.CourseOffering.Course?.CreditUnits ?? 0);
-            return MapRegistration(x, x.CourseOffering, credits);
+            var sem = ResolveCourseSemester(x.CourseOffering.CourseId, x.CourseOffering.Course, x.CourseOffering);
+            return MapRegistration(x, x.CourseOffering, credits, sem);
         }).ToList();
 
         var optionDtos = new List<RegistrationOfferingDto>();
@@ -607,10 +674,11 @@ public class RegistrationService : BaseService, IRegistrationService
 
             var credits = curriculumCreditMap.TryGetValue(offering.CourseId, out var cVal) ? cVal : (offering.Course?.CreditUnits ?? 0);
             var isCarryover = IsLowerLevelCourse(offering, lowerLevelIds, curriculumCourseLevels) && !passedCourseIds.Contains(offering.CourseId);
+            var courseSemester = ResolveCourseSemester(offering.CourseId, offering.Course, offering);
 
             optionDtos.Add(new RegistrationOfferingDto(
                 offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty, credits,
-                (int)offering.Semester,
+                courseSemester,
                 offering.Lecturers.FirstOrDefault(l => l.Role == Data.Enums.CourseLecturerRole.Main)?.Lecturer?.DisplayName ?? "To be announced",
                 slots.Where(x => x.CourseOfferingId == offering.Id)
                     .Select(x => $"{x.DayOfWeek} {x.StartTime:HH\\:mm}–{x.EndTime:HH\\:mm}").ToList(),
@@ -846,9 +914,25 @@ public class RegistrationService : BaseService, IRegistrationService
             .Include(x => x.Programs).ThenInclude(p => p.Level)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
-    private static CourseRegistrationDto MapRegistration(CourseEnrollment enrollment, CourseOffering offering, int creditUnits) =>
-        new(enrollment.Id, enrollment.StudentId, offering.Id, offering.Course?.Code ?? string.Empty, offering.Course?.Title ?? string.Empty,
-            enrollment.RegisteredAtUtc, enrollment.DroppedAtUtc, enrollment.Status, creditUnits);
+    private static CourseRegistrationDto MapRegistration(CourseEnrollment enrollment, CourseOffering offering, int creditUnits, int? semester = null)
+    {
+        var sem = semester ?? (offering.Course?.Semester.HasValue == true
+            ? (int)offering.Course.Semester.Value
+            : (int)offering.Semester);
+        if (sem <= 0) sem = 1;
+
+        return new CourseRegistrationDto(
+            enrollment.Id,
+            enrollment.StudentId,
+            offering.Id,
+            offering.Course?.Code ?? string.Empty,
+            offering.Course?.Title ?? string.Empty,
+            enrollment.RegisteredAtUtc,
+            enrollment.DroppedAtUtc,
+            enrollment.Status,
+            creditUnits,
+            sem);
+    }
 
     private async Task<string> GetStudentIdentifierAsync(Guid studentId, CancellationToken ct)
     {

@@ -26,9 +26,11 @@ public sealed class CafeteriaVendorOrder
     [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "decimal(18,2)")]
     public decimal Price { get; set; }
     public bool IsScholarshipCovered { get; set; }
+    public string? MealSession { get; set; } // "Breakfast", "Lunch", "Dinner"
     public string? Station { get; set; }
     public CafeteriaOrderStatus Status { get; set; } = CafeteriaOrderStatus.New;
     public string QrToken { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ExpiresAt { get; set; }
     public DateTime? ClaimedAt { get; set; }
 }

@@ -149,14 +149,32 @@ public class ParentPortalService : BaseService, IParentPortalService
             var offering = enrollment.CourseOffering;
             if (offering == null) continue;
 
-            var totalMarks = await _context.Grades
+            var studentGrades = await _context.Grades
                 .Where(g => g.Assessment!.CourseOfferingId == offering.Id && studentUserIds.Contains(g.StudentId))
-                .SumAsync(g => g.MarksObtained, ct);
+                .ToListAsync(ct);
 
-            if (totalMarks > 100m) totalMarks = 100m;
-            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
-            var currentGrade = gradeResult.LetterGrade;
-            bool isCompleted = gradeResult.Score >= 40m;
+            bool isPublished = await _context.GradePublications
+                .AnyAsync(p => p.CourseOfferingId == offering.Id && p.IsVisibleToStudents, ct);
+
+            string currentGrade;
+            bool isCompleted = false;
+
+            if (!isPublished)
+            {
+                currentGrade = studentGrades.Any() ? "AR" : "IP";
+            }
+            else if (!studentGrades.Any())
+            {
+                currentGrade = "AR";
+            }
+            else
+            {
+                var totalMarks = studentGrades.Sum(g => g.MarksObtained);
+                if (totalMarks > 100m) totalMarks = 100m;
+                var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
+                currentGrade = gradeResult.LetterGrade;
+                isCompleted = gradeResult.Score >= 40m;
+            }
 
             var totalSessions = await _context.LectureSessions
                 .CountAsync(ls => ls.CourseOfferingId == offering.Id && ls.IsCompleted, ct);
@@ -243,13 +261,29 @@ public class ParentPortalService : BaseService, IParentPortalService
             var offering = enrollment.CourseOffering;
             if (offering == null) continue;
 
-            var totalMarks = await _context.Grades
+            var studentGrades = await _context.Grades
                 .Where(g => g.Assessment!.CourseOfferingId == offering.Id && studentUserIds.Contains(g.StudentId))
-                .SumAsync(g => g.MarksObtained, ct);
+                .ToListAsync(ct);
 
-            if (totalMarks > 100m) totalMarks = 100m;
-            var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
-            var gradeLetter = gradeResult.LetterGrade;
+            bool isPublished = await _context.GradePublications
+                .AnyAsync(p => p.CourseOfferingId == offering.Id && p.IsVisibleToStudents, ct);
+
+            string gradeLetter;
+            if (!isPublished)
+            {
+                gradeLetter = studentGrades.Any() ? "AR" : "IP";
+            }
+            else if (!studentGrades.Any())
+            {
+                gradeLetter = "AR";
+            }
+            else
+            {
+                var totalMarks = studentGrades.Sum(g => g.MarksObtained);
+                if (totalMarks > 100m) totalMarks = 100m;
+                var gradeResult = GradeCalculator.CalculateGrade(totalMarks, rStrategy, decimalPlaces, graceThreshold, mappings);
+                gradeLetter = gradeResult.LetterGrade;
+            }
 
             grades.Add(new StudentGradeDto(
                 offering.Id,

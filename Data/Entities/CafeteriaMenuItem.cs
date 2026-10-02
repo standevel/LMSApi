@@ -29,6 +29,14 @@ public sealed class CafeteriaMenuItem
     public bool IsAvailable { get; set; } = true;
     public DateOnly AvailableDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
 
+    [MaxLength(250)]
+    public string? Allergens { get; set; }
+
+    [MaxLength(200)]
+    public string? DietaryFlags { get; set; }
+
+    public int? Calories { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

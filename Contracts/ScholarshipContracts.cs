@@ -63,4 +63,18 @@ public sealed record StudentFeedingEntitlementDto(
     bool HasActiveScholarship,
     decimal CoveragePercent,
     bool IsFeedingFullyCovered,
-    Dictionary<string, bool>? DailyMealWindowsClaimed = null);
+    Dictionary<string, bool>? DailyMealWindowsClaimed = null,
+    List<string>? AvailableMealWindowsRightNow = null,
+    string? CurrentSessionName = null,
+    string? RolloverSummary = null
+);
+
+public sealed record ScholarshipMealClaimResult(
+    bool CanClaim,
+    string Reason,
+    string TargetMealWindow,
+    bool IsRolledOver,
+    Dictionary<string, bool> DailyWindowsClaimed,
+    List<string> AvailableWindowsRightNow,
+    string CurrentSession
+);

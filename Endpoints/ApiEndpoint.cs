@@ -74,6 +74,9 @@ public abstract class ApiEndpoint<TRequest, TResponse> : Endpoint<TRequest, ApiR
             ApiResponse<TResponse>.Fail(message, statusCode, new ApiError(errorCode, errorMessage)),
             statusCode: statusCode));
 
+    protected Task SendNotFoundAsync(string message, CancellationToken ct) =>
+        SendFailureAsync(404, message, "NOT_FOUND", message, ct);
+
     protected Task SendUnauthorizedAsync(CancellationToken ct) =>
         SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User is not authenticated", ct);
 
@@ -164,6 +167,9 @@ public abstract class ApiEndpointWithoutRequest<TResponse> : EndpointWithoutRequ
         Send.ResultAsync(TypedResults.Json(
             ApiResponse<TResponse>.Fail(message, statusCode, new ApiError(errorCode, errorMessage)),
             statusCode: statusCode));
+
+    protected Task SendNotFoundAsync(string message, CancellationToken ct) =>
+        SendFailureAsync(404, message, "NOT_FOUND", message, ct);
 
     protected Task SendUnauthorizedAsync(CancellationToken ct) =>
         SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "User is not authenticated", ct);

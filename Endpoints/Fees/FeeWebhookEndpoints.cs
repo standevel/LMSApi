@@ -27,7 +27,7 @@ public sealed class ApplyLateFeesEndpoint(IFeeService feeService)
 
 // ─── Paystack Webhook ─────────────────────────────────────────────────────────
 
-public sealed class PaystackWebhookEndpoint(IFeeService feeService)
+public sealed class PaystackWebhookEndpoint(IFeeService feeService, ICafeteriaWalletService walletService)
     : EndpointWithoutRequest
 {
     public override void Configure()
@@ -47,7 +47,16 @@ public sealed class PaystackWebhookEndpoint(IFeeService feeService)
 
         try
         {
-            await feeService.HandlePaystackWebhookAsync(rawBody, signature);
+            // Multiplex webhook: Check if this is a Cafeteria top-up or standard Fee transaction
+            if (rawBody.Contains("CFTR-", StringComparison.OrdinalIgnoreCase) ||
+                rawBody.Contains("\"CafeteriaWallet\"", StringComparison.OrdinalIgnoreCase))
+            {
+                await walletService.HandlePaystackWebhookAsync(rawBody, signature, ct);
+            }
+            else
+            {
+                await feeService.HandlePaystackWebhookAsync(rawBody, signature);
+            }
             await Send.OkAsync(ct); // Paystack requires 200 OK
         }
         catch (UnauthorizedAccessException)
@@ -63,7 +72,7 @@ public sealed class PaystackWebhookEndpoint(IFeeService feeService)
 
 // ─── Hydrogen Webhook ─────────────────────────────────────────────────────────
 
-public sealed class HydrogenWebhookEndpoint(IFeeService feeService)
+public sealed class HydrogenWebhookEndpoint(IFeeService feeService, ICafeteriaWalletService walletService)
     : EndpointWithoutRequest
 {
     public override void Configure()
@@ -82,7 +91,16 @@ public sealed class HydrogenWebhookEndpoint(IFeeService feeService)
 
         try
         {
-            await feeService.HandleHydrogenWebhookAsync(rawBody, signature);
+            // Multiplex webhook: Check if this is a Cafeteria top-up or standard Fee transaction
+            if (rawBody.Contains("CFTR-", StringComparison.OrdinalIgnoreCase) ||
+                rawBody.Contains("\"CafeteriaWallet\"", StringComparison.OrdinalIgnoreCase))
+            {
+                await walletService.HandleHydrogenWebhookAsync(rawBody, signature, ct);
+            }
+            else
+            {
+                await feeService.HandleHydrogenWebhookAsync(rawBody, signature);
+            }
             await Send.OkAsync(ct);
         }
         catch (UnauthorizedAccessException)

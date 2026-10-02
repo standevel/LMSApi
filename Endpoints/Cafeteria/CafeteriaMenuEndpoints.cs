@@ -25,38 +25,47 @@ public sealed class GetAvailableMenuItemsEndpoint(LmsDbContext db)
     public override async Task HandleAsync(CancellationToken ct)
     {
         var vendorId = Query<string?>("vendorId", isRequired: false)
-                       ?? User.FindFirst("vendorId")?.Value
-                       ?? "1";
+                       ?? User.FindFirst("vendorId")?.Value;
 
-        await SeedDefaultsIfEmpty(db, vendorId, ct);
+        try
+        {
+            await SeedDefaultsIfEmpty(db, ct);
+        }
+        catch
+        {
+            // Ignore seeding errors in production when table already has concurrent writes
+        }
 
-        var today = DateTime.Today;
-        var start = DateTime.UtcNow.AddDays(-7); // allow a rolling window
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var query = db.CafeteriaMenuItems
+            .Where(m => m.IsAvailable);
 
-        var items = await db.CafeteriaMenuItems
-            .Where(m => m.VendorId == vendorId && m.IsAvailable)
-            .Where(m => m.AvailableDate >= DateOnly.FromDateTime(today))
-            .ToListAsync(ct);
+        if (!string.IsNullOrWhiteSpace(vendorId))
+        {
+            query = query.Where(m => m.VendorId == vendorId);
+        }
 
+        var items = await query.OrderBy(m => m.FeedingTimeId).ThenBy(m => m.Name).ToListAsync(ct);
         await SendSuccessAsync(items.Select(m => MapDto(m)).ToList(), ct);
     }
 
     private static MenuItemDto MapDto(CafeteriaMenuItem m) => new(
         m.Id, m.VendorId, m.Name, m.Description, m.ImageUrl,
         m.Price, m.FeedingTimeId, m.FeedingTimeName,
-        m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt);
+        m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt,
+        m.Allergens, m.DietaryFlags, m.Calories);
 
-    internal static async Task SeedDefaultsIfEmpty(LmsDbContext db, string vendorId, CancellationToken ct)
+    internal static async Task SeedDefaultsIfEmpty(LmsDbContext db, CancellationToken ct)
     {
-        var hasAny = await db.CafeteriaMenuItems.AnyAsync(m => m.VendorId == vendorId, ct);
+        var hasAny = await db.CafeteriaMenuItems.AnyAsync(ct);
         if (hasAny) return;
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var defaults = new[]
         {
-            new CafeteriaMenuItem { VendorId = vendorId, Name = "Jollof Rice & Fried Plantain (Breakfast)", FeedingTimeId = 1, FeedingTimeName = "Breakfast", Price = 2500m, IsAvailable = true, AvailableDate = today },
-            new CafeteriaMenuItem { VendorId = vendorId, Name = "Stewed Beans & Bread (Lunch)",             FeedingTimeId = 2, FeedingTimeName = "Lunch",    Price = 3500m, IsAvailable = true, AvailableDate = today },
-            new CafeteriaMenuItem { VendorId = vendorId, Name = "Vegetable Soup & Pound Edo (Dinner)",       FeedingTimeId = 3, FeedingTimeName = "Dinner",   Price = 4500m, IsAvailable = true, AvailableDate = today }
+            new CafeteriaMenuItem { VendorId = "1", Name = "Jollof Rice & Fried Plantain", FeedingTimeId = 1, FeedingTimeName = "Breakfast", Price = 2500m, IsAvailable = true, AvailableDate = today, DietaryFlags = "Halal, Vegetarian", Allergens = "None", Calories = 550 },
+            new CafeteriaMenuItem { VendorId = "1", Name = "Stewed Beans & Fresh Bread",    FeedingTimeId = 2, FeedingTimeName = "Lunch",    Price = 3500m, IsAvailable = true, AvailableDate = today, DietaryFlags = "Vegetarian", Allergens = "Gluten", Calories = 620 },
+            new CafeteriaMenuItem { VendorId = "1", Name = "Vegetable Soup & Pounded Yam",  FeedingTimeId = 3, FeedingTimeName = "Dinner",   Price = 4500m, IsAvailable = true, AvailableDate = today, DietaryFlags = "Halal, Gluten-Free", Allergens = "Fish", Calories = 750 }
         };
 
         db.CafeteriaMenuItems.AddRange(defaults);
@@ -77,19 +86,33 @@ public sealed class GetAvailableMenuItemsFallbackEndpoint(LmsDbContext db)
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        var vendorId = Query<string?>("vendorId", isRequired: false) ?? "1";
-        await GetAvailableMenuItemsEndpoint.SeedDefaultsIfEmpty(db, vendorId, ct);
+        var vendorId = Query<string?>("vendorId", isRequired: false)
+                       ?? User.FindFirst("vendorId")?.Value;
 
-        var today = DateTime.Today;
-        var items = await db.CafeteriaMenuItems
-            .Where(m => m.VendorId == vendorId && m.IsAvailable)
-            .Where(m => m.AvailableDate >= DateOnly.FromDateTime(today))
-            .ToListAsync(ct);
+        try
+        {
+            await GetAvailableMenuItemsEndpoint.SeedDefaultsIfEmpty(db, ct);
+        }
+        catch
+        {
+            // Ignore concurrent seeding collision
+        }
+
+        var query = db.CafeteriaMenuItems
+            .Where(m => m.IsAvailable);
+
+        if (!string.IsNullOrWhiteSpace(vendorId))
+        {
+            query = query.Where(m => m.VendorId == vendorId);
+        }
+
+        var items = await query.OrderBy(m => m.FeedingTimeId).ThenBy(m => m.Name).ToListAsync(ct);
 
         await SendSuccessAsync(items.Select(m => new MenuItemDto(
             m.Id, m.VendorId, m.Name, m.Description, m.ImageUrl,
             m.Price, m.FeedingTimeId, m.FeedingTimeName,
-            m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt)).ToList(), ct);
+            m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt,
+            m.Allergens, m.DietaryFlags, m.Calories)).ToList(), ct);
     }
 }
 
@@ -124,7 +147,8 @@ public sealed class GetMenuItemByIdEndpoint(LmsDbContext db)
         await SendSuccessAsync(new MenuItemDto(
             item.Id, item.VendorId, item.Name, item.Description, item.ImageUrl,
             item.Price, item.FeedingTimeId, item.FeedingTimeName,
-            item.IsAvailable, item.AvailableDate, item.CreatedAt, item.UpdatedAt), ct);
+            item.IsAvailable, item.AvailableDate, item.CreatedAt, item.UpdatedAt,
+            item.Allergens, item.DietaryFlags, item.Calories), ct);
     }
 }
 
@@ -245,6 +269,7 @@ public sealed class GetFavoriteMealsEndpoint(LmsDbContext db)
         await SendSuccessAsync(items.Select(m => new MenuItemDto(
             m.Id, m.VendorId, m.Name, m.Description, m.ImageUrl,
             m.Price, m.FeedingTimeId, m.FeedingTimeName,
-            m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt)).ToList(), ct);
+            m.IsAvailable, m.AvailableDate, m.CreatedAt, m.UpdatedAt,
+            m.Allergens, m.DietaryFlags, m.Calories)).ToList(), ct);
     }
 }

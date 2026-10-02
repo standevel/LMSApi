@@ -54,12 +54,24 @@ public sealed class GetRegistryStatsEndpoint(LmsDbContext dbContext)
         var pendingDocuments = await dbContext.DocumentRecords
             .CountAsync(d => d.Status == DocumentStatus.Pending, ct);
 
+        var directEntryStudents = await dbContext.Students
+            .CountAsync(s => s.IsDirectEntry, ct);
+
+        var migratedTranscriptsCount = await dbContext.CourseEquivalencies
+            .CountAsync(ct);
+
+        var pendingMatricNumbers = await dbContext.Students
+            .CountAsync(s => string.IsNullOrEmpty(s.StudentNumber), ct);
+
         await SendSuccessAsync(new RegistryStatsResponse(
             totalStudents,
             undergraduateStudents,
             postgraduateStudents,
             newAdmissions,
-            pendingDocuments
+            pendingDocuments,
+            directEntryStudents,
+            migratedTranscriptsCount,
+            pendingMatricNumbers
         ), ct);
     }
 }

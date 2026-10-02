@@ -1280,14 +1280,25 @@ namespace LMS.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Allergens")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
                     b.Property<DateOnly>("AvailableDate")
                         .HasColumnType("date");
+
+                    b.Property<int?>("Calories")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DietaryFlags")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<int>("FeedingTimeId")
                         .HasColumnType("int");
@@ -1369,6 +1380,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("ImageUrl")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1378,6 +1392,9 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<string>("MatricNo")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MealSession")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MenuItemId")
@@ -1435,8 +1452,15 @@ namespace LMS.Api.Data.Migrations
                     b.Property<decimal>("Balance")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<Guid>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<decimal?>("ParentDailySpendLimit")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<Guid?>("StudentId")
                         .HasColumnType("uniqueidentifier");
@@ -5851,6 +5875,18 @@ namespace LMS.Api.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("DirectEntryInstitution")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<decimal?>("DirectEntryPoints")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("DirectEntryQualification")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("EmergencyContactEmail")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -5883,6 +5919,11 @@ namespace LMS.Api.Data.Migrations
 
                     b.Property<DateTime?>("GraduationDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDirectEntry")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("JambRegistrationNumber")
                         .HasMaxLength(50)
@@ -5949,6 +5990,8 @@ namespace LMS.Api.Data.Migrations
                         .HasFilter("[EntraObjectId] IS NOT NULL");
 
                     b.HasIndex("FacultyId");
+
+                    b.HasIndex("IsDirectEntry");
 
                     b.HasIndex("LevelId");
 
@@ -6210,6 +6253,9 @@ namespace LMS.Api.Data.Migrations
                     b.Property<bool>("AllowParentTopUp")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("AllowPreOrdersOutsideWindows")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("AllowStudentSelfTopUp")
                         .HasColumnType("bit");
 
@@ -6220,6 +6266,9 @@ namespace LMS.Api.Data.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<bool>("EnableSelfServiceTopUp")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("EnforceMealSessionWindows")
                         .HasColumnType("bit");
 
                     b.Property<decimal>("MaxSingleTopUpAmount")
@@ -8195,22 +8244,22 @@ namespace LMS.Api.Data.Migrations
                     b.HasOne("LMS.Api.Data.Entities.AcademicLevel", "AcademicLevel")
                         .WithMany()
                         .HasForeignKey("AcademicLevelId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("LMS.Api.Data.Entities.AcademicProgram", "AcademicProgram")
                         .WithMany()
                         .HasForeignKey("AcademicProgramId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("LMS.Api.Data.Entities.AcademicSession", "AcademicSession")
                         .WithMany()
                         .HasForeignKey("AcademicSessionId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("LMS.Api.Data.Entities.Faculty", "Faculty")
                         .WithMany()
                         .HasForeignKey("FacultyId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("AcademicLevel");
 

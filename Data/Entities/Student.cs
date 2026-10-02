@@ -78,6 +78,12 @@ public sealed class Student
     }
     public int? JambScore { get; set; }
     
+    // Direct Entry Information
+    public bool IsDirectEntry { get; set; } = false;
+    public string? DirectEntryQualification { get; set; }
+    public string? DirectEntryInstitution { get; set; }
+    public decimal? DirectEntryPoints { get; set; }
+    
     // Status
     public StudentStatus Status { get; set; } = StudentStatus.Active;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

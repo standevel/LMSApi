@@ -1294,12 +1294,18 @@ public sealed class CourseService(
                         (double)calculated.GradePoints,
                         true);
                 }
+                else
+                {
+                    gradeDto = new StudentCourseGradeDto(
+                        null, null, null, null, null, "AR", 0, true);
+                }
             }
 
-            // Class analytics from published student results
+            // Class analytics from published student results (exclude administrative grades)
             var publishedResults = await dbContext.StudentCourseResults
                 .AsNoTracking()
-                .Where(r => r.CourseOfferingId == offeringId && r.IsPublished)
+                .Where(r => r.CourseOfferingId == offeringId && r.IsPublished
+                            && r.LetterGrade != "IP" && r.LetterGrade != "AR" && r.LetterGrade != "I" && r.LetterGrade != "W")
                 .ToListAsync(ct);
 
             if (publishedResults.Count > 1)
@@ -1326,6 +1332,15 @@ public sealed class CourseService(
                 analytics = new CourseClassAnalyticsDto(
                     Math.Round(classAverage, 1), myScore, percentile, scores.Count, buckets);
             }
+        }
+        else
+        {
+            var hasAssessments = await dbContext.Assessments
+                .AnyAsync(a => a.CourseOfferingId == offeringId, ct);
+            string pendingGrade = (hasGrades || hasAssessments) ? "AR" : "IP";
+
+            gradeDto = new StudentCourseGradeDto(
+                null, null, null, null, null, pendingGrade, 0, false);
         }
 
         return new StudentCourseDetailResponse(

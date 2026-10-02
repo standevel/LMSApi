@@ -18,7 +18,7 @@ public sealed class GetCourseGradebookAuditHistoryEndpoint : ApiEndpointWithoutR
     public override void Configure()
     {
         Get("gradebook/courses/{offeringId:guid}/audit-history");
-        AllowAnonymous();
+        Roles(LmsRoles.SuperAdmin, LmsRoles.Admin);
         Tags("Gradebook");
     }
 
@@ -27,6 +27,17 @@ public sealed class GetCourseGradebookAuditHistoryEndpoint : ApiEndpointWithoutR
         if (HttpContext.User?.Identity?.IsAuthenticated != true)
         {
             await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userRoles = HttpContext.User.Claims
+            .Where(c => c.Type == "roles" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role" || c.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+
+        if (!userRoles.Any(r => r.Equals(LmsRoles.Admin, StringComparison.OrdinalIgnoreCase) || r.Equals(LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase)))
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Only administrators can access gradebook audit history.", ct);
             return;
         }
 
@@ -62,7 +73,7 @@ public sealed class PreviewGradebookSnapshotEndpoint : ApiEndpointWithoutRequest
     public override void Configure()
     {
         Get("gradebook/courses/{offeringId:guid}/audit-history/{auditLogId:guid}/preview");
-        AllowAnonymous();
+        Roles(LmsRoles.SuperAdmin, LmsRoles.Admin);
         Tags("Gradebook");
     }
 
@@ -71,6 +82,17 @@ public sealed class PreviewGradebookSnapshotEndpoint : ApiEndpointWithoutRequest
         if (HttpContext.User?.Identity?.IsAuthenticated != true)
         {
             await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userRoles = HttpContext.User.Claims
+            .Where(c => c.Type == "roles" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role" || c.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+
+        if (!userRoles.Any(r => r.Equals(LmsRoles.Admin, StringComparison.OrdinalIgnoreCase) || r.Equals(LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase)))
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Only administrators can preview gradebook snapshots.", ct);
             return;
         }
 
@@ -110,7 +132,7 @@ public sealed class RestoreGradebookSnapshotEndpoint : ApiEndpoint<RestoreGrades
     public override void Configure()
     {
         Post("gradebook/courses/{offeringId:guid}/audit-history/{auditLogId:guid}/restore");
-        AllowAnonymous();
+        Roles(LmsRoles.SuperAdmin, LmsRoles.Admin);
         Tags("Gradebook");
     }
 
@@ -119,6 +141,17 @@ public sealed class RestoreGradebookSnapshotEndpoint : ApiEndpoint<RestoreGrades
         if (HttpContext.User?.Identity?.IsAuthenticated != true)
         {
             await SendFailureAsync(401, "Unauthorized", "UNAUTHORIZED", "Please log in to access this resource.", ct);
+            return;
+        }
+
+        var userRoles = HttpContext.User.Claims
+            .Where(c => c.Type == "roles" || c.Type == "http://schemas.microsoft.com/ws/2008/06/identity/claims/role" || c.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(c => c.Value)
+            .ToList();
+
+        if (!userRoles.Any(r => r.Equals(LmsRoles.Admin, StringComparison.OrdinalIgnoreCase) || r.Equals(LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase)))
+        {
+            await SendFailureAsync(403, "Forbidden", "FORBIDDEN", "Only administrators can restore historical grade snapshots.", ct);
             return;
         }
 

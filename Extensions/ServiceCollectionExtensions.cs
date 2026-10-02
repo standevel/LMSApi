@@ -238,6 +238,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGradeConversionService, GradeConversionService>();
         services.AddScoped<ICourseEquivalencyService, CourseEquivalencyService>();
         services.AddScoped<ICredentialEvaluationService, CredentialEvaluationService>();
+        services.AddScoped<ITranscriptMigrationService, TranscriptMigrationService>();
 
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
         services.AddScoped<IPermissionService, PermissionService>();
@@ -280,6 +281,7 @@ public static class ServiceCollectionExtensions
         // Background Services
         services.AddHostedService<NotificationBackgroundService>();
         services.AddHostedService<LMS.Api.Services.AI.AIAgentInterventionBackgroundService>();
+        services.AddHostedService<CafeteriaOrderExpiryBackgroundService>();
 
         // Course Catalog Import — must be Singleton so in-memory preview dictionary survives across requests
         services.AddSingleton<ICourseCatalogImportService, CourseCatalogImportService>();

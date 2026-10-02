@@ -67,7 +67,12 @@ public sealed class MeEndpoint(IUserRepository userRepository, IPermissionServic
         AppUser? user = null;
         try
         {
-            if (!string.IsNullOrEmpty(objectId))
+            if (HttpContext.Items.TryGetValue("CurrentUserId", out var cUid) && cUid is Guid currentGuid)
+            {
+                user = await userRepository.GetByIdAsync(currentGuid, ct);
+            }
+
+            if (user is null && !string.IsNullOrEmpty(objectId))
             {
                 user = await userRepository.GetByEntraObjectIdAsync(objectId, ct);
             }
@@ -81,6 +86,10 @@ public sealed class MeEndpoint(IUserRepository userRepository, IPermissionServic
             {
                 user = await userRepository.GetByIdAsync(subjectGuid, ct);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("[MeEndpoint] DB lookup canceled by client.");
         }
         catch (Exception dbEx)
         {
@@ -149,17 +158,30 @@ public sealed class MeEndpoint(IUserRepository userRepository, IPermissionServic
         }
 
         List<string>? effectivePermissions = null;
-        if (dbUserId.HasValue)
+        if (dbUserId.HasValue && !ct.IsCancellationRequested)
         {
             try
             {
                 var perms = await permissionService.GetEffectivePermissionsAsync(dbUserId.Value, ct);
                 effectivePermissions = perms.OrderBy(p => p).ToList();
             }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("[MeEndpoint] Permissions load canceled by client.");
+            }
             catch (Exception ex)
             {
                 Console.WriteLine($"[MeEndpoint] Failed to load permissions: {ex.Message}");
             }
+        }
+
+        var isAdminOrSuperAdmin = roles.Any(r =>
+            string.Equals(r, LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(r, LmsRoles.Admin, StringComparison.OrdinalIgnoreCase));
+
+        if (isAdminOrSuperAdmin)
+        {
+            effectivePermissions = LmsPermissions.All.OrderBy(p => p).ToList();
         }
 
         var data = new MeResponse(dbUserId, name, email, objectId, roles, user?.DepartmentId, user?.FacultyId, user?.ThemePreference, effectivePermissions);

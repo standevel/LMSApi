@@ -15,7 +15,6 @@ public sealed class CreateMessageEndpoint(IMessageService messageService)
     public override void Configure()
     {
         Post("messages");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -108,7 +107,6 @@ public sealed class GetUserMessagesEndpoint(IMessageService messageService)
     public override void Configure()
     {
         Get("messages");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -139,7 +137,6 @@ public sealed class GetMessageByIdEndpoint(IMessageService messageService)
     public override void Configure()
     {
         Get("messages/{Id:guid}");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -161,7 +158,6 @@ public sealed class MarkMessageAsReadEndpoint(IMessageService messageService)
     public override void Configure()
     {
         Put("messages/{Id:guid}/read");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -183,7 +179,6 @@ public sealed class DeleteMessageEndpoint(IMessageService messageService)
     public override void Configure()
     {
         Delete("messages/{Id:guid}");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -204,7 +199,6 @@ public sealed class GetAdminRecipientEndpoint(LmsDbContext dbContext, IConfigura
     public override void Configure()
     {
         Get("messages/admin-recipient");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 
@@ -266,7 +260,6 @@ public sealed class GetAllowedRecipientsEndpoint(LmsDbContext dbContext)
     public override void Configure()
     {
         Get("messages/allowed-recipients");
-        Roles("SuperAdmin", "Admin", "Lecturer", "Student", "Parent", "Registrar", "AdmissionOfficer");
         Tags("Communication");
     }
 

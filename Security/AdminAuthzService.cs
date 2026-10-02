@@ -13,7 +13,8 @@ public sealed class AdminAuthzService(
     IUserPermissionRepository userPermissionRepository,
     IPermissionService permissionService,
     ICurrentUserContext currentUserContext,
-    LmsDbContext dbContext) : IAdminAuthzService
+    LmsDbContext dbContext,
+    Microsoft.Extensions.Caching.Memory.IMemoryCache memoryCache) : IAdminAuthzService
 {
     public async Task<ListManagedUsersResult> ListManagedUsersAsync(string? search, CancellationToken ct = default)
     {
@@ -210,6 +211,7 @@ public sealed class AdminAuthzService(
             await userRoleRepository.SaveChangesAsync(ct);
         }
 
+        InvalidateUserCache(user);
         return new AssignUserRoleResult(true, user.EntraObjectId, role.Name, StatusCode: StatusCodes.Status200OK);
     }
 
@@ -239,6 +241,7 @@ public sealed class AdminAuthzService(
             await userRoleRepository.SaveChangesAsync(ct);
         }
 
+        InvalidateUserCache(user);
         return new RevokeUserRoleResult(true, user.EntraObjectId, role.Name, StatusCode: StatusCodes.Status200OK);
     }
 
@@ -283,6 +286,7 @@ public sealed class AdminAuthzService(
         record.ModifiedUtc = DateTime.UtcNow;
         record.ExpiresUtc = expiresUtc;
         await userPermissionRepository.SaveChangesAsync(ct);
+        InvalidateUserCache(user);
 
         return new SetUserPermissionResult(
             true,
@@ -292,6 +296,14 @@ public sealed class AdminAuthzService(
             Reason: reason,
             ExpiresUtc: expiresUtc,
             StatusCode: StatusCodes.Status200OK);
+    }
+
+    private void InvalidateUserCache(AppUser user)
+    {
+        if (memoryCache is null) return;
+        if (!string.IsNullOrEmpty(user.EntraObjectId)) memoryCache.Remove($"UserProv_{user.EntraObjectId}");
+        if (!string.IsNullOrEmpty(user.Email)) memoryCache.Remove($"UserProv_{user.Email}");
+        memoryCache.Remove($"UserProv_{user.Id}");
     }
 
     public async Task<GetEffectivePermissionsResult> GetEffectivePermissionsAsync(string entraObjectId, CancellationToken ct = default)

@@ -27,17 +27,35 @@ public sealed class PermissionAuthorizationHandler(
 {
     protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
     {
-        // 1. SuperAdmin / Admin bypass
-        if (context.User.IsInRole(LmsRoles.SuperAdmin) || context.User.IsInRole(LmsRoles.Admin))
+        // 1. SuperAdmin / Admin bypass (check IsInRole and all role claim variants)
+        var isSuperAdminOrAdmin = context.User.IsInRole(LmsRoles.SuperAdmin)
+            || context.User.IsInRole(LmsRoles.Admin)
+            || context.User.Claims.Any(c =>
+                (c.Type == ClaimTypes.Role || c.Type == "roles" || c.Type == "role")
+                && (string.Equals(c.Value, LmsRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(c.Value, LmsRoles.Admin, StringComparison.OrdinalIgnoreCase)));
+
+        if (isSuperAdminOrAdmin)
         {
             context.Succeed(requirement);
             return;
         }
 
-        // 2. Check effective permissions via user ID (includes DB RolePermissions and individual UserPermissions overrides)
+        // 2. Check effective permissions via user ID (includes DB RolePermissions, SuperAdmin/Admin check, and individual UserPermissions overrides)
         var userId = await currentUserContext.GetUserIdAsync();
         if (userId.HasValue)
         {
+            var hasAdminInDb = await dbContext.UserRoles.AsNoTracking()
+                .Include(ur => ur.Role)
+                .AnyAsync(ur => ur.UserId == userId.Value &&
+                    (ur.Role.Name == LmsRoles.SuperAdmin || ur.Role.Name == LmsRoles.Admin));
+
+            if (hasAdminInDb)
+            {
+                context.Succeed(requirement);
+                return;
+            }
+
             var effective = await permissionService.GetEffectivePermissionsAsync(userId.Value);
             if (requirement.PermissionCodes.Any(code => effective.Contains(code)))
             {

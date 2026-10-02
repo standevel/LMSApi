@@ -210,7 +210,7 @@ public class TranscriptGenerationService : BaseService, ITranscriptGenerationSer
 
         foreach (var record in courseRecords)
         {
-            if (record.GradePoints.HasValue)
+            if (record.GradePoints.HasValue && record.GradeLetter != "IP" && record.GradeLetter != "AR" && record.GradeLetter != "I" && record.GradeLetter != "W")
             {
                 totalGpaPoints += record.GradePoints.Value * record.CreditUnits;
                 totalGpaCredits += record.CreditUnits;

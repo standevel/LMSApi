@@ -276,7 +276,10 @@ public sealed record RegistryStatsResponse(
     int UndergraduateStudents,
     int PostgraduateStudents,
     int NewAdmissions,
-    int PendingDocuments
+    int PendingDocuments,
+    int DirectEntryStudents = 0,
+    int MigratedTranscriptsCount = 0,
+    int PendingMatricNumbers = 0
 );
 
 public sealed record DocumentResubmissionContextResponse(

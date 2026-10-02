@@ -592,22 +592,22 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasOne(x => x.AcademicSession)
                 .WithMany()
                 .HasForeignKey(x => x.AcademicSessionId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.AcademicLevel)
                 .WithMany()
                 .HasForeignKey(x => x.AcademicLevelId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.Faculty)
                 .WithMany()
                 .HasForeignKey(x => x.FacultyId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(x => x.AcademicProgram)
                 .WithMany()
                 .HasForeignKey(x => x.AcademicProgramId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(x => new { x.AcademicSessionId, x.AcademicLevelId, x.AcademicProgramId, x.IsActive });
         });
@@ -1110,6 +1110,10 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.Property(x => x.StudentNumber).HasMaxLength(50); // Nullable - assigned by Registrar after admission
             entity.Property(x => x.JambRegistrationNumber).HasMaxLength(50);
             entity.Property(x => x.JambScore).HasColumnType("int");
+            entity.Property(x => x.IsDirectEntry).HasDefaultValue(false);
+            entity.Property(x => x.DirectEntryQualification).HasMaxLength(100);
+            entity.Property(x => x.DirectEntryInstitution).HasMaxLength(250);
+            entity.Property(x => x.DirectEntryPoints).HasPrecision(5, 2);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
             
             entity.HasOne(x => x.AdmissionApplication)
@@ -1146,6 +1150,7 @@ public DbSet<TranscriptRequest> TranscriptRequests => Set<TranscriptRequest>();
             entity.HasIndex(x => x.EmergencyContactName).HasFilter($"{SqlCol("EmergencyContactName")} IS NOT NULL");
             entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.LevelId);
+            entity.HasIndex(x => x.IsDirectEntry);
         });
 
         modelBuilder.Entity<CourseAdviserAssignment>(entity =>

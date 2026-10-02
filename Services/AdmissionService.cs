@@ -1606,6 +1606,10 @@ public sealed class AdmissionService(
                 LevelId = app.StartingLevelId,
                 StudentNumber = null, // Matric number assigned by Registrar later
                 Status = StudentStatus.Active,
+                IsDirectEntry = app.ApplicantType == ApplicantType.DirectEntry,
+                DirectEntryQualification = app.DirectEntryQualification != DirectEntryQualification.None ? app.DirectEntryQualification.ToString() : null,
+                DirectEntryInstitution = app.DirectEntryInstitution,
+                DirectEntryPoints = app.DirectEntryPoints,
                 EnrollmentDate = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow

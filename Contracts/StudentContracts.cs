@@ -25,6 +25,8 @@ public sealed class StudentSummaryDto
     public DateTime? GraduationDate { get; set; }
     public DateTime UpdatedAt { get; set; }
     public string? JambRegistrationNumber { get; set; }
+    public bool IsDirectEntry { get; set; }
+    public string? DirectEntryQualification { get; set; }
 }
 
 public sealed class StudentListResponse
@@ -64,6 +66,10 @@ public sealed class StudentDetailDto
     public string? JambRegistrationNumber { get; set; }
     public int? JambScore { get; set; }
     public string? AdmissionApplicationId { get; set; }
+    public bool IsDirectEntry { get; set; }
+    public string? DirectEntryQualification { get; set; }
+    public string? DirectEntryInstitution { get; set; }
+    public decimal? DirectEntryPoints { get; set; }
 }
 
 /// <summary>
@@ -102,6 +108,10 @@ public sealed class StudentCourseResultDto
     public string Grade { get; set; } = string.Empty;
     public string Point { get; set; } = string.Empty;
     public bool IsPublished { get; set; }
+    public bool IsMigrated { get; set; }
+    public string? SourceCourseCode { get; set; }
+    public string? SourceCourseTitle { get; set; }
+    public string? SourceInstitution { get; set; }
 }
 
 /// <summary>

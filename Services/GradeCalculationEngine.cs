@@ -137,12 +137,32 @@ public class GradeCalculationEngine : IGradeCalculationEngine
             0m,
             100m);
 
-        var gradeResult = GradeCalculator.CalculateGrade(
-            rawScore,
-            sysConfig.RoundingStrategy,
-            sysConfig.RoundingDecimalPlaces,
-            sysConfig.GraceThreshold,
-            mappings);
+        bool hasAnyGrades = studentGrades.Any(g => assessments.Any(a => a.Id == g.AssessmentId));
+
+        string letterGrade;
+        decimal gradePoints;
+        decimal finalScore;
+
+        if (!hasAnyGrades)
+        {
+            // If the student has no recorded assessment grades, do not default to a failing F grade.
+            // Represent as "AR" (Awaiting Results) if assessments exist, or "IP" (In Progress) if course has no assessments yet.
+            letterGrade = assessments.Any() ? "AR" : "IP";
+            gradePoints = 0m;
+            finalScore = 0m;
+        }
+        else
+        {
+            var gradeResult = GradeCalculator.CalculateGrade(
+                rawScore,
+                sysConfig.RoundingStrategy,
+                sysConfig.RoundingDecimalPlaces,
+                sysConfig.GraceThreshold,
+                mappings);
+            letterGrade = gradeResult.LetterGrade;
+            gradePoints = gradeResult.GradePoints;
+            finalScore = gradeResult.Score;
+        }
 
         return new CalculatedStudentGrade(
             studentId,
@@ -150,9 +170,9 @@ public class GradeCalculationEngine : IGradeCalculationEngine
             ca2Score,
             ca3Score,
             examScore,
-            gradeResult.Score,
-            gradeResult.LetterGrade,
-            gradeResult.GradePoints,
+            finalScore,
+            letterGrade,
+            gradePoints,
             assessmentItems);
 
         void SetCategoryScore(AssessmentCategoryType type, decimal score)

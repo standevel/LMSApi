@@ -162,17 +162,6 @@ await SeedCountriesAsync(ct);
             }
         }
 
-        if (roles.TryGetValue(LmsRoles.Admin, out var adminRole)
-            && permissions.TryGetValue(LmsPermissions.AccessManage, out var accessManagePermission))
-        {
-            var adminAccessPermission = await dbContext.RolePermissions
-                .FirstOrDefaultAsync(x => x.RoleId == adminRole.Id && x.PermissionId == accessManagePermission.Id, ct);
-
-            if (adminAccessPermission is not null)
-            {
-                dbContext.RolePermissions.Remove(adminAccessPermission);
-            }
-        }
 
         if (rowsToAdd.Count == 0 && dbContext.ChangeTracker.Entries<RolePermission>().All(x => x.State == EntityState.Unchanged))
         {

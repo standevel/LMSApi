@@ -10,7 +10,7 @@ public interface IStudentService
 {
     Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
         string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
-        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct);
+        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct, bool? isDirectEntry = null);
 
     Task<StudentDetailDto?> GetStudentDetailAsync(Guid studentId, CancellationToken ct);
 
@@ -31,13 +31,17 @@ public interface IStudentService
     Task<ChangeStudentProgramItemResult> ChangeStudentProgramAsync(Guid studentId, ChangeStudentProgramRequest request, Guid? changedByUserId, CancellationToken ct);
 
     Task<BatchChangeStudentProgramResponse> BatchChangeStudentProgramAsync(BatchChangeStudentProgramRequest request, Guid? changedByUserId, CancellationToken ct);
+
+    Task<UpdateStudentDirectEntryResult> SetDirectEntryStatusAsync(Guid studentId, UpdateStudentDirectEntryRequest request, Guid? changedByUserId, CancellationToken ct);
+
+    Task<BatchUpdateStudentDirectEntryResponse> BatchSetDirectEntryStatusAsync(BatchUpdateStudentDirectEntryRequest request, Guid? changedByUserId, CancellationToken ct);
 }
 
 public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAuditService = null) : IStudentService
 {
     public async Task<(IEnumerable<StudentSummaryDto> Students, int TotalCount)> GetStudentsAsync(
         string? search, string? programId, string? departmentId, string? facultyId, string? levelId, string? sessionId, string? status,
-        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct)
+        string? sortBy, string? sortDirection, int page, int pageSize, CancellationToken ct, bool? isDirectEntry = null)
     {
         var query = context.Students
             .Include(s => s.AcademicProgram)
@@ -108,6 +112,12 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
             }
         }
 
+        // Filter by Direct Entry
+        if (isDirectEntry.HasValue)
+        {
+            query = query.Where(s => s.IsDirectEntry == isDirectEntry.Value);
+        }
+
         var totalCount = await query.CountAsync(ct);
 
         if (!string.IsNullOrWhiteSpace(sortBy) && sortBy.Equals("level", StringComparison.OrdinalIgnoreCase))
@@ -145,7 +155,9 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
                 EnrollmentDate = s.EnrollmentDate,
                 GraduationDate = s.GraduationDate,
                 UpdatedAt = s.UpdatedAt,
-                JambRegistrationNumber = s.JambRegistrationNumber
+                JambRegistrationNumber = s.JambRegistrationNumber,
+                IsDirectEntry = s.IsDirectEntry,
+                DirectEntryQualification = s.DirectEntryQualification
             })
             .ToListAsync(ct);
 
@@ -190,7 +202,11 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
             UpdatedAt = student.UpdatedAt,
             JambRegistrationNumber = student.JambRegistrationNumber,
             JambScore = student.JambScore,
-            AdmissionApplicationId = student.AdmissionApplicationId?.ToString()
+            AdmissionApplicationId = student.AdmissionApplicationId?.ToString(),
+            IsDirectEntry = student.IsDirectEntry,
+            DirectEntryQualification = student.DirectEntryQualification,
+            DirectEntryInstitution = student.DirectEntryInstitution,
+            DirectEntryPoints = student.DirectEntryPoints
         };
     }
 
@@ -265,7 +281,16 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
             .Distinct()
             .ToListAsync(ct);
 
-        var relevantOfferingIds = enrolledOfferingIds.Union(gradedOfferingIds).ToHashSet();
+        var migratedOfferingIds = await context.StudentCourseResults
+            .Where(r => r.StudentId == userId)
+            .Select(r => r.CourseOfferingId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var relevantOfferingIds = enrolledOfferingIds
+            .Union(gradedOfferingIds)
+            .Union(migratedOfferingIds)
+            .ToHashSet();
 
         if (!relevantOfferingIds.Any())
             return Enumerable.Empty<StudentCourseResultDto>();
@@ -297,6 +322,28 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
             if (saved != null)
             {
                 decimal savedCA = (saved.Ca1Score ?? 0m) + (saved.Ca2Score ?? 0m) + (saved.Ca3Score ?? 0m);
+                bool isNonLetter = saved.LetterGrade == "IP" || saved.LetterGrade == "AR" || saved.LetterGrade == "I" || saved.LetterGrade == "W";
+                bool isMigrated = false;
+                string? sourceCourseCode = null;
+                string? sourceCourseTitle = null;
+                string? sourceInstitution = null;
+
+                if (!string.IsNullOrWhiteSpace(saved.CalculationSnapshotJson))
+                {
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(saved.CalculationSnapshotJson);
+                        if (doc.RootElement.TryGetProperty("isMigrated", out var migProp) && migProp.GetBoolean())
+                        {
+                            isMigrated = true;
+                            if (doc.RootElement.TryGetProperty("sourceCourseCode", out var scc)) sourceCourseCode = scc.GetString();
+                            if (doc.RootElement.TryGetProperty("sourceCourseTitle", out var sct)) sourceCourseTitle = sct.GetString();
+                            if (doc.RootElement.TryGetProperty("sourceInstitution", out var si)) sourceInstitution = si.GetString();
+                        }
+                    }
+                    catch { }
+                }
+
                 results.Add(new StudentCourseResultDto
                 {
                     CourseOfferingId = offering.Id,
@@ -309,8 +356,12 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
                     TotalExam = saved.ExamScore ?? 0m,
                     TotalMarks = saved.TotalScore,
                     Grade = saved.LetterGrade,
-                    Point = saved.GradePoints.ToString("F2"),
-                    IsPublished = saved.IsPublished
+                    Point = isNonLetter ? "—" : saved.GradePoints.ToString("F2"),
+                    IsPublished = saved.IsPublished,
+                    IsMigrated = isMigrated,
+                    SourceCourseCode = sourceCourseCode,
+                    SourceCourseTitle = sourceCourseTitle,
+                    SourceInstitution = sourceInstitution
                 });
                 continue;
             }
@@ -379,7 +430,32 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
                 totalScore = totalCA + totalExam;
             }
 
-            var gradeResult = GradeCalculator.CalculateGrade(totalScore, rStrategy, decimalPlaces, graceThreshold, mappings);
+            bool isPublished = publications.TryGetValue(offering.Id, out var visible) && visible;
+            bool hasGrades = assessments.Any(a => a.Grades.Any(g => g.StudentId == userId));
+
+            string letterGrade;
+            string point;
+            decimal displayTotalMarks;
+
+            if (!isPublished)
+            {
+                letterGrade = hasGrades ? "AR" : "IP";
+                point = "—";
+                displayTotalMarks = totalScore;
+            }
+            else if (!hasGrades)
+            {
+                letterGrade = "AR";
+                point = "—";
+                displayTotalMarks = 0m;
+            }
+            else
+            {
+                var gradeResult = GradeCalculator.CalculateGrade(totalScore, rStrategy, decimalPlaces, graceThreshold, mappings);
+                letterGrade = gradeResult.LetterGrade;
+                point = gradeResult.GradePoints.ToString("F2");
+                displayTotalMarks = gradeResult.Score;
+            }
 
             results.Add(new StudentCourseResultDto
             {
@@ -391,10 +467,10 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
                 Level = 0,
                 TotalCA = totalCA,
                 TotalExam = totalExam,
-                TotalMarks = gradeResult.Score,
-                Grade = gradeResult.LetterGrade,
-                Point = gradeResult.GradePoints.ToString("F2"),
-                IsPublished = publications.TryGetValue(offering.Id, out var visible) && visible
+                TotalMarks = displayTotalMarks,
+                Grade = letterGrade,
+                Point = point,
+                IsPublished = isPublished
             });
         }
 
@@ -1064,6 +1140,111 @@ public class StudentService(LmsDbContext context, IDegreeAuditService? degreeAud
             successfulCount,
             failedCount,
             results);
+    }
+
+    public async Task<UpdateStudentDirectEntryResult> SetDirectEntryStatusAsync(Guid studentId, UpdateStudentDirectEntryRequest request, Guid? changedByUserId, CancellationToken ct)
+    {
+        var student = await context.Students
+            .Include(s => s.AcademicProgram)
+            .FirstOrDefaultAsync(s => s.Id == studentId, ct);
+
+        if (student == null)
+        {
+            return new UpdateStudentDirectEntryResult(studentId, "Unknown", null, false, null, false, "Student not found.");
+        }
+
+        var studentFullName = $"{student.FirstName} {student.LastName}".Trim();
+        student.IsDirectEntry = request.IsDirectEntry;
+        if (request.IsDirectEntry)
+        {
+            if (!string.IsNullOrWhiteSpace(request.DirectEntryQualification))
+                student.DirectEntryQualification = request.DirectEntryQualification.Trim();
+            if (!string.IsNullOrWhiteSpace(request.DirectEntryInstitution))
+                student.DirectEntryInstitution = request.DirectEntryInstitution.Trim();
+            if (request.DirectEntryPoints.HasValue)
+                student.DirectEntryPoints = request.DirectEntryPoints.Value;
+        }
+
+        student.UpdatedAt = DateTime.UtcNow;
+
+        context.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            UserId = changedByUserId,
+            Action = "UpdateDirectEntryStatus",
+            EntityName = nameof(Student),
+            EntityId = student.Id.ToString(),
+            Changes = $"Updated Direct Entry status for {studentFullName}: IsDirectEntry={student.IsDirectEntry}, Qualification={student.DirectEntryQualification}, Institution={student.DirectEntryInstitution}",
+            Timestamp = DateTime.UtcNow
+        });
+
+        await context.SaveChangesAsync(ct);
+
+        return new UpdateStudentDirectEntryResult(
+            student.Id,
+            studentFullName,
+            student.StudentNumber,
+            student.IsDirectEntry,
+            student.DirectEntryQualification,
+            true,
+            $"Student Direct Entry status updated successfully to {(student.IsDirectEntry ? "Direct Entry" : "Standard UTME")}."
+        );
+    }
+
+    public async Task<BatchUpdateStudentDirectEntryResponse> BatchSetDirectEntryStatusAsync(BatchUpdateStudentDirectEntryRequest request, Guid? changedByUserId, CancellationToken ct)
+    {
+        if (request.StudentIds == null || !request.StudentIds.Any())
+        {
+            return new BatchUpdateStudentDirectEntryResponse(0, 0, request.IsDirectEntry, "No student IDs provided.");
+        }
+
+        var students = await context.Students
+            .Where(s => request.StudentIds.Contains(s.Id))
+            .ToListAsync(ct);
+
+        var results = new List<UpdateStudentDirectEntryResult>();
+        var now = DateTime.UtcNow;
+
+        foreach (var student in students)
+        {
+            student.IsDirectEntry = request.IsDirectEntry;
+            if (request.IsDirectEntry && !string.IsNullOrWhiteSpace(request.DirectEntryQualification))
+            {
+                student.DirectEntryQualification = request.DirectEntryQualification.Trim();
+            }
+            student.UpdatedAt = now;
+
+            context.AuditLogs.Add(new AuditLog
+            {
+                Id = Guid.NewGuid(),
+                UserId = changedByUserId,
+                Action = "BatchUpdateDirectEntryStatus",
+                EntityName = nameof(Student),
+                EntityId = student.Id.ToString(),
+                Changes = $"Batch updated Direct Entry status: IsDirectEntry={student.IsDirectEntry}, Qualification={student.DirectEntryQualification}",
+                Timestamp = now
+            });
+
+            results.Add(new UpdateStudentDirectEntryResult(
+                student.Id,
+                $"{student.FirstName} {student.LastName}".Trim(),
+                student.StudentNumber,
+                student.IsDirectEntry,
+                student.DirectEntryQualification,
+                true,
+                "Updated successfully."
+            ));
+        }
+
+        await context.SaveChangesAsync(ct);
+
+        return new BatchUpdateStudentDirectEntryResponse(
+            request.StudentIds.Count,
+            students.Count,
+            request.IsDirectEntry,
+            $"Successfully updated {students.Count} out of {request.StudentIds.Count} students.",
+            results
+        );
     }
 
     private static (string Grade, string Point) ComputeGrade(decimal totalMarks, List<LMS.Api.Contracts.GradeMappingDto>? mappings = null)

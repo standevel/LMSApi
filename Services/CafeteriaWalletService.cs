@@ -248,6 +248,7 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
 
         // Verification succeeded: atomically update account balance
         account.Balance += verifiedAmount;
+        account.ConcurrencyToken = Guid.NewGuid();
         account.UpdatedAt = DateTime.UtcNow;
 
         if (tx == null)
@@ -275,7 +276,35 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
             tx.VerifiedAt = DateTime.UtcNow;
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            _logger.LogWarning("Concurrency token conflict during wallet verification for reference {Reference}. Checking idempotency state.", req.Reference);
+            _db.ChangeTracker.Clear();
+            var reloadedTx = await _db.CafeteriaWalletTransactions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Reference == req.Reference, ct);
+
+            if (reloadedTx != null && reloadedTx.Status.Equals("Successful", StringComparison.OrdinalIgnoreCase))
+            {
+                var reloadedAcc = await _db.CafeteriaWalletAccounts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.Username.ToLower() == req.Username.ToLower(), ct);
+
+                return new VerifyWalletTopUpResponse(
+                    Status: true,
+                    ResponseCode: "00",
+                    ResponseMessage: "Transaction was already verified and credited.",
+                    NewBalance: reloadedAcc?.Balance ?? account.Balance,
+                    PaymentReference: req.Reference,
+                    Gateway: gateway
+                );
+            }
+            throw;
+        }
 
         _logger.LogInformation("Successfully credited Cafeteria Wallet for {Username} with {Amount} NGN via {Gateway}. Reference: {Reference}. New Balance: {Balance}",
             account.Username, verifiedAmount, gateway, req.Reference, account.Balance);
@@ -299,6 +328,7 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
 
         var account = await GetOrCreateAccountAsync(req.Username, ct);
         account.Balance += req.Amount;
+        account.ConcurrencyToken = Guid.NewGuid();
         account.UpdatedAt = DateTime.UtcNow;
 
         string reference = string.IsNullOrWhiteSpace(req.PaymentReference)
@@ -357,13 +387,20 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
             if (tx != null && !tx.Status.Equals("Successful", StringComparison.OrdinalIgnoreCase))
             {
                 tx.WalletAccount.Balance += amountNaira;
+                tx.WalletAccount.ConcurrencyToken = Guid.NewGuid();
                 tx.WalletAccount.UpdatedAt = DateTime.UtcNow;
                 tx.Status = "Successful";
                 tx.BalanceAfter = tx.WalletAccount.Balance;
                 tx.VerifiedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
-
-                _logger.LogInformation("Webhook asynchronously credited cafeteria wallet. Ref: {Ref}, Amount: {Amount}", reference, amountNaira);
+                try
+                {
+                    await _db.SaveChangesAsync(ct);
+                    _logger.LogInformation("Webhook asynchronously credited cafeteria wallet. Ref: {Ref}, Amount: {Amount}", reference, amountNaira);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    _logger.LogInformation("Webhook encountered concurrency token update for Ref: {Ref}; already verified concurrently.", reference);
+                }
             }
         }
     }
@@ -393,13 +430,21 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
             if (tx != null && !tx.Status.Equals("Successful", StringComparison.OrdinalIgnoreCase))
             {
                 tx.WalletAccount.Balance += amountNaira;
+                tx.WalletAccount.ConcurrencyToken = Guid.NewGuid();
                 tx.WalletAccount.UpdatedAt = DateTime.UtcNow;
                 tx.Status = "Successful";
                 tx.BalanceAfter = tx.WalletAccount.Balance;
                 tx.VerifiedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync(ct);
 
-                _logger.LogInformation("Hydrogen webhook asynchronously credited cafeteria wallet. Ref: {Ref}, Amount: {Amount}", reference, amountNaira);
+                try
+                {
+                    await _db.SaveChangesAsync(ct);
+                    _logger.LogInformation("Hydrogen webhook asynchronously credited cafeteria wallet. Ref: {Ref}, Amount: {Amount}", reference, amountNaira);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    _logger.LogInformation("Hydrogen webhook encountered concurrency token update for Ref: {Ref}; already verified concurrently.", reference);
+                }
             }
         }
     }
@@ -415,16 +460,39 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
         await GetOrCreateAccountAsync(username, ct);
     }
 
+    private static DateTime GetStartOfDayWatUtc()
+    {
+        TimeZoneInfo watZone;
+        try
+        {
+            watZone = TimeZoneInfo.FindSystemTimeZoneById("W. Central Africa Standard Time");
+        }
+        catch
+        {
+            try
+            {
+                watZone = TimeZoneInfo.FindSystemTimeZoneById("Africa/Lagos");
+            }
+            catch
+            {
+                watZone = TimeZoneInfo.CreateCustomTimeZone("WAT", TimeSpan.FromHours(1), "West Africa Time", "WAT");
+            }
+        }
+
+        var watNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, watZone);
+        return TimeZoneInfo.ConvertTimeToUtc(watNow.Date, watZone);
+    }
+
     public async Task<decimal> GetDailySpendAsync(string username, CancellationToken ct = default)
     {
-        var today = DateTime.UtcNow.Date;
+        var startOfDayUtc = GetStartOfDayWatUtc();
         var cleanUsername = (username ?? string.Empty).Trim().ToLowerInvariant();
 
         var spend = await _db.CafeteriaWalletTransactions
             .Where(t => t.WalletAccount.Username.ToLower() == cleanUsername
                         && t.TransactionType == "Debit"
                         && t.Status == "Successful"
-                        && t.CreatedAt >= today)
+                        && t.CreatedAt >= startOfDayUtc)
             .SumAsync(t => (decimal?)t.Amount, ct);
 
         return spend ?? 0m;
@@ -437,54 +505,149 @@ public sealed class CafeteriaWalletService : ICafeteriaWalletService
             return new WalletDebitResult(false, 0m, "Amount must be greater than zero.", false, false);
         }
 
-        var account = await GetOrCreateAccountAsync(username, ct);
-        var config = await GetConfigurationAsync(ct);
-
-        if (config.DailySpendLimit > 0)
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            var todaysSpend = await GetDailySpendAsync(username, ct);
-            if (todaysSpend + amount > config.DailySpendLimit)
+            var account = await GetOrCreateAccountAsync(username, ct);
+            var config = await GetConfigurationAsync(ct);
+
+            decimal effectiveLimit = config.DailySpendLimit;
+            if (account.ParentDailySpendLimit.HasValue && account.ParentDailySpendLimit.Value > 0)
+            {
+                effectiveLimit = config.DailySpendLimit > 0
+                    ? Math.Min(config.DailySpendLimit, account.ParentDailySpendLimit.Value)
+                    : account.ParentDailySpendLimit.Value;
+            }
+
+            if (effectiveLimit > 0)
+            {
+                var todaysSpend = await GetDailySpendAsync(username, ct);
+                if (todaysSpend + amount > effectiveLimit)
+                {
+                    return new WalletDebitResult(
+                        Success: false,
+                        account.Balance,
+                        $"Daily spending limit of {effectiveLimit:N2} NGN would be exceeded. Already spent today: {todaysSpend:N2}.",
+                        DailyLimitExceeded: true,
+                        InsufficientFunds: false);
+                }
+            }
+
+            if (account.Balance < amount)
             {
                 return new WalletDebitResult(
                     Success: false,
                     account.Balance,
-                    $"Daily spending limit of {config.DailySpendLimit:N2} NGN would be exceeded. Already spent today: {todaysSpend:N2}.",
-                    DailyLimitExceeded: true,
-                    InsufficientFunds: false);
+                    $"Insufficient wallet balance. Available: {account.Balance:N2}, required: {amount:N2}.",
+                    DailyLimitExceeded: false,
+                    InsufficientFunds: true);
+            }
+
+            account.Balance -= amount;
+            account.ConcurrencyToken = Guid.NewGuid();
+            account.UpdatedAt = DateTime.UtcNow;
+
+            var tx = new CafeteriaWalletTransaction
+            {
+                WalletAccountId = account.Id,
+                Amount = amount,
+                TransactionType = "Debit",
+                Gateway = "CafeteriaWallet",
+                Reference = $"WAL-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}",
+                Status = "Successful",
+                Description = description ?? "Meal Purchase",
+                BalanceAfter = account.Balance,
+                CreatedAt = DateTime.UtcNow,
+                VerifiedAt = DateTime.UtcNow
+            };
+
+            _db.CafeteriaWalletTransactions.Add(tx);
+
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return new WalletDebitResult(true, account.Balance, "Wallet debited successfully for meal.", false, false);
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < maxRetries)
+            {
+                _logger.LogWarning(ex, "Concurrency conflict during meal debit for {Username}, attempt {Attempt} of {MaxRetries}. Retrying...", username, attempt, maxRetries);
+                _db.ChangeTracker.Clear();
+                await Task.Delay(50 * attempt, ct);
             }
         }
 
-        if (account.Balance < amount)
+        return new WalletDebitResult(false, 0m, "Transaction could not be completed due to high concurrency. Please try again.", false, false);
+    }
+
+    public async Task<WalletDebitResult> RefundMealOrderAsync(Guid orderId, string reason, CancellationToken ct = default)
+    {
+        var order = await _db.CafeteriaVendorOrders.FindAsync([orderId], ct);
+        if (order is null)
         {
-            return new WalletDebitResult(
-                Success: false,
-                account.Balance,
-                $"Insufficient wallet balance. Available: {account.Balance:N2}, required: {amount:N2}.",
-                DailyLimitExceeded: false,
-                InsufficientFunds: true);
+            return new WalletDebitResult(false, 0m, "Order not found.", false, false);
         }
 
-        account.Balance -= amount;
-        account.UpdatedAt = DateTime.UtcNow;
-
-        var tx = new CafeteriaWalletTransaction
+        if (order.IsScholarshipCovered || order.Price <= 0)
         {
-            WalletAccountId = account.Id,
-            Amount = amount,
-            TransactionType = "Debit",
-            Gateway = "CafeteriaWallet",
-            Reference = $"WAL-{Guid.NewGuid().ToString("N")[..10].ToUpperInvariant()}",
-            Status = "Successful",
-            Description = description ?? "Meal Purchase",
-            BalanceAfter = account.Balance,
-            CreatedAt = DateTime.UtcNow,
-            VerifiedAt = DateTime.UtcNow
-        };
+            return new WalletDebitResult(true, 0m, "Order was scholarship-covered or zero-cost; no wallet refund required.", false, false);
+        }
 
-        _db.CafeteriaWalletTransactions.Add(tx);
-        await _db.SaveChangesAsync(ct);
+        string cleanUsername = order.StudentUsername.Trim().ToLowerInvariant();
+        var account = await GetOrCreateAccountAsync(cleanUsername, ct);
 
-        return new WalletDebitResult(true, account.Balance, "Wallet debited successfully for meal.", false, false);
+        // Idempotent: prevent double refund if already processed
+        string refundRefPrefix = $"REF-{order.OrderCode}";
+        var existingRefund = await _db.CafeteriaWalletTransactions
+            .AnyAsync(t => t.WalletAccountId == account.Id 
+                        && t.TransactionType == "Refund" 
+                        && t.Reference.StartsWith(refundRefPrefix), ct);
+
+        if (existingRefund)
+        {
+            return new WalletDebitResult(true, account.Balance, "Order has already been refunded.", false, false);
+        }
+
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            account = await GetOrCreateAccountAsync(cleanUsername, ct);
+            account.Balance += order.Price;
+            account.ConcurrencyToken = Guid.NewGuid();
+            account.UpdatedAt = DateTime.UtcNow;
+
+            var tx = new CafeteriaWalletTransaction
+            {
+                WalletAccountId = account.Id,
+                Amount = order.Price,
+                TransactionType = "Refund",
+                Gateway = "CafeteriaWallet",
+                Reference = $"REF-{order.OrderCode}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}",
+                Status = "Successful",
+                Description = string.IsNullOrWhiteSpace(reason)
+                    ? $"Refund for cancelled meal: {order.MenuItemName} ({order.OrderCode})"
+                    : $"Refund for order {order.OrderCode}: {reason}",
+                BalanceAfter = account.Balance,
+                CreatedAt = DateTime.UtcNow,
+                VerifiedAt = DateTime.UtcNow
+            };
+
+            _db.CafeteriaWalletTransactions.Add(tx);
+
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                _logger.LogInformation("Successfully refunded {Amount:N2} NGN to {Username} for cancelled order {OrderCode}.", order.Price, order.StudentUsername, order.OrderCode);
+                return new WalletDebitResult(true, account.Balance, "Wallet refunded successfully.", false, false);
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < maxRetries)
+            {
+                _logger.LogWarning(ex, "Concurrency conflict during refund for {Username}, attempt {Attempt} of {MaxRetries}. Retrying...", cleanUsername, attempt, maxRetries);
+                _db.ChangeTracker.Clear();
+                await Task.Delay(50 * attempt, ct);
+            }
+        }
+
+        return new WalletDebitResult(false, account.Balance, "Refund could not be completed due to high concurrency. Please retry.", false, false);
     }
 
     public async Task<PayWithWalletResponse> PayWithWalletAsync(PayWithWalletRequest req, CancellationToken ct = default)

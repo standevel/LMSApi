@@ -34,11 +34,12 @@ public sealed class StudentListEndpoint : ApiEndpointWithoutRequest<StudentListR
         string? status = GetString(query, "status");
         string? sortBy = GetString(query, "sortBy");
         string? sortDir = GetString(query, "sortDir");
+        bool? isDirectEntry = GetBool(query, "isDirectEntry");
         var page = GetInt(query, "page") ?? 1;
         var pageSize = GetInt(query, "pageSize") ?? 25;
 
         var (students, totalCount) = await _studentService.GetStudentsAsync(
-            search, programId, departmentId, facultyId, levelId, sessionId, status, sortBy, sortDir, page, pageSize, ct);
+            search, programId, departmentId, facultyId, levelId, sessionId, status, sortBy, sortDir, page, pageSize, ct, isDirectEntry);
 
         await SendSuccessAsync(new StudentListResponse
         {
@@ -61,5 +62,13 @@ public sealed class StudentListEndpoint : ApiEndpointWithoutRequest<StudentListR
             return null;
         var raw = values.ToString();
         return int.TryParse(raw, out var val) ? val : null;
+    }
+
+    private static bool? GetBool(IQueryCollection query, string key)
+    {
+        if (!query.TryGetValue(key, out var values) || StringValues.IsNullOrEmpty(values))
+            return null;
+        var raw = values.ToString();
+        return bool.TryParse(raw, out var val) ? val : null;
     }
 }

@@ -23,6 +23,12 @@ public sealed class SystemCafeteriaConfiguration
     [System.ComponentModel.DataAnnotations.Schema.Column(TypeName = "decimal(18,2)")]
     public decimal DailySpendLimit { get; set; } = 15000m;
 
+    /// <summary>When true, students can only place orders for meals during their designated session time window.</summary>
+    public bool EnforceMealSessionWindows { get; set; } = false;
+
+    /// <summary>When true, orders placed outside session windows are accepted as pre-orders rather than rejected.</summary>
+    public bool AllowPreOrdersOutsideWindows { get; set; } = true;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public Guid? UpdatedById { get; set; }

@@ -45,7 +45,11 @@ public sealed class InitializeWalletTopUpEndpoint(ICafeteriaWalletService wallet
 {
     public override void Configure()
     {
-        Post("cafeteria/Wallet/Initialize", "cafeteria/Wallet/InitializePaystack", "cafeteria/Wallet/InitializeHydrogen");
+        Post("cafeteria/Wallet/Initialize",
+             "cafeteria/Wallet/InitializePaystack",
+             "cafeteria/Wallet/InitializeHydrogen",
+             "cafeteria/wallet/initialize-topup",
+             "cafeteria/Wallet/Initialize-TopUp");
         Tags("CafeteriaWallet");
     }
 
@@ -358,7 +362,9 @@ public sealed class GetSystemCafeteriaConfigurationEndpoint(LmsDbContext dbConte
             config.AllowParentTopUp,
             config.MaxSingleTopUpAmount,
             config.DailySpendLimit,
-            config.UpdatedAt
+            config.UpdatedAt,
+            config.EnforceMealSessionWindows,
+            config.AllowPreOrdersOutsideWindows
         ), ct);
     }
 }
@@ -387,6 +393,8 @@ public sealed class UpdateSystemCafeteriaConfigurationEndpoint(LmsDbContext dbCo
         config.AllowParentTopUp       = req.AllowParentTopUp;
         config.MaxSingleTopUpAmount   = req.MaxSingleTopUpAmount;
         config.DailySpendLimit        = req.DailySpendLimit;
+        config.EnforceMealSessionWindows = req.EnforceMealSessionWindows;
+        config.AllowPreOrdersOutsideWindows = req.AllowPreOrdersOutsideWindows;
         config.UpdatedAt              = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(ct);
@@ -398,7 +406,270 @@ public sealed class UpdateSystemCafeteriaConfigurationEndpoint(LmsDbContext dbCo
             config.AllowParentTopUp,
             config.MaxSingleTopUpAmount,
             config.DailySpendLimit,
-            config.UpdatedAt
+            config.UpdatedAt,
+            config.EnforceMealSessionWindows,
+            config.AllowPreOrdersOutsideWindows
         ), ct);
     }
 }
+
+// ─── Parent Delegated Policy Endpoints ─────────────────────────────────────
+
+public static class CafeteriaParentSecurityHelper
+{
+    public static async Task<bool> IsParentOfAsync(string? parentUsername, string childUsername, LmsDbContext dbContext, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(parentUsername)) return false;
+        var cleanParent = parentUsername.Trim().ToLowerInvariant();
+
+        var userId = await dbContext.Users
+            .Where(u => (u.Email != null && u.Email.ToLower() == cleanParent) || (u.Username != null && u.Username.ToLower() == cleanParent))
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(ct);
+
+        if (userId == Guid.Empty) return false;
+
+        return await dbContext.ParentStudentLinks
+            .Where(l => l.ParentGuardian != null && l.ParentGuardian.UserId == userId)
+            .SelectMany(l => dbContext.Students.Where(s => s.Id == l.StudentId))
+            .AnyAsync(s => s.OfficialEmail.ToLower() == childUsername || (s.StudentNumber != null && s.StudentNumber.ToLower() == childUsername), ct);
+    }
+}
+
+public sealed class GetParentStudentPolicyEndpoint(ICafeteriaWalletService walletService, LmsDbContext dbContext)
+    : ApiEndpointWithoutRequest<ParentStudentCafeteriaPolicyDto>
+{
+    public override void Configure()
+    {
+        Get("cafeteria/parent/policy/{studentUsername}");
+        Roles("Parent", "SuperAdmin", "Admin");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var studentUsername = Route<string>("studentUsername");
+        var currentUsername = User.Identity?.Name ?? User.FindFirst("name")?.Value ?? User.FindFirst("preferred_username")?.Value;
+        var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+
+        var cleanChild = (studentUsername ?? string.Empty).Trim().ToLowerInvariant();
+        if (!isStaff)
+        {
+            var isParent = await CafeteriaParentSecurityHelper.IsParentOfAsync(currentUsername, cleanChild, dbContext, ct);
+            if (!isParent)
+            {
+                await SendFailureAsync(403, "You may only view dining policies for your own linked children.", "FORBIDDEN", "Relationship not verified.", ct);
+                return;
+            }
+        }
+
+        var balance = await walletService.GetBalanceAsync(cleanChild, ct);
+        var config = await walletService.GetConfigurationAsync(ct);
+        var spentToday = await walletService.GetDailySpendAsync(cleanChild, ct);
+
+        var account = await dbContext.CafeteriaWalletAccounts.FirstOrDefaultAsync(a => a.Username.ToLower() == cleanChild, ct);
+        var parentLimit = account?.ParentDailySpendLimit;
+
+        decimal effectiveLimit = config.DailySpendLimit;
+        if (parentLimit.HasValue && parentLimit.Value > 0)
+        {
+            effectiveLimit = config.DailySpendLimit > 0
+                ? Math.Min(config.DailySpendLimit, parentLimit.Value)
+                : parentLimit.Value;
+        }
+
+        await SendSuccessAsync(new ParentStudentCafeteriaPolicyDto(
+            StudentUsername: cleanChild,
+            StudentName: balance.FullName,
+            WalletBalance: balance.WalletBalance,
+            ParentDailySpendLimit: parentLimit,
+            SystemDailySpendLimit: config.DailySpendLimit,
+            EffectiveDailySpendLimit: effectiveLimit,
+            SpentToday: spentToday
+        ), ct);
+    }
+}
+
+public sealed class SetParentDailyLimitEndpoint(ICafeteriaWalletService walletService, LmsDbContext dbContext)
+    : ApiEndpoint<SetParentDailyLimitRequest, SetParentDailyLimitResponse>
+{
+    public override void Configure()
+    {
+        Post("cafeteria/parent/set-daily-limit");
+        Roles("Parent", "SuperAdmin", "Admin");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(SetParentDailyLimitRequest req, CancellationToken ct)
+    {
+        var currentUsername = User.Identity?.Name ?? User.FindFirst("name")?.Value ?? User.FindFirst("preferred_username")?.Value;
+        var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+
+        var cleanChild = (req.StudentUsername ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(cleanChild))
+        {
+            await SendFailureAsync(400, "Child username is required.", "INVALID_REQUEST", "Child username is required.", ct);
+            return;
+        }
+
+        if (req.DailyLimit.HasValue && req.DailyLimit.Value < 0)
+        {
+            await SendFailureAsync(400, "Daily spending limit cannot be negative.", "INVALID_LIMIT", "Limit must be >= 0.", ct);
+            return;
+        }
+
+        if (!isStaff)
+        {
+            var isParent = await CafeteriaParentSecurityHelper.IsParentOfAsync(currentUsername, cleanChild, dbContext, ct);
+            if (!isParent)
+            {
+                await SendFailureAsync(403, "You may only adjust spending limits for your own linked children.", "FORBIDDEN", "Relationship not verified.", ct);
+                return;
+            }
+        }
+
+        await walletService.EnsureAccountExistsAsync(cleanChild, ct);
+        var account = await dbContext.CafeteriaWalletAccounts.FirstOrDefaultAsync(a => a.Username.ToLower() == cleanChild, ct);
+        if (account is null)
+        {
+            await SendFailureAsync(404, "Student wallet account not found.", "NOT_FOUND", "Account not found.", ct);
+            return;
+        }
+
+        account.ParentDailySpendLimit = req.DailyLimit;
+        account.ConcurrencyToken = Guid.NewGuid();
+        account.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(ct);
+
+        var config = await walletService.GetConfigurationAsync(ct);
+        decimal effectiveLimit = config.DailySpendLimit;
+        if (account.ParentDailySpendLimit.HasValue && account.ParentDailySpendLimit.Value > 0)
+        {
+            effectiveLimit = config.DailySpendLimit > 0
+                ? Math.Min(config.DailySpendLimit, account.ParentDailySpendLimit.Value)
+                : account.ParentDailySpendLimit.Value;
+        }
+
+        string msg = req.DailyLimit.HasValue && req.DailyLimit.Value > 0
+            ? $"Daily spending limit updated to ₦{req.DailyLimit.Value:N2}."
+            : "Custom daily limit removed. Campus default limit applies.";
+
+        await SendSuccessAsync(new SetParentDailyLimitResponse(
+            Success: true,
+            Message: msg,
+            ParentDailySpendLimit: account.ParentDailySpendLimit,
+            EffectiveDailySpendLimit: effectiveLimit
+        ), ct);
+    }
+}
+
+public sealed class GetParentChildMealHistoryEndpoint(LmsDbContext dbContext)
+    : ApiEndpointWithoutRequest<List<ParentChildMealOrderDto>>
+{
+    public override void Configure()
+    {
+        Get("cafeteria/parent/child-orders/{studentUsername}");
+        Roles("Parent", "SuperAdmin", "Admin");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var currentUsername = User.Identity?.Name ?? User.FindFirst("name")?.Value ?? User.FindFirst("preferred_username")?.Value;
+        var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+
+        var childUsername = Route<string>("studentUsername");
+        var cleanChild = (childUsername ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(cleanChild))
+        {
+            await SendFailureAsync(400, "Student username is required.", "INVALID_REQUEST", "Student username is required.", ct);
+            return;
+        }
+
+        if (!isStaff)
+        {
+            var isParent = await CafeteriaParentSecurityHelper.IsParentOfAsync(currentUsername, cleanChild, dbContext, ct);
+            if (!isParent)
+            {
+                await SendFailureAsync(403, "You may only view dining activity for your own linked children.", "FORBIDDEN", "Relationship not verified.", ct);
+                return;
+            }
+        }
+
+        var orders = await dbContext.CafeteriaVendorOrders
+            .Where(o => o.StudentUsername.ToLower() == cleanChild)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(50)
+            .Select(o => new ParentChildMealOrderDto(
+                o.Id,
+                o.OrderCode,
+                o.MenuItemName,
+                o.ImageUrl,
+                o.Price,
+                o.IsScholarshipCovered,
+                o.VendorName,
+                o.Status.ToString(),
+                o.CreatedAt,
+                o.ClaimedAt))
+            .ToListAsync(ct);
+
+        await SendSuccessAsync(orders, ct);
+    }
+}
+
+public sealed class GetParentChildWalletTransactionsEndpoint(LmsDbContext dbContext)
+    : ApiEndpointWithoutRequest<List<CafeteriaWalletTransactionDto>>
+{
+    public override void Configure()
+    {
+        Get("cafeteria/parent/child-transactions/{studentUsername}");
+        Roles("Parent", "SuperAdmin", "Admin");
+        Tags("CafeteriaWallet");
+    }
+
+    public override async Task HandleAsync(CancellationToken ct)
+    {
+        var currentUsername = User.Identity?.Name ?? User.FindFirst("name")?.Value ?? User.FindFirst("preferred_username")?.Value;
+        var isStaff = User.IsInRole("SuperAdmin") || User.IsInRole("Admin");
+
+        var childUsername = Route<string>("studentUsername");
+        var cleanChild = (childUsername ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(cleanChild))
+        {
+            await SendFailureAsync(400, "Student username is required.", "INVALID_REQUEST", "Student username is required.", ct);
+            return;
+        }
+
+        if (!isStaff)
+        {
+            var isParent = await CafeteriaParentSecurityHelper.IsParentOfAsync(currentUsername, cleanChild, dbContext, ct);
+            if (!isParent)
+            {
+                await SendFailureAsync(403, "You may only view ledger activity for your own linked children.", "FORBIDDEN", "Relationship not verified.", ct);
+                return;
+            }
+        }
+
+        var txs = await dbContext.CafeteriaWalletTransactions
+            .Where(t => t.WalletAccount.Username.ToLower() == cleanChild)
+            .OrderByDescending(t => t.CreatedAt)
+            .Take(50)
+            .Select(t => new CafeteriaWalletTransactionDto(
+                t.Id,
+                t.Amount,
+                t.TransactionType,
+                t.Gateway,
+                t.Reference,
+                t.Status,
+                t.Description,
+                t.BalanceAfter,
+                t.CreatedAt,
+                t.VerifiedAt))
+            .ToListAsync(ct);
+
+        await SendSuccessAsync(txs, ct);
+    }
+}
+

@@ -97,13 +97,17 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
             .ToListAsync(ct);
 
         decimal cumulativeGpa = 0;
-        if (publishedCourseResults.Any())
+        var validGpaResults = publishedCourseResults
+            .Where(r => r.LetterGrade != "IP" && r.LetterGrade != "AR" && r.LetterGrade != "I" && r.LetterGrade != "W" && !string.IsNullOrWhiteSpace(r.LetterGrade))
+            .ToList();
+
+        if (validGpaResults.Any())
         {
-            decimal totalQualityPoints = publishedCourseResults.Sum(r => r.GradePoints * r.CreditUnits);
-            int totalCredits = publishedCourseResults.Sum(r => r.CreditUnits);
+            decimal totalQualityPoints = validGpaResults.Sum(r => r.GradePoints * r.CreditUnits);
+            int totalCredits = validGpaResults.Sum(r => r.CreditUnits);
             cumulativeGpa = totalCredits > 0
                 ? totalQualityPoints / totalCredits
-                : publishedCourseResults.Average(r => r.GradePoints);
+                : validGpaResults.Average(r => r.GradePoints);
         }
 
         // Count assignments due this week from assessments
@@ -163,8 +167,12 @@ public sealed class GetStudentDashboardEndpoint : ApiEndpointWithoutRequest<Stud
         {
             if (!publishedOfferingIds.Contains(offering.Id))
             {
+                bool hasGrades = await _dbContext.Grades
+                    .AnyAsync(g => g.StudentId == userId.Value && g.Assessment.CourseOfferingId == offering.Id, ct);
+
+                string statusGrade = hasGrades ? "AR" : "IP";
                 enrolledCourses.Add(new EnrolledCourseDto(offering.Id, offering.Course.Code, offering.Course.Title,
-                    offering.AcademicSession.Name, (int)offering.Semester, 0, "N/A", false));
+                    offering.AcademicSession.Name, (int)offering.Semester, 0, statusGrade, false));
                 publishedOfferingIds.Add(offering.Id);
             }
         }

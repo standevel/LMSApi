@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -54,25 +54,25 @@ namespace LMS.Api.Data.Migrations
                         column: x => x.AcademicSessionId,
                         principalTable: "AcademicSessions",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_ProfileCompletionRequirements_Faculties_FacultyId",
                         column: x => x.FacultyId,
                         principalTable: "Faculties",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_ProfileCompletionRequirements_Levels_AcademicLevelId",
                         column: x => x.AcademicLevelId,
                         principalTable: "Levels",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_ProfileCompletionRequirements_Programs_AcademicProgramId",
                         column: x => x.AcademicProgramId,
                         principalTable: "Programs",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateIndex(

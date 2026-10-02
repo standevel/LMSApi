@@ -28,4 +28,5 @@ public interface IScholarshipService
     Task<bool> IsFeedingFullyCoveredAsync(Guid studentId, CancellationToken ct = default);
     Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(string username, CancellationToken ct = default);
     Task<StudentFeedingEntitlementDto> GetFeedingEntitlementAsync(Guid studentId, CancellationToken ct = default);
+    Task<ScholarshipMealClaimResult> EvaluateScholarshipMealClaimAsync(Guid studentId, int feedingTimeId, string? menuItemName, CancellationToken ct = default);
 }

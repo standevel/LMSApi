@@ -3585,6 +3585,11 @@ public sealed class GradebookService : IGradebookService
         {
             if (!calculatedGrades.TryGetValue(studentId, out var calc)) continue;
 
+            bool studentHasGrades = allGrades.Any(g => g.StudentId == studentId);
+            string finalLetterGrade = studentHasGrades ? calc.LetterGrade : "AR";
+            decimal finalGradePoints = studentHasGrades ? calc.GradePoints : 0m;
+            decimal finalTotalScore = studentHasGrades ? calc.TotalScore : 0m;
+
             var resultRecord = existingResults.FirstOrDefault(r => r.StudentId == studentId);
             if (resultRecord == null)
             {
@@ -3595,13 +3600,13 @@ public sealed class GradebookService : IGradebookService
                     AcademicSessionId = offering.AcademicSessionId,
                     Semester = (int)offering.Semester,
                     CreditUnits = offering.Course?.CreditUnits ?? 0,
-                    Ca1Score = calc.Ca1Score,
-                    Ca2Score = calc.Ca2Score,
-                    Ca3Score = calc.Ca3Score,
-                    ExamScore = calc.ExamScore,
-                    TotalScore = calc.TotalScore,
-                    LetterGrade = calc.LetterGrade,
-                    GradePoints = calc.GradePoints,
+                    Ca1Score = studentHasGrades ? calc.Ca1Score : null,
+                    Ca2Score = studentHasGrades ? calc.Ca2Score : null,
+                    Ca3Score = studentHasGrades ? calc.Ca3Score : null,
+                    ExamScore = studentHasGrades ? calc.ExamScore : null,
+                    TotalScore = finalTotalScore,
+                    LetterGrade = finalLetterGrade,
+                    GradePoints = finalGradePoints,
                     IsPublished = true,
                     PublishedAt = now,
                     PublishedById = publishedById,
@@ -3616,13 +3621,13 @@ public sealed class GradebookService : IGradebookService
                 resultRecord.AcademicSessionId = offering.AcademicSessionId;
                 resultRecord.Semester = (int)offering.Semester;
                 resultRecord.CreditUnits = offering.Course?.CreditUnits ?? 0;
-                resultRecord.Ca1Score = calc.Ca1Score;
-                resultRecord.Ca2Score = calc.Ca2Score;
-                resultRecord.Ca3Score = calc.Ca3Score;
-                resultRecord.ExamScore = calc.ExamScore;
-                resultRecord.TotalScore = calc.TotalScore;
-                resultRecord.LetterGrade = calc.LetterGrade;
-                resultRecord.GradePoints = calc.GradePoints;
+                resultRecord.Ca1Score = studentHasGrades ? calc.Ca1Score : null;
+                resultRecord.Ca2Score = studentHasGrades ? calc.Ca2Score : null;
+                resultRecord.Ca3Score = studentHasGrades ? calc.Ca3Score : null;
+                resultRecord.ExamScore = studentHasGrades ? calc.ExamScore : null;
+                resultRecord.TotalScore = finalTotalScore;
+                resultRecord.LetterGrade = finalLetterGrade;
+                resultRecord.GradePoints = finalGradePoints;
                 resultRecord.IsPublished = true;
                 resultRecord.PublishedAt = now;
                 resultRecord.PublishedById = publishedById;
@@ -3708,8 +3713,11 @@ public sealed class GradebookService : IGradebookService
             item.CategoryWeight,
             item.WeightedScore)).ToList();
 
-        decimal finalScore = savedResult?.TotalScore ?? calculated.TotalScore;
-        string finalGrade = savedResult?.LetterGrade ?? calculated.LetterGrade;
+        bool studentHasGrades = grades.Any();
+        decimal finalScore = studentHasGrades ? (savedResult?.TotalScore ?? calculated.TotalScore) : 0m;
+        string finalGrade = studentHasGrades
+            ? (savedResult?.LetterGrade ?? calculated.LetterGrade)
+            : "AR";
 
         return new StudentGradeViewDto(
             offering.Id,
@@ -6366,10 +6374,8 @@ public sealed class GradebookService : IGradebookService
             .Select(ur => ur.Role.Name)
             .ToListAsync(ct);
 
-        var isAdmin = userRoles.Any(r => r == "Admin" || r == "SuperAdmin");
-        var hasPermission = isAdmin || await _permissionService.HasPermissionAsync(userId, LmsPermissions.ResultsPublish, ct);
-
-        if (!hasPermission)
+        var isAdmin = userRoles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase) || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
+        if (!isAdmin)
         {
             return Error.Forbidden("Access.Denied", "You do not have permission to restore historical grade snapshots. Administrator privileges required.");
         }

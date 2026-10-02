@@ -74,7 +74,9 @@ public sealed record SystemCafeteriaConfigurationDto(
     bool AllowParentTopUp,
     decimal MaxSingleTopUpAmount,
     decimal DailySpendLimit,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    bool EnforceMealSessionWindows = false,
+    bool AllowPreOrdersOutsideWindows = true
 );
 
 public sealed record UpdateSystemCafeteriaConfigurationRequest(
@@ -82,7 +84,37 @@ public sealed record UpdateSystemCafeteriaConfigurationRequest(
     bool AllowStudentSelfTopUp,
     bool AllowParentTopUp,
     decimal MaxSingleTopUpAmount = 100000m,
-    decimal DailySpendLimit = 15000m
+    decimal DailySpendLimit = 15000m,
+    bool EnforceMealSessionWindows = false,
+    bool AllowPreOrdersOutsideWindows = true
+);
+
+public sealed record VendorSettlementReportDto(
+    string VendorId,
+    string VendorName,
+    DateOnly SettlementDate,
+    decimal TotalRevenue,
+    decimal DirectWalletRevenue,
+    decimal ScholarshipSubsidyRevenue,
+    int TotalOrders,
+    int ClaimedOrders,
+    int CancelledOrders,
+    int PendingOrders,
+    List<VendorSettlementItemDto> Items
+);
+
+public sealed record VendorSettlementItemDto(
+    Guid OrderId,
+    string OrderCode,
+    string StudentUsername,
+    string StudentName,
+    string MatricNo,
+    string MenuItemName,
+    decimal Price,
+    bool IsScholarshipCovered,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? ClaimedAt
 );
 
 public sealed record VendorOrderDto(
@@ -146,7 +178,10 @@ public sealed record MenuItemDto(
     bool IsAvailable,
     DateOnly AvailableDate,
     DateTime CreatedAt,
-    DateTime UpdatedAt
+    DateTime UpdatedAt,
+    string? Allergens = null,
+    string? DietaryFlags = null,
+    int? Calories = null
 );
 
 public sealed record UpdateMenuItemAvailabilityRequest(string MenuItemId, bool IsAvailable);
@@ -189,6 +224,21 @@ public sealed record PlaceStudentOrderResponse(
     DateTime CreatedAt
 );
 
+public sealed record PlaceBatchStudentOrderRequest(
+    string StudentId,
+    List<string> MenuItemIds,
+    string? VendorId = null
+);
+
+public sealed record PlaceBatchStudentOrderResponse(
+    bool Success,
+    string Message,
+    int OrdersPlaced,
+    decimal TotalChargedToWallet,
+    int ScholarshipCoveredCount,
+    List<PlaceStudentOrderResponse> Orders
+);
+
 public sealed record StudentOrderHistoryItemDto(
     Guid OrderId,
     string OrderCode,
@@ -200,3 +250,53 @@ public sealed record StudentOrderHistoryItemDto(
     DateTime CreatedAt,
     DateTime? ClaimedAt
 );
+
+public sealed record ParentStudentCafeteriaPolicyDto(
+    string StudentUsername,
+    string StudentName,
+    decimal WalletBalance,
+    decimal? ParentDailySpendLimit,
+    decimal SystemDailySpendLimit,
+    decimal EffectiveDailySpendLimit,
+    decimal SpentToday
+);
+
+public sealed record SetParentDailyLimitRequest(
+    string StudentUsername,
+    decimal? DailyLimit
+);
+
+public sealed record SetParentDailyLimitResponse(
+    bool Success,
+    string Message,
+    decimal? ParentDailySpendLimit,
+    decimal EffectiveDailySpendLimit
+);
+
+public sealed record CancelStudentOrderRequest(
+    Guid? OrderId = null,
+    string? Reason = null
+);
+
+public sealed record CancelStudentOrderResponse(
+    bool Success,
+    string Message,
+    Guid OrderId,
+    string OrderCode,
+    decimal RefundedAmount,
+    decimal NewWalletBalance
+);
+
+public sealed record ParentChildMealOrderDto(
+    Guid OrderId,
+    string OrderCode,
+    string MenuItemName,
+    string? ImageUrl,
+    decimal Price,
+    bool IsScholarshipCovered,
+    string VendorName,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? ClaimedAt
+);
+

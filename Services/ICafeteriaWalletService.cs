@@ -16,6 +16,7 @@ public interface ICafeteriaWalletService
     Task<SystemCafeteriaConfiguration> GetConfigurationAsync(CancellationToken ct = default);
     Task<decimal> GetDailySpendAsync(string username, CancellationToken ct = default);
     Task<WalletDebitResult> TryDebitForMealAsync(string username, decimal amount, string description, CancellationToken ct = default);
+    Task<WalletDebitResult> RefundMealOrderAsync(Guid orderId, string reason, CancellationToken ct = default);
     Task<PayWithWalletResponse> PayWithWalletAsync(PayWithWalletRequest req, CancellationToken ct = default);
     Task EnsureAccountExistsAsync(string username, CancellationToken ct = default);
 }
