@@ -14,8 +14,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Publish
-echo "[2/4] Publishing to publish/iis-output..."
-dotnet publish LMS.Api.csproj -c Release -r win-x64 --self-contained false -o publish/iis-output
+echo "[2/4] Publishing to publish/iis-output (self-contained)..."
+dotnet publish LMS.Api.csproj -c Release -r win-x64 --self-contained true -o publish/iis-output
 if [ $? -ne 0 ]; then
     echo "ERROR: dotnet publish failed"
     exit 1
