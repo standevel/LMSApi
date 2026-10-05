@@ -54,7 +54,10 @@ public record RegistrationSummaryDto(
     DateTime? RegistrationStartDate = null,
     DateTime? RegistrationEndDate = null,
     bool AllowMultiSemesterRegistration = false,
-    int ActiveSemester = 1);
+    int ActiveSemester = 1,
+    string MatricNumber = "",
+    string FacultyName = "",
+    string DepartmentName = "");
 
 public record WaitlistDto(
     Guid Id,

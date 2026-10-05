@@ -461,34 +461,49 @@ public class RegistrationService : BaseService, IRegistrationService
 
         var programName = "";
         var levelName = "";
+        var matricNumber = "";
+        var facultyName = "";
+        var departmentName = "";
+
+        var student = await _context.Set<Student>().AsNoTracking()
+            .Include(s => s.AcademicProgram)
+                .ThenInclude(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
+            .Include(s => s.Level)
+            .Include(s => s.Faculty)
+            .FirstOrDefaultAsync(s => s.Id == studentId || (s.EntraObjectId != null
+                ? _context.Users.Any(u => u.Id == studentId && u.EntraObjectId == s.EntraObjectId)
+                : _context.Users.Any(u => u.Id == studentId && u.Email == s.OfficialEmail)), ct)
+            ?? await _context.Set<Student>().AsNoTracking()
+                .Include(s => s.AcademicProgram)
+                    .ThenInclude(p => p.Department)
+                        .ThenInclude(d => d.Faculty)
+                .Include(s => s.Level)
+                .Include(s => s.Faculty)
+                .Where(s => _context.Users.Any(u => u.Id == studentId && (u.Email == s.OfficialEmail || u.Email == s.PersonalEmail)))
+                .FirstOrDefaultAsync(ct);
+
+        if (student is not null)
+        {
+            matricNumber = student.StudentNumber ?? "";
+            facultyName = student.Faculty?.Name ?? student.AcademicProgram?.Department?.Faculty?.Name ?? "";
+            departmentName = student.AcademicProgram?.Department?.Name ?? "";
+            programName = student.AcademicProgram?.Name ?? "";
+            levelName = student.Level?.Name ?? "";
+        }
+
         if (programmeEnrollment is not null)
         {
             var program = await _context.Programs.AsNoTracking()
+                .Include(p => p.Department)
+                    .ThenInclude(d => d.Faculty)
                 .FirstOrDefaultAsync(p => p.Id == programmeEnrollment.ProgramId, ct);
             var level = await _context.Levels.AsNoTracking()
                 .FirstOrDefaultAsync(l => l.Id == programmeEnrollment.LevelId, ct);
-            programName = program?.Name ?? "";
-            levelName = level?.Name ?? "";
-        }
-        else
-        {
-            var student = await _context.Set<Student>().AsNoTracking()
-                .Include(s => s.AcademicProgram)
-                .Include(s => s.Level)
-                .FirstOrDefaultAsync(s => s.Id == studentId || (s.EntraObjectId != null
-                    ? _context.Users.Any(u => u.Id == studentId && u.EntraObjectId == s.EntraObjectId)
-                    : _context.Users.Any(u => u.Id == studentId && u.Email == s.OfficialEmail)), ct)
-                ?? await _context.Set<Student>().AsNoTracking()
-                    .Include(s => s.AcademicProgram)
-                    .Include(s => s.Level)
-                    .Where(s => _context.Users.Any(u => u.Id == studentId && (u.Email == s.OfficialEmail || u.Email == s.PersonalEmail)))
-                    .FirstOrDefaultAsync(ct);
-
-            if (student is not null)
-            {
-                programName = student.AcademicProgram?.Name ?? "";
-                levelName = student.Level?.Name ?? "";
-            }
+            if (!string.IsNullOrWhiteSpace(program?.Name)) programName = program.Name;
+            if (!string.IsNullOrWhiteSpace(level?.Name)) levelName = level.Name;
+            if (!string.IsNullOrWhiteSpace(program?.Department?.Name)) departmentName = program.Department.Name;
+            if (!string.IsNullOrWhiteSpace(program?.Department?.Faculty?.Name)) facultyName = program.Department.Faculty.Name;
         }
 
         // If no programme enrollment exists for the active session, return an empty summary
@@ -521,7 +536,8 @@ public class RegistrationService : BaseService, IRegistrationService
                 0, 0, new List<CourseRegistrationDto>(), emptyOptionDtos, programName, levelName,
                 configEmpty.Strategy, 0, emptyVerification is not null, emptyVerification?.VerifiedAtUtc,
                 session.IsRegistrationOpen, session.RegistrationStartDate, session.RegistrationEndDate,
-                configEmpty.AllowMultiSemesterRegistration, (int)session.ActiveSemester);
+                configEmpty.AllowMultiSemesterRegistration, (int)session.ActiveSemester,
+                matricNumber, facultyName, departmentName);
         }
 
         var levels = await _context.Levels.AsNoTracking()
@@ -648,14 +664,35 @@ public class RegistrationService : BaseService, IRegistrationService
             ).ToList();
         }
 
-        var maxCreditsQuery = _context.LevelSemesterConfigs.AsNoTracking()
-            .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive);
+        int maxCredits;
         if (semester.HasValue)
-            maxCreditsQuery = maxCreditsQuery.Where(x => x.Semester == semester.Value);
-        else if (!config.AllowMultiSemesterRegistration)
-            maxCreditsQuery = maxCreditsQuery.Where(x => x.Semester == session.ActiveSemester);
+        {
+            var semMax = await _context.LevelSemesterConfigs.AsNoTracking()
+                .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive && x.Semester == semester.Value)
+                .Select(x => (int?)x.MaxCreditLoad)
+                .FirstOrDefaultAsync(ct);
+            maxCredits = semMax ?? 24;
+        }
+        else if (config.AllowMultiSemesterRegistration)
+        {
+            // For multi-semester registration (full session), sum the max load for both semesters (default 24 + 24 = 48)
+            var semConfigs = await _context.LevelSemesterConfigs.AsNoTracking()
+                .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive)
+                .Select(x => new { x.Semester, x.MaxCreditLoad })
+                .ToListAsync(ct);
 
-        var maxCredits = await maxCreditsQuery.Select(x => (int?)x.MaxCreditLoad).MaxAsync(ct) ?? 24;
+            var sem1Max = semConfigs.FirstOrDefault(x => x.Semester == LMS.Api.Data.Enums.Semester.First)?.MaxCreditLoad ?? 24;
+            var sem2Max = semConfigs.FirstOrDefault(x => x.Semester == LMS.Api.Data.Enums.Semester.Second)?.MaxCreditLoad ?? 24;
+            maxCredits = sem1Max + sem2Max;
+        }
+        else
+        {
+            var semMax = await _context.LevelSemesterConfigs.AsNoTracking()
+                .Where(x => x.LevelId == programmeEnrollment.LevelId && x.IsActive && x.Semester == session.ActiveSemester)
+                .Select(x => (int?)x.MaxCreditLoad)
+                .FirstOrDefaultAsync(ct);
+            maxCredits = semMax ?? 24;
+        }
 
         var registeredDtos = registrations.Select(x => 
         {
@@ -708,7 +745,8 @@ public class RegistrationService : BaseService, IRegistrationService
             registeredDtos.Sum(x => x.CreditUnits), maxCredits, registeredDtos, optionDtos, programName, levelName,
             config.Strategy, minCredits, verification is not null, verification?.VerifiedAtUtc,
             session.IsRegistrationOpen, session.RegistrationStartDate, session.RegistrationEndDate,
-            config.AllowMultiSemesterRegistration, (int)session.ActiveSemester);
+            config.AllowMultiSemesterRegistration, (int)session.ActiveSemester,
+            matricNumber, facultyName, departmentName);
     }
 
     private async Task<List<RegistrationBlockerDto>> GetBlockersAsync(
