@@ -19,7 +19,11 @@ public sealed record AdminDashboardStatsResponse(
     int ActiveSessions,
     decimal SystemHealth,
     int PendingRequests,
-    List<AuditLogDto> RecentLogs);
+    List<AuditLogDto> RecentLogs,
+    int PendingAdmissions = 0,
+    int PendingTranscripts = 0,
+    int PendingProgramSwitches = 0,
+    int PendingPrerequisiteOverrides = 0);
 
 public sealed class GetAdminDashboardStatsEndpoint(
     LmsDbContext dbContext,
@@ -115,7 +119,11 @@ public sealed class GetAdminDashboardStatsEndpoint(
                 activeSessions,
                 systemHealth,
                 pendingRequests,
-                recentLogs
+                recentLogs,
+                pendingAdmissionApps,
+                pendingTranscriptRequests,
+                pendingSwitchRequests,
+                pendingOverrides
             );
 
             await SendSuccessAsync(data, ct);
@@ -129,7 +137,11 @@ public sealed class GetAdminDashboardStatsEndpoint(
                 ActiveSessions: 1,
                 SystemHealth: 100.0m,
                 PendingRequests: 0,
-                RecentLogs: []
+                RecentLogs: [],
+                PendingAdmissions: 0,
+                PendingTranscripts: 0,
+                PendingProgramSwitches: 0,
+                PendingPrerequisiteOverrides: 0
             );
             await SendSuccessAsync(fallback, ct);
         }
